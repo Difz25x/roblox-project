@@ -1,6 +1,8 @@
 local MacLib = { 
 	Options = {}, 
-	Folder = "Maclib", 
+	Toggles = {},
+	Folder = "TiRex",
+	Name = "TiRex",
 	GetService = function(service)
 		return cloneref and cloneref(game:GetService(service)) or game:GetService(service)
 	end
@@ -4589,6 +4591,64 @@ function MacLib:Window(Settings)
 					return SpacerFunctions
 				end
 
+				function SectionFunctions:Custom(Settings, Flag)
+					Settings = Settings or {}
+					local CustomFunctions = { Settings = Settings }
+
+					local custom = Instance.new("Frame")
+					custom.Name = Settings.Name or "Custom"
+					custom.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					custom.BackgroundTransparency = 1
+					custom.BorderColor3 = Color3.fromRGB(0, 0, 0)
+					custom.BorderSizePixel = 0
+					custom.ClipsDescendants = Settings.ClipsDescendants ~= false
+					custom.Size = UDim2.new(1, 0, 0, Settings.Height or 38)
+					custom.Visible = Settings.Visible ~= false
+					custom.Parent = section
+
+					local instance = Settings.Instance
+					if typeof(instance) == "Instance" then
+						instance.Parent = custom
+						if instance:IsA("GuiObject") then
+							instance.AnchorPoint = Vector2.new(0, 0)
+							instance.Position = UDim2.fromOffset(0, 0)
+							instance.Size = UDim2.fromScale(1, 1)
+						end
+					end
+
+					function CustomFunctions:SetHeight(Height)
+						custom.Size = UDim2.new(1, 0, 0, tonumber(Height) or custom.Size.Y.Offset)
+					end
+					function CustomFunctions:SetVisibility(State)
+						custom.Visible = State
+					end
+					function CustomFunctions:SetInstance(NewInstance)
+						if typeof(instance) == "Instance" and instance.Parent == custom then
+							instance.Parent = nil
+						end
+						instance = NewInstance
+						if typeof(instance) == "Instance" then
+							instance.Parent = custom
+							if instance:IsA("GuiObject") then
+								instance.AnchorPoint = Vector2.new(0, 0)
+								instance.Position = UDim2.fromOffset(0, 0)
+								instance.Size = UDim2.fromScale(1, 1)
+							end
+						end
+					end
+					function CustomFunctions:GetFrame()
+						return custom
+					end
+					function CustomFunctions:Remove()
+						custom:Destroy()
+					end
+
+					if Flag then
+						MacLib.Options[Flag] = CustomFunctions
+					end
+					return CustomFunctions
+				end
+
 				return SectionFunctions
 			end
 
@@ -5416,15 +5476,35 @@ function MacLib:Window(Settings)
 		},
 		["Keybind"] = {
 			Save = function(Flag, data)
+				local bind = data.Bind
+				if type(bind) == "function" then
+					bind = nil
+				end
+				if bind == nil and type(data.GetBind) == "function" then
+					bind = data:GetBind()
+				end
+				if bind == nil then
+					bind = data.Value
+				end
+				local bindName = nil
+				if typeof(bind) == "EnumItem" then
+					bindName = bind.Name
+				elseif type(bind) == "string" and bind ~= "" and bind ~= "None" then
+					bindName = bind
+				end
 				return {
 					type = "Keybind", 
 					flag = Flag, 
-					bind = (typeof(data.Bind) == "EnumItem" and data.Bind.Name) or nil
+					bind = bindName
 				}
 			end,
 			Load = function(Flag, data)
 				if MacLib.Options[Flag] and data.bind then
-					MacLib.Options[Flag]:Bind(Enum.KeyCode[data.bind])
+					if type(MacLib.Options[Flag].Bind) == "function" then
+						MacLib.Options[Flag]:Bind(Enum.KeyCode[data.bind])
+					elseif type(MacLib.Options[Flag].SetValue) == "function" then
+						MacLib.Options[Flag]:SetValue(data.bind)
+					end
 				end
 			end
 		},
@@ -5614,9 +5694,976 @@ function MacLib:Window(Settings)
 	return WindowFunctions
 end
 
+--// TiRex / Obsidian compatibility layer
+local compatState = {
+	Windows = {},
+	KeyPickers = {},
+	StatusLabels = {},
+	InputBound = false,
+	InputBeganConnection = nil,
+	InputEndedConnection = nil
+}
+
+local unpackArgs = unpack or table.unpack
+
+local function runCallback(callback, ...)
+	if type(callback) ~= "function" then
+		return
+	end
+
+	local args = { ... }
+	if task and type(task.spawn) == "function" then
+		task.spawn(function()
+			callback(unpackArgs(args))
+		end)
+	else
+		coroutine.wrap(function()
+			callback(unpackArgs(args))
+		end)()
+	end
+end
+
+local function firstNonNil(...)
+	local values = { ... }
+	for i = 1, #values do
+		if values[i] ~= nil then
+			return values[i]
+		end
+	end
+	return nil
+end
+
+local function normalizeKeyName(value)
+	if type(value) == "table" then
+		value = value.Key or value.Value or value[1]
+	end
+	if typeof(value) == "EnumItem" then
+		return value.Name
+	end
+
+	local text = tostring(value or "None")
+	text = text:gsub("^Enum%.KeyCode%.", "")
+	text = text:gsub("^KeyCode%.", "")
+	text = text:gsub("^Enum%.UserInputType%.", "")
+	text = text:gsub("^UserInputType%.", "")
+	if text == "" or string.lower(text) == "nil" then
+		text = "None"
+	end
+	return text
+end
+
+local function parseKeyPickerValue(value, mode)
+	local parsedMode = mode
+	if type(value) == "table" then
+		if value.Mode ~= nil then
+			parsedMode = tostring(value.Mode)
+		elseif value[2] ~= nil then
+			parsedMode = tostring(value[2])
+		end
+	end
+	return normalizeKeyName(value), parsedMode
+end
+
+local function enumItemByName(enumType, name)
+	local target = string.lower(tostring(name or ""))
+	if target == "" or target == "none" then
+		return nil
+	end
+
+	for _, item in ipairs(enumType:GetEnumItems()) do
+		if string.lower(item.Name) == target then
+			return item
+		end
+	end
+	return nil
+end
+
+local function inputMatchesKey(input, keyName)
+	local normalized = normalizeKeyName(keyName)
+	if normalized == "None" then
+		return false
+	end
+	if input.KeyCode and input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode.Name == normalized then
+		return true
+	end
+	if input.UserInputType and input.UserInputType.Name == normalized then
+		return true
+	end
+	return false
+end
+
+local function ensureCompatInput()
+	if compatState.InputBound then
+		return
+	end
+	compatState.InputBound = true
+
+	compatState.InputBeganConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed or UserInputService:GetFocusedTextBox() then
+			return
+		end
+
+		for _, keyPicker in pairs(compatState.KeyPickers) do
+			if keyPicker.Active ~= false and inputMatchesKey(input, keyPicker.Value) then
+				if keyPicker.SyncToggleState and keyPicker.OwnerToggle and type(keyPicker.OwnerToggle.SetValue) == "function" then
+					if keyPicker.Mode == "Hold" then
+						keyPicker.OwnerToggle:SetValue(true)
+					else
+						keyPicker.OwnerToggle:SetValue(not keyPicker.OwnerToggle.Value)
+					end
+				end
+				runCallback(keyPicker.Callback, keyPicker.Value)
+			end
+		end
+	end)
+
+	compatState.InputEndedConnection = UserInputService.InputEnded:Connect(function(input, gameProcessed)
+		if gameProcessed then
+			return
+		end
+
+		for _, keyPicker in pairs(compatState.KeyPickers) do
+			if keyPicker.Active ~= false
+				and keyPicker.Mode == "Hold"
+				and keyPicker.SyncToggleState
+				and keyPicker.OwnerToggle
+				and inputMatchesKey(input, keyPicker.Value) then
+				keyPicker.OwnerToggle:SetValue(false)
+			end
+		end
+	end)
+end
+
+local function createLoadingGui(settings)
+	settings = settings or {}
+	local gui = GetGui()
+	gui.Name = "TiRexLoading"
+
+	local holder = Instance.new("Frame")
+	holder.Name = "Holder"
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	holder.BorderSizePixel = 0
+	holder.Position = UDim2.fromScale(0.5, 0.5)
+	holder.Size = UDim2.fromOffset(320, 128)
+	holder.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = holder
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 255, 255)
+	stroke.Transparency = 0.88
+	stroke.Parent = holder
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingBottom = UDim.new(0, 16)
+	padding.PaddingLeft = UDim.new(0, 18)
+	padding.PaddingRight = UDim.new(0, 18)
+	padding.PaddingTop = UDim.new(0, 16)
+	padding.Parent = holder
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = holder
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+	title.Text = settings.Title or "TiRex"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 18
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Size = UDim2.new(1, 0, 0, 22)
+	title.Parent = holder
+
+	local message = Instance.new("TextLabel")
+	message.Name = "Message"
+	message.BackgroundTransparency = 1
+	message.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+	message.Text = "Loading..."
+	message.TextColor3 = Color3.fromRGB(230, 230, 230)
+	message.TextSize = 13
+	message.TextXAlignment = Enum.TextXAlignment.Left
+	message.Size = UDim2.new(1, 0, 0, 18)
+	message.Parent = holder
+
+	local description = Instance.new("TextLabel")
+	description.Name = "Description"
+	description.BackgroundTransparency = 1
+	description.FontFace = Font.new(assets.interFont)
+	description.Text = ""
+	description.TextColor3 = Color3.fromRGB(190, 190, 190)
+	description.TextSize = 12
+	description.TextWrapped = true
+	description.TextXAlignment = Enum.TextXAlignment.Left
+	description.Size = UDim2.new(1, 0, 0, 30)
+	description.Parent = holder
+
+	local progressBack = Instance.new("Frame")
+	progressBack.Name = "ProgressBack"
+	progressBack.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	progressBack.BorderSizePixel = 0
+	progressBack.Size = UDim2.new(1, 0, 0, 5)
+	progressBack.Parent = holder
+
+	local progressCorner = Instance.new("UICorner")
+	progressCorner.CornerRadius = UDim.new(1, 0)
+	progressCorner.Parent = progressBack
+
+	local progress = Instance.new("Frame")
+	progress.Name = "Progress"
+	progress.BackgroundColor3 = Color3.fromRGB(245, 194, 231)
+	progress.BorderSizePixel = 0
+	progress.Size = UDim2.fromScale(0, 1)
+	progress.Parent = progressBack
+
+	local progressFillCorner = Instance.new("UICorner")
+	progressFillCorner.CornerRadius = UDim.new(1, 0)
+	progressFillCorner.Parent = progress
+
+	local loading = {
+		Destroyed = false,
+		TotalSteps = tonumber(settings.TotalSteps) or 1,
+		CurrentStep = 0
+	}
+
+	function loading:SetMessage(text)
+		message.Text = tostring(text or "")
+	end
+	function loading:SetDescription(text)
+		description.Text = tostring(text or "")
+	end
+	function loading:SetCurrentStep(step)
+		self.CurrentStep = math.clamp(tonumber(step) or 0, 0, self.TotalSteps)
+		progress.Size = UDim2.fromScale(self.TotalSteps > 0 and (self.CurrentStep / self.TotalSteps) or 1, 1)
+	end
+	function loading:Continue()
+		self:Destroy()
+	end
+	function loading:Destroy()
+		if self.Destroyed then
+			return
+		end
+		self.Destroyed = true
+		gui:Destroy()
+	end
+
+	return loading
+end
+
+local function makeNotificationPayload(settings, time)
+	if type(settings) == "table" then
+		return {
+			Title = settings.Title or MacLib.Name or "TiRex",
+			Description = settings.Description or settings.Text or "",
+			Lifetime = settings.Lifetime or settings.Time or time or 3,
+			Style = settings.Style,
+			SizeX = settings.SizeX,
+			Scale = settings.Scale,
+			Callback = settings.Callback
+		}
+	end
+
+	return {
+		Title = MacLib.Name or "TiRex",
+		Description = tostring(settings or ""),
+		Lifetime = time or 3
+	}
+end
+
+local function isIgnoredOption(flag)
+	local ignoreIndexes = MacLib.SaveManager and MacLib.SaveManager.IgnoreIndexes
+	return type(ignoreIndexes) == "table" and table.find(ignoreIndexes, flag) ~= nil
+end
+
+local function createDraggableLabel(text)
+	local gui = GetGui()
+	gui.Name = "TiRexStatusLabel"
+
+	local label = Instance.new("TextButton")
+	label.Name = "StatusLabel"
+	label.AutoButtonColor = false
+	label.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	label.BackgroundTransparency = 0.1
+	label.BorderSizePixel = 0
+	label.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+	label.Text = tostring(text or "TiRex")
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextSize = 13
+	label.Position = UDim2.fromOffset(18, 18)
+	label.Size = UDim2.fromOffset(180, 30)
+	label.Visible = true
+	label.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = label
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 255, 255)
+	stroke.Transparency = 0.88
+	stroke.Parent = label
+
+	local dragging = false
+	local dragStart
+	local startPos
+
+	label.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = label.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			label.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+
+	local proxy = {}
+	function proxy:SetText(value)
+		label.Text = tostring(value or "")
+	end
+	function proxy:SetVisible(state)
+		label.Visible = state == true
+	end
+	function proxy:Destroy()
+		gui:Destroy()
+	end
+
+	table.insert(compatState.StatusLabels, proxy)
+	return proxy
+end
+
+local function installKeyPicker(flag, settings, ownerToggle, section, ownerProxy)
+	settings = settings or {}
+	ensureCompatInput()
+
+	local defaultValue, defaultMode = parseKeyPickerValue(settings.Default or "None", settings.Mode or "Toggle")
+	local keyProxy = {
+		Value = defaultValue,
+		Mode = defaultMode or "Toggle",
+		SyncToggleState = settings.SyncToggleState == true,
+		OwnerToggle = ownerToggle,
+		Callback = settings.Callback,
+		ChangedCallback = settings.ChangedCallback,
+		Active = true,
+		NoUI = settings.NoUI == true,
+		IgnoreConfig = isIgnoredOption(flag),
+		Class = "Keybind"
+	}
+
+	local rawKeybind
+	if not keyProxy.NoUI and section and type(section.Keybind) == "function" then
+		local enumDefault = enumItemByName(Enum.KeyCode, keyProxy.Value) or enumItemByName(Enum.UserInputType, keyProxy.Value)
+		rawKeybind = section:Keybind({
+			Name = settings.Text or settings.Name or flag,
+			Default = enumDefault,
+			onBinded = function(bind)
+				keyProxy.Value = normalizeKeyName(bind)
+				if flag == "ScriptKeybind" and MacLib._activeWindow and type(MacLib._activeWindow.SetKeybind) == "function" then
+					local enumKey = enumItemByName(Enum.KeyCode, keyProxy.Value)
+					if enumKey then
+						MacLib._activeWindow:SetKeybind(enumKey)
+					end
+				end
+				runCallback(keyProxy.ChangedCallback, keyProxy.Value)
+			end
+		}, nil)
+	end
+
+	function keyProxy:SetValue(value)
+		local newValue, newMode = parseKeyPickerValue(value, self.Mode)
+		self.Value = newValue
+		self.Mode = newMode or self.Mode
+
+		if rawKeybind then
+			local enumValue = enumItemByName(Enum.KeyCode, self.Value) or enumItemByName(Enum.UserInputType, self.Value)
+			if enumValue and type(rawKeybind.Bind) == "function" then
+				rawKeybind:Bind(enumValue)
+			elseif type(rawKeybind.Unbind) == "function" then
+				rawKeybind:Unbind()
+			end
+		end
+
+		if flag == "ScriptKeybind" and MacLib._activeWindow and type(MacLib._activeWindow.SetKeybind) == "function" then
+			local enumKey = enumItemByName(Enum.KeyCode, self.Value)
+			if enumKey then
+				MacLib._activeWindow:SetKeybind(enumKey)
+			end
+		end
+
+		runCallback(self.ChangedCallback, self.Value)
+	end
+	function keyProxy:Bind(value)
+		self:SetValue(value)
+	end
+	function keyProxy:Unbind()
+		self:SetValue("None")
+	end
+	function keyProxy:GetBind()
+		return enumItemByName(Enum.KeyCode, self.Value) or enumItemByName(Enum.UserInputType, self.Value) or self.Value
+	end
+	function keyProxy:GetState()
+		return self.Value
+	end
+	function keyProxy:SetVisibility(state)
+		if rawKeybind and type(rawKeybind.SetVisibility) == "function" then
+			rawKeybind:SetVisibility(state)
+		end
+	end
+
+	if ownerProxy then
+		ownerProxy.KeyPicker = keyProxy
+	end
+	compatState.KeyPickers[flag] = keyProxy
+	MacLib.Options[flag] = keyProxy
+	return keyProxy
+end
+
+local function wrapLabel(rawLabel, groupProxy)
+	local proxy = {
+		Raw = rawLabel,
+		Value = nil
+	}
+
+	function proxy:SetText(value)
+		self.Value = tostring(value or "")
+		if rawLabel and type(rawLabel.UpdateName) == "function" then
+			rawLabel:UpdateName(self.Value)
+		end
+	end
+	function proxy:SetVisibility(state)
+		if rawLabel and type(rawLabel.SetVisibility) == "function" then
+			rawLabel:SetVisibility(state)
+		end
+	end
+	function proxy:AddKeyPicker(flag, settings)
+		return groupProxy:_AddKeyPicker(flag, settings, nil, self)
+	end
+
+	return proxy
+end
+
+local function makeGroupProxy(section)
+	local groupProxy = {
+		_section = section
+	}
+
+	function groupProxy:_AddKeyPicker(flag, settings, ownerToggle, ownerProxy)
+		return installKeyPicker(flag, settings, ownerToggle, section, ownerProxy)
+	end
+
+	function groupProxy:AddLabel(text)
+		local raw = section:Label({
+			Text = tostring(text or "")
+		})
+		local proxy = wrapLabel(raw, self)
+		proxy.Value = tostring(text or "")
+		return proxy
+	end
+
+	function groupProxy:AddDivider()
+		return section:Divider()
+	end
+
+	function groupProxy:AddUIPassthrough(flag, settings)
+		settings = settings or {}
+		if type(section.Custom) == "function" then
+			return section:Custom({
+				Name = flag,
+				Instance = settings.Instance,
+				Height = settings.Height,
+				Visible = settings.Visible
+			}, flag)
+		end
+		return self:AddLabel(flag)
+	end
+
+	function groupProxy:AddButton(text, callback)
+		local settings = type(text) == "table" and text or {
+			Name = tostring(text or "Button"),
+			Callback = callback
+		}
+		return section:Button(settings)
+	end
+
+	function groupProxy:AddCheckbox(flag, settings)
+		settings = settings or {}
+		local toggleProxy
+		local rawToggle = section:Toggle({
+			Name = settings.Text or settings.Name or tostring(flag),
+			Default = settings.Default == true,
+			Callback = function(value)
+				if toggleProxy then
+					toggleProxy.Value = value == true
+					toggleProxy.State = toggleProxy.Value
+				end
+				runCallback(settings.Callback, value == true)
+			end
+		}, nil)
+
+		toggleProxy = {
+			Raw = rawToggle,
+			Value = settings.Default == true,
+			State = settings.Default == true,
+			Class = "Toggle",
+			IgnoreConfig = isIgnoredOption(flag),
+			Settings = settings
+		}
+
+		function toggleProxy:SetValue(value)
+			local desired = value == true
+			if self.Value == desired then
+				return
+			end
+			self.Value = desired
+			self.State = desired
+			if rawToggle and type(rawToggle.UpdateState) == "function" then
+				rawToggle:UpdateState(desired)
+			end
+		end
+		function toggleProxy:UpdateState(value)
+			self:SetValue(value)
+		end
+		function toggleProxy:GetState()
+			return self.Value
+		end
+		function toggleProxy:UpdateName(name)
+			if rawToggle and type(rawToggle.UpdateName) == "function" then
+				rawToggle:UpdateName(name)
+			end
+		end
+		function toggleProxy:SetVisibility(state)
+			if rawToggle and type(rawToggle.SetVisibility) == "function" then
+				rawToggle:SetVisibility(state)
+			end
+		end
+		function toggleProxy:AddKeyPicker(keyFlag, keySettings)
+			return groupProxy:_AddKeyPicker(keyFlag, keySettings, self, self)
+		end
+		function toggleProxy:AddColorPicker(colorFlag, colorSettings)
+			return groupProxy:AddColorPicker(colorFlag, colorSettings, self)
+		end
+
+		MacLib.Toggles[flag] = toggleProxy
+		MacLib.Options[flag] = toggleProxy
+		return toggleProxy
+	end
+
+	groupProxy.AddToggle = groupProxy.AddCheckbox
+
+	function groupProxy:AddSlider(flag, settings)
+		settings = settings or {}
+		local sliderProxy
+		local rawSlider = section:Slider({
+			Name = settings.Text or settings.Name or tostring(flag),
+			Default = firstNonNil(settings.Default, settings.Min, settings.Minimum, 0),
+			Minimum = firstNonNil(settings.Min, settings.Minimum, 0),
+			Maximum = firstNonNil(settings.Max, settings.Maximum, 100),
+			DisplayMethod = "Value",
+			Precision = settings.Rounding or settings.Precision,
+			Prefix = settings.Prefix,
+			Suffix = settings.Suffix,
+			Callback = function(value)
+				if sliderProxy then
+					sliderProxy.Value = value
+				end
+				runCallback(settings.Callback, value)
+			end,
+			onInputComplete = settings.onInputComplete
+		}, nil)
+
+		sliderProxy = rawSlider or {}
+		sliderProxy.Value = firstNonNil(settings.Default, settings.Min, settings.Minimum, 0)
+		sliderProxy.Class = "Slider"
+		sliderProxy.IgnoreConfig = isIgnoredOption(flag)
+		sliderProxy.Settings = settings
+
+		local oldUpdateValue = sliderProxy.UpdateValue
+		function sliderProxy:SetValue(value)
+			self.Value = tonumber(value) or self.Value
+			if oldUpdateValue then
+				oldUpdateValue(self, self.Value)
+			end
+		end
+		function sliderProxy:UpdateValue(value)
+			self:SetValue(value)
+		end
+
+		MacLib.Options[flag] = sliderProxy
+		return sliderProxy
+	end
+
+	function groupProxy:AddDropdown(flag, settings)
+		settings = settings or {}
+		local values = settings.Values or settings.Options or {}
+		local dropdownProxy
+		local rawDropdown = section:Dropdown({
+			Name = settings.Text or settings.Name or tostring(flag),
+			Options = values,
+			Default = settings.Default,
+			Multi = settings.Multi == true,
+			Required = settings.Required == true or settings.AllowNull == false,
+			Search = settings.Searchable == true or settings.Search == true,
+			Callback = function(value)
+				if dropdownProxy then
+					dropdownProxy.Value = value
+				end
+				runCallback(settings.Callback, value)
+			end
+		}, nil)
+
+		local initialValue = nil
+		if type(settings.Default) == "number" then
+			initialValue = values[settings.Default]
+		elseif type(settings.Default) == "table" and settings.Multi then
+			initialValue = settings.Default
+		else
+			initialValue = settings.Default
+		end
+
+		dropdownProxy = rawDropdown or {}
+		dropdownProxy.Value = initialValue
+		dropdownProxy.Values = values
+		dropdownProxy.Class = "Dropdown"
+		dropdownProxy.IgnoreConfig = isIgnoredOption(flag)
+		dropdownProxy.Settings = settings
+
+		local oldUpdateSelection = dropdownProxy.UpdateSelection
+		local oldClearOptions = dropdownProxy.ClearOptions
+		local oldInsertOptions = dropdownProxy.InsertOptions
+		function dropdownProxy:SetValue(value)
+			self.Value = value
+			if oldUpdateSelection then
+				oldUpdateSelection(self, value)
+			end
+		end
+		function dropdownProxy:UpdateSelection(value)
+			self:SetValue(value)
+		end
+		function dropdownProxy:SetValues(newValues)
+			self.Values = newValues or {}
+			if oldClearOptions then
+				oldClearOptions(self)
+			end
+			if oldInsertOptions then
+				oldInsertOptions(self, self.Values)
+			end
+			if settings.AllowNull == false and self.Values[1] then
+				self:SetValue(1)
+			end
+		end
+
+		MacLib.Options[flag] = dropdownProxy
+		return dropdownProxy
+	end
+
+	function groupProxy:AddInput(flag, settings)
+		settings = settings or {}
+		local inputProxy
+		local rawInput = section:Input({
+			Name = settings.Text or settings.Name or tostring(flag),
+			Default = settings.Default or "",
+			Placeholder = settings.Placeholder or settings.PlaceholderText or "",
+			AcceptedCharacters = settings.AcceptedCharacters or "All",
+			CharacterLimit = settings.CharacterLimit,
+			Callback = function(value)
+				if inputProxy then
+					inputProxy.Value = value
+					inputProxy.Text = value
+				end
+				runCallback(settings.Callback, value)
+			end,
+			onChanged = settings.onChanged
+		}, nil)
+
+		inputProxy = rawInput or {}
+		inputProxy.Value = settings.Default or ""
+		inputProxy.Text = settings.Default or ""
+		inputProxy.Class = "Input"
+		inputProxy.IgnoreConfig = isIgnoredOption(flag)
+		inputProxy.Settings = settings
+
+		local oldUpdateText = inputProxy.UpdateText
+		function inputProxy:SetValue(value)
+			self.Value = tostring(value or "")
+			self.Text = self.Value
+			if oldUpdateText then
+				oldUpdateText(self, self.Value)
+			end
+		end
+
+		MacLib.Options[flag] = inputProxy
+		return inputProxy
+	end
+
+	function groupProxy:AddColorPicker(flag, settings, ownerToggle)
+		settings = settings or {}
+		local colorProxy
+		local rawColor = section:Colorpicker({
+			Name = settings.Title or settings.Text or settings.Name or tostring(flag),
+			Default = settings.Default or Color3.fromRGB(255, 255, 255),
+			Alpha = settings.Alpha,
+			Callback = function(color, alpha)
+				if colorProxy then
+					colorProxy.Value = color
+					colorProxy.Color = color
+					colorProxy.Alpha = alpha
+				end
+				runCallback(settings.Callback, color, alpha)
+			end
+		}, nil)
+
+		colorProxy = rawColor or {}
+		colorProxy.Value = settings.Default or Color3.fromRGB(255, 255, 255)
+		colorProxy.Color = colorProxy.Value
+		colorProxy.Alpha = settings.Alpha
+		colorProxy.Class = "Colorpicker"
+		colorProxy.IgnoreConfig = isIgnoredOption(flag)
+		colorProxy.Settings = settings
+
+		local oldSetColor = colorProxy.SetColor
+		function colorProxy:SetValue(color)
+			self.Value = color
+			self.Color = color
+			if oldSetColor then
+				oldSetColor(self, color)
+			end
+		end
+		function colorProxy:AddKeyPicker(keyFlag, keySettings)
+			return groupProxy:_AddKeyPicker(keyFlag, keySettings, ownerToggle, self)
+		end
+
+		MacLib.Options[flag] = colorProxy
+		return colorProxy
+	end
+
+	return groupProxy
+end
+
+local function makeTabProxy(rawTab)
+	local tabProxy = {
+		_tab = rawTab
+	}
+
+	local function addGroup(side, title)
+		local section = rawTab:Section({ Side = side })
+		if title and title ~= "" then
+			section:Header({ Name = title })
+		end
+		return makeGroupProxy(section)
+	end
+
+	function tabProxy:AddLeftGroupbox(title)
+		return addGroup("Left", title)
+	end
+	function tabProxy:AddRightGroupbox(title)
+		return addGroup("Right", title)
+	end
+	function tabProxy:AddGroupbox(title)
+		return addGroup("Left", title)
+	end
+	function tabProxy:Select()
+		if rawTab and type(rawTab.Select) == "function" then
+			rawTab:Select()
+		end
+	end
+	function tabProxy:InsertConfigSection(side)
+		if rawTab and type(rawTab.InsertConfigSection) == "function" then
+			return rawTab:InsertConfigSection(side or "Left")
+		end
+	end
+
+	return tabProxy
+end
+
+function MacLib:CreateLoading(settings)
+	return createLoadingGui(settings)
+end
+
+function MacLib:CreateWindow(settings)
+	settings = settings or {}
+	self.Name = settings.Title or "TiRex"
+	local rawWindow = self:Window({
+		Title = self.Name,
+		Subtitle = settings.Footer or settings.Subtitle or "",
+		Size = settings.Size or UDim2.fromOffset(868, 650),
+		DragStyle = settings.DragStyle or 1,
+		DisabledWindowControls = settings.DisabledWindowControls or {},
+		ShowUserInfo = settings.ShowUserInfo ~= false,
+		Keybind = settings.ToggleKeybind or settings.Keybind or Enum.KeyCode.G,
+		AcrylicBlur = settings.AcrylicBlur ~= false
+	})
+
+	self._activeWindow = rawWindow
+	table.insert(compatState.Windows, rawWindow)
+
+	if self.SaveManager and self.SaveManager.Folder and type(self.SetFolder) == "function" then
+		pcall(function()
+			self:SetFolder(self.SaveManager.Folder)
+		end)
+	end
+
+	local tabGroup = rawWindow:TabGroup()
+	local windowProxy = {
+		Raw = rawWindow,
+		Settings = settings,
+		TabCount = 0
+	}
+
+	function windowProxy:AddTab(name, icon)
+		local image = nil
+		if type(icon) == "string" and icon:find("^rbxasset") then
+			image = icon
+		end
+
+		local rawTab = tabGroup:Tab({
+			Name = tostring(name or "Tab"),
+			Image = image
+		})
+
+		self.TabCount += 1
+		local tabProxy = makeTabProxy(rawTab)
+		if self.TabCount == 1 then
+			tabProxy:Select()
+		end
+		return tabProxy
+	end
+	function windowProxy:Notify(payload)
+		return rawWindow:Notify(makeNotificationPayload(payload))
+	end
+	function windowProxy:Unload()
+		return rawWindow:Unload()
+	end
+	function windowProxy:SetState(state)
+		return rawWindow:SetState(state)
+	end
+	function windowProxy:GetState()
+		return rawWindow:GetState()
+	end
+
+	return windowProxy
+end
+
+function MacLib:Notify(settings, time)
+	if self._activeWindow and type(self._activeWindow.Notify) == "function" then
+		return self._activeWindow:Notify(makeNotificationPayload(settings, time))
+	end
+	warn("[TiRex] Notification before window is ready: " .. tostring(type(settings) == "table" and settings.Description or settings))
+	return nil
+end
+
+function MacLib:AddDraggableLabel(text)
+	return createDraggableLabel(text)
+end
+
+function MacLib:Unload()
+	if compatState.InputBeganConnection then
+		pcall(function()
+			compatState.InputBeganConnection:Disconnect()
+		end)
+		compatState.InputBeganConnection = nil
+	end
+	if compatState.InputEndedConnection then
+		pcall(function()
+			compatState.InputEndedConnection:Disconnect()
+		end)
+		compatState.InputEndedConnection = nil
+	end
+	compatState.InputBound = false
+	compatState.KeyPickers = {}
+
+	for _, statusLabel in ipairs(compatState.StatusLabels) do
+		pcall(function()
+			statusLabel:Destroy()
+		end)
+	end
+	compatState.StatusLabels = {}
+
+	for _, window in ipairs(compatState.Windows) do
+		pcall(function()
+			window:Unload()
+		end)
+	end
+	compatState.Windows = {}
+	self._activeWindow = nil
+end
+
+MacLib.ThemeManager = MacLib.ThemeManager or {
+	BuiltInThemes = { Default = {} },
+	SetLibrary = function(self, lib)
+		self.Library = lib
+	end,
+	SetFolder = function(self, folder)
+		self.Folder = folder
+	end,
+	ApplyToTab = function() end,
+	LoadDefault = function() end
+}
+
+MacLib.SaveManager = MacLib.SaveManager or {
+	SetLibrary = function(self, lib)
+		self.Library = lib
+	end,
+	IgnoreThemeSettings = function(self)
+		self.IgnoreThemes = true
+	end,
+	SetIgnoreIndexes = function(self, indexes)
+		self.IgnoreIndexes = indexes
+		if type(indexes) == "table" then
+			for _, flag in ipairs(indexes) do
+				if MacLib.Options[flag] then
+					MacLib.Options[flag].IgnoreConfig = true
+				end
+			end
+		end
+	end,
+	SetFolder = function(self, folder)
+		self.Folder = folder
+		if self.Library then
+			self.Library.Folder = folder
+		else
+			MacLib.Folder = folder
+		end
+	end,
+	BuildConfigSection = function(self, tab)
+		if self.Folder and type(MacLib.SetFolder) == "function" then
+			pcall(function()
+				MacLib:SetFolder(self.Folder)
+			end)
+		end
+		if tab and type(tab.InsertConfigSection) == "function" then
+			return tab:InsertConfigSection("Left")
+		end
+	end,
+	LoadAutoloadConfig = function(self)
+		if self.Folder and type(MacLib.SetFolder) == "function" then
+			pcall(function()
+				MacLib:SetFolder(self.Folder)
+			end)
+		end
+		if type(MacLib.LoadAutoLoadConfig) == "function" then
+			return MacLib:LoadAutoLoadConfig()
+		end
+	end
+}
+
 function MacLib:Demo()
 	local Window = MacLib:Window({
-		Title = "Maclib Demo",
+		Title = "TiRex Demo",
 		Subtitle = "This is a subtitle.",
 		Size = UDim2.fromOffset(868, 650),
 		DragStyle = 1,
@@ -5866,7 +6913,7 @@ function MacLib:Demo()
 		Text = "Sub-Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
 	})
 
-	MacLib:SetFolder("Maclib")
+	MacLib:SetFolder("TiRex")
 	tabs.Settings:InsertConfigSection("Left")
 
 	Window.onUnloaded(function()
