@@ -1988,13 +1988,27 @@ function MacLib:Window(Settings)
 				mesh.MeshType = 2
 				mesh.Name = wedgeguid
 			end
-			p0[wedgeguid].Scale = Vector3.new(0, perp/sz, para/sz)
+			local mesh0 = p0:FindFirstChild(wedgeguid)
+			if not mesh0 then
+				mesh0 = Instance.new('SpecialMesh')
+				mesh0.MeshType = 2
+				mesh0.Name = wedgeguid
+				mesh0.Parent = p0
+			end
+			mesh0.Scale = Vector3.new(0, perp/sz, para/sz)
 			p0.CFrame = cf0
 
 			if not p1 then
 				p1 = p0:clone()
 			end
-			p1[wedgeguid].Scale = Vector3.new(0, perp/sz, dif_para/sz)
+			local mesh1 = p1:FindFirstChild(wedgeguid)
+			if not mesh1 then
+				mesh1 = Instance.new('SpecialMesh')
+				mesh1.MeshType = 2
+				mesh1.Name = wedgeguid
+				mesh1.Parent = p1
+			end
+			mesh1.Scale = Vector3.new(0, perp/sz, dif_para/sz)
 			p1.CFrame = cf1
 
 			return p0, p1
@@ -3038,6 +3052,23 @@ function MacLib:Window(Settings)
 
 					local dragging = false
 
+					local function getSliderBounds()
+						local runtimeSettings = SliderFunctions.Settings or Settings or {}
+						local minValue = tonumber(optionFirstNonNil(runtimeSettings.Minimum, runtimeSettings.Min, Settings.Minimum, Settings.Min)) or 0
+						local maxValue = tonumber(optionFirstNonNil(runtimeSettings.Maximum, runtimeSettings.Max, Settings.Maximum, Settings.Max)) or 100
+						if maxValue < minValue then
+							minValue, maxValue = maxValue, minValue
+						end
+
+						local precision = tonumber(optionFirstNonNil(runtimeSettings.Precision, runtimeSettings.Rounding, Settings.Precision, Settings.Rounding)) or 0
+						runtimeSettings.Minimum = minValue
+						runtimeSettings.Maximum = maxValue
+						runtimeSettings.Precision = precision
+						runtimeSettings.Default = optionClampNumber(optionFirstNonNil(runtimeSettings.Default, runtimeSettings.Value, Settings.Default, minValue), minValue, maxValue)
+						SliderFunctions.Settings = runtimeSettings
+						return minValue, maxValue, precision
+					end
+
 					local DisplayMethods = {
 						Hundredths = function(sliderValue) -- Deprecated use Settings.Precision
 							return string.format("%.2f", sliderValue)
@@ -3057,8 +3088,9 @@ function MacLib:Window(Settings)
 							return formattedValue .. "°"
 						end,
 						Percent = function(sliderValue, precision)
-							local range = SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum
-							local percentage = range == 0 and 0 or ((sliderValue - SliderFunctions.Settings.Minimum) / range) * 100
+							local minValue, maxValue = getSliderBounds()
+							local range = maxValue - minValue
+							local percentage = range == 0 and 0 or ((sliderValue - minValue) / range) * 100
 							return precision and string.format("%." .. precision .. "f", percentage) .. "%" or tostring(math.round(percentage)) .. "%"
 						end,
 						Value = function(sliderValue, precision)
@@ -3075,8 +3107,7 @@ function MacLib:Window(Settings)
 
 					local function SetValue(val, ignorecallback)
 						local posXScale
-						local minValue = SliderFunctions.Settings.Minimum
-						local maxValue = SliderFunctions.Settings.Maximum
+						local minValue, maxValue, precision = getSliderBounds()
 						local range = maxValue - minValue
 
 						if (typeof(val) == "InputObject" or type(val) == "table") and val.Position then
@@ -3090,14 +3121,14 @@ function MacLib:Window(Settings)
 							elseif isPercent then
 								value = minValue + (value / 100) * range
 							end
-							value = optionClampNumber(optionRound(value, SliderFunctions.Settings.Precision), minValue, maxValue)
+							value = optionClampNumber(optionRound(value, precision), minValue, maxValue)
 							posXScale = range == 0 and 0 or ((value - minValue) / range)
 						end
 
 						local pos = UDim2.new(posXScale, 0, 0.5, 0)
 						sliderHead.Position = pos
 
-						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, SliderFunctions.Settings.Precision), minValue, maxValue)
+						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
 						SliderFunctions.State = finalValue
 
@@ -3139,13 +3170,14 @@ function MacLib:Window(Settings)
 
 					sliderValue.FocusLost:Connect(function(enterPressed)
 						local value, isPercent = optionExtractNumber(sliderValue.Text)
+						local minValue, maxValue = getSliderBounds()
 
 						if value then
 							if isPercent then
-								value = SliderFunctions.Settings.Minimum + (value / 100) * (SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum)
+								value = minValue + (value / 100) * (maxValue - minValue)
 							end
 
-							local newValue = math.clamp(value, SliderFunctions.Settings.Minimum, SliderFunctions.Settings.Maximum)
+							local newValue = math.clamp(value, minValue, maxValue)
 							SetValue(newValue)
 						else
 							sliderValue.Text = formatSliderValue(finalValue or SliderFunctions.Settings.Default)
@@ -3458,7 +3490,7 @@ function MacLib:Window(Settings)
 					keybindName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybindName.BorderSizePixel = 0
 					keybindName.Position = UDim2.fromScale(0, 0.5)
-					keybindName.Size = UDim2.new(1, -82, 0, 0)
+					keybindName.Size = UDim2.new(1, -96, 0, 0)
 					keybindName.Parent = keybind
 
 					local binderBox = Instance.new("TextButton")
@@ -3468,19 +3500,19 @@ function MacLib:Window(Settings)
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 					binderBox.TextSize = 12
 					binderBox.TextScaled = false
-					binderBox.TextTransparency = 0.05
+					binderBox.TextTransparency = 0
 					binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
 					binderBox.AutoButtonColor = false
 					binderBox.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
-					binderBox.BackgroundTransparency = 0.45
+					binderBox.BackgroundTransparency = 0.25
 					binderBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					binderBox.BorderSizePixel = 0
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(64, 28)
-					binderBox.ZIndex = 2
+					binderBox.Size = UDim2.fromOffset(78, 30)
+					binderBox.ZIndex = 10
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
@@ -3508,8 +3540,8 @@ function MacLib:Window(Settings)
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
-					binderBoxUISizeConstraint.MinSize = Vector2.new(64, 28)
-					binderBoxUISizeConstraint.MaxSize = Vector2.new(64, 28)
+					binderBoxUISizeConstraint.MinSize = Vector2.new(78, 30)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(78, 30)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
@@ -3534,7 +3566,7 @@ function MacLib:Window(Settings)
 						end
 
 						if name == "" or name == "None" or name == "nil" then
-							return "None"
+							return "NONE"
 						end
 
 						local shortNames = {
@@ -3571,7 +3603,7 @@ function MacLib:Window(Settings)
 							binderBox.TextColor3 = binded and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(120, 120, 120),
-								BackgroundTransparency = binded and 0.12 or 0.45
+								BackgroundTransparency = binded and 0.12 or 0.25
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220),
@@ -7866,7 +7898,7 @@ local function makeGroupProxy(section)
 		sliderProxy.Value = firstNonNil(settings.Default, settings.Min, settings.Minimum, 0)
 		sliderProxy.Class = "Slider"
 		sliderProxy.IgnoreConfig = isIgnoredOption(flag)
-		sliderProxy.Settings = settings
+		sliderProxy.CompatSettings = settings
 
 		local oldUpdateValue = sliderProxy.UpdateValue
 		function sliderProxy:SetValue(value)
@@ -7916,7 +7948,7 @@ local function makeGroupProxy(section)
 		dropdownProxy.Values = values
 		dropdownProxy.Class = "Dropdown"
 		dropdownProxy.IgnoreConfig = isIgnoredOption(flag)
-		dropdownProxy.Settings = settings
+		dropdownProxy.CompatSettings = settings
 
 		local oldUpdateSelection = dropdownProxy.UpdateSelection
 		local oldClearOptions = dropdownProxy.ClearOptions
@@ -7971,7 +8003,7 @@ local function makeGroupProxy(section)
 		inputProxy.Text = settings.Default or ""
 		inputProxy.Class = "Input"
 		inputProxy.IgnoreConfig = isIgnoredOption(flag)
-		inputProxy.Settings = settings
+		inputProxy.CompatSettings = settings
 
 		local oldUpdateText = inputProxy.UpdateText
 		function inputProxy:SetValue(value)
@@ -8009,7 +8041,7 @@ local function makeGroupProxy(section)
 		colorProxy.Alpha = settings.Alpha
 		colorProxy.Class = "Colorpicker"
 		colorProxy.IgnoreConfig = isIgnoredOption(flag)
-		colorProxy.Settings = settings
+		colorProxy.CompatSettings = settings
 
 		local oldSetColor = colorProxy.SetColor
 		function colorProxy:SetValue(color)
@@ -8380,7 +8412,10 @@ local function compatApplyThemeToRoot(root, theme)
 		elseif obj:IsA("Frame") and obj.Name == "Line" and obj.Parent and obj.Parent:IsA("CanvasGroup") then
 			obj.BackgroundColor3 = normalized.Font
 		elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-			if obj.Name == "ProfileTier" then
+			if obj.Name == "BinderBox" then
+				obj.TextColor3 = normalized.Font
+				obj.TextTransparency = 0
+			elseif obj.Name == "ProfileTier" then
 				obj.TextColor3 = normalized.Background
 			else
 				obj.TextColor3 = normalized.Font
@@ -8393,7 +8428,10 @@ local function compatApplyThemeToRoot(root, theme)
 					-- Keep the colorpicker value slider hue intact.
 				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
-				elseif obj.Name == "CheckboxButton" or obj.Name == "BinderBox" then
+				elseif obj.Name == "BinderBox" then
+					obj.BackgroundColor3 = normalized.Outline
+					obj.BackgroundTransparency = 0.2
+				elseif obj.Name == "CheckboxButton" then
 					obj.BackgroundColor3 = normalized.Outline
 				else
 					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
