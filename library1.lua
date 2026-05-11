@@ -24,6 +24,10 @@ local LocalPlayer = Players.LocalPlayer
 local windowState
 local acrylicBlur
 local hasGlobalSetting
+local activeLoadingGuis = 0
+
+local DEFAULT_WINDOW_SIZE = UDim2.fromOffset(920, 680)
+local MIN_WINDOW_SIZE = Vector2.new(760, 520)
 
 local tabs = {}
 local currentTabInstance = nil
@@ -559,11 +563,16 @@ function MacLib:Window(Settings)
 	base.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	base.BorderSizePixel = 0
 	base.Position = UDim2.fromScale(0.5, 0.5)
-	base.Size = Settings.Size or UDim2.fromOffset(868, 650)
+	base.Size = Settings.Size or DEFAULT_WINDOW_SIZE
 
 	local baseUIScale = Instance.new("UIScale")
 	baseUIScale.Name = "BaseUIScale"
 	baseUIScale.Parent = base
+
+	local baseUISizeConstraint = Instance.new("UISizeConstraint")
+	baseUISizeConstraint.Name = "BaseUISizeConstraint"
+	baseUISizeConstraint.MinSize = Settings.MinimumSize or Settings.MinSize or MIN_WINDOW_SIZE
+	baseUISizeConstraint.Parent = base
 
 	local baseUICorner = Instance.new("UICorner")
 	baseUICorner.Name = "BaseUICorner"
@@ -3241,7 +3250,7 @@ function MacLib:Window(Settings)
 					binderBox.Name = "BinderBox"
 					binderBox.CursorPosition = -1
 					binderBox.FontFace = Font.new(assets.interFont)
-					binderBox.PlaceholderText = "..."
+					binderBox.PlaceholderText = "None"
 					binderBox.Text = ""
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 					binderBox.TextSize = 12
@@ -3255,7 +3264,7 @@ function MacLib:Window(Settings)
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(21, 21)
+					binderBox.Size = UDim2.fromOffset(76, 24)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
@@ -3277,6 +3286,8 @@ function MacLib:Window(Settings)
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
+					binderBoxUISizeConstraint.MinSize = Vector2.new(72, 24)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(160, 24)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
@@ -3286,15 +3297,17 @@ function MacLib:Window(Settings)
 					local reset = false
 					local binded = KeybindFunctions.Settings.Default
 
+					local function getBindText(bind)
+						return bind and bind.Name or "None"
+					end
+
 					local function resetFocusState()
 						focused = false
 						isBinding = false
 						binderBox:ReleaseFocus()
 					end
 
-					if binded then
-						binderBox.Text = binded.Name
-					end
+					binderBox.Text = getBindText(binded)
 
 					binderBox.Focused:Connect(function()
 						focused = true
@@ -3310,7 +3323,7 @@ function MacLib:Window(Settings)
 
 							local Event
 							Event = UserInputService.InputBegan:Connect(function(input)
-								if KeybindFunctions.Settings.Blacklist and (table.find(KeybindFunctions.KeybindFunctions.Settings.Blacklist, input.KeyCode) or table.find(KeybindFunctions.Settings.Blacklist, input.UserInputType)) then
+								if KeybindFunctions.Settings.Blacklist and (table.find(KeybindFunctions.Settings.Blacklist, input.KeyCode) or table.find(KeybindFunctions.Settings.Blacklist, input.UserInputType)) then
 									binderBox:ReleaseFocus()
 									resetFocusState()
 									Event:Disconnect()
@@ -3358,12 +3371,12 @@ function MacLib:Window(Settings)
 
 					function KeybindFunctions:Bind(Key)
 						binded = Key
-						binderBox.Text = Key.Name
+						binderBox.Text = getBindText(Key)
 					end
 
 					function KeybindFunctions:Unbind()
 						binded = nil
-						binderBox.Text = ""
+						binderBox.Text = getBindText(nil)
 					end
 
 					function KeybindFunctions:GetBind()
@@ -6247,9 +6260,52 @@ function MacLib:Window(Settings)
 		return notifications.Visible
 	end
 
+	local windowMouseCaptured = false
+	local previousMouseBehavior
+	local previousMouseIconEnabled
+
+	local function setWindowMouseState(isOpen)
+		if isOpen then
+			if not windowMouseCaptured then
+				pcall(function()
+					previousMouseBehavior = UserInputService.MouseBehavior
+				end)
+				pcall(function()
+					previousMouseIconEnabled = UserInputService.MouseIconEnabled
+				end)
+				windowMouseCaptured = true
+			end
+
+			pcall(function()
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+				UserInputService.MouseIconEnabled = true
+			end)
+			return
+		end
+
+		if not windowMouseCaptured then
+			return
+		end
+
+		pcall(function()
+			if previousMouseBehavior ~= nil then
+				UserInputService.MouseBehavior = previousMouseBehavior
+			end
+			if previousMouseIconEnabled ~= nil then
+				UserInputService.MouseIconEnabled = previousMouseIconEnabled
+			end
+		end)
+
+		windowMouseCaptured = false
+		previousMouseBehavior = nil
+		previousMouseIconEnabled = nil
+	end
+
 	function WindowFunctions:SetState(State)
-		windowState = State
-		base.Visible = State
+		local nextState = State == true
+		windowState = nextState
+		base.Visible = nextState
+		setWindowMouseState(nextState)
 	end
 
 	function WindowFunctions:GetState()
@@ -6262,6 +6318,7 @@ function MacLib:Window(Settings)
 		if onUnloadCallback then
 			onUnloadCallback()  
 		end
+		setWindowMouseState(false)
 		macLib:Destroy()
 		unloaded = true
 	end
@@ -6273,6 +6330,10 @@ function MacLib:Window(Settings)
 	local MenuKeybind = Settings.Keybind or Enum.KeyCode.RightControl
 
 	local function ToggleMenu()
+		if activeLoadingGuis > 0 then
+			return
+		end
+
 		local state = not WindowFunctions:GetState()
 		WindowFunctions:SetState(state)
 		WindowFunctions:Notify({
@@ -6624,6 +6685,7 @@ function MacLib:Window(Settings)
 	ContentProvider:PreloadAsync(assetList)
 	macLib.Enabled = true
 	windowState = true
+	setWindowMouseState(true)
 
 	return WindowFunctions
 end
@@ -6772,6 +6834,7 @@ local function createLoadingGui(settings)
 	settings = settings or {}
 	local gui = GetGui()
 	gui.Name = "TiRexLoading"
+	activeLoadingGuis += 1
 
 	local holder = Instance.new("Frame")
 	holder.Name = "Holder"
@@ -6883,6 +6946,7 @@ local function createLoadingGui(settings)
 			return
 		end
 		self.Destroyed = true
+		activeLoadingGuis = math.max(0, activeLoadingGuis - 1)
 		gui:Destroy()
 	end
 
@@ -7090,6 +7154,12 @@ local function wrapLabel(rawLabel, groupProxy)
 	function proxy:AddKeyPicker(flag, settings)
 		return groupProxy:_AddKeyPicker(flag, settings, nil, self)
 	end
+	function proxy:AddKeybind(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function proxy:addKeybind(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
 
 	return proxy
 end
@@ -7196,6 +7266,12 @@ local function makeGroupProxy(section)
 		function toggleProxy:AddKeyPicker(keyFlag, keySettings)
 			return groupProxy:_AddKeyPicker(keyFlag, keySettings, self, self)
 		end
+		function toggleProxy:AddKeybind(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function toggleProxy:addKeybind(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 		function toggleProxy:AddColorPicker(colorFlag, colorSettings)
 			return groupProxy:AddColorPicker(colorFlag, colorSettings, self)
 		end
@@ -7211,6 +7287,12 @@ local function makeGroupProxy(section)
 
 	function groupProxy:AddToggle(flag, settings)
 		return addBooleanOption(flag, settings, "Toggle")
+	end
+	function groupProxy:AddKeybind(flag, settings)
+		return self:_AddKeyPicker(flag, settings, nil, self)
+	end
+	function groupProxy:addKeybind(flag, settings)
+		return self:AddKeybind(flag, settings)
 	end
 
 	function groupProxy:AddSlider(flag, settings)
@@ -7394,6 +7476,12 @@ local function makeGroupProxy(section)
 		function colorProxy:AddKeyPicker(keyFlag, keySettings)
 			return groupProxy:_AddKeyPicker(keyFlag, keySettings, ownerToggle, self)
 		end
+		function colorProxy:AddKeybind(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function colorProxy:addKeybind(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 
 		MacLib.Options[flag] = colorProxy
 		return colorProxy
@@ -7488,7 +7576,8 @@ function MacLib:CreateWindow(settings)
 	local rawWindow = self:Window({
 		Title = self.Name,
 		Subtitle = settings.Footer or settings.Subtitle or "",
-		Size = settings.Size or UDim2.fromOffset(868, 650),
+		Size = settings.Size or DEFAULT_WINDOW_SIZE,
+		MinSize = settings.MinimumSize or settings.MinSize or MIN_WINDOW_SIZE,
 		DragStyle = settings.DragStyle or 1,
 		DisabledWindowControls = settings.DisabledWindowControls or {},
 		ShowUserInfo = settings.ShowUserInfo ~= false,
