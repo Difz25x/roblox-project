@@ -558,8 +558,8 @@ function MacLib:Window(Settings)
 	local base = Instance.new("Frame")
 	base.Name = "Base"
 	base.AnchorPoint = Vector2.new(0.5, 0.5)
-	base.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-	base.BackgroundTransparency = Settings.AcrylicBlur and 0.05 or 0
+	base.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	base.BackgroundTransparency = Settings.AcrylicBlur and 0.02 or 0
 	base.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	base.BorderSizePixel = 0
 	base.Position = UDim2.fromScale(0.5, 0.5)
@@ -1346,7 +1346,7 @@ function MacLib:Window(Settings)
 	local globalSettings = Instance.new("Frame")
 	globalSettings.Name = "GlobalSettings"
 	globalSettings.AutomaticSize = Enum.AutomaticSize.XY
-	globalSettings.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	globalSettings.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 	globalSettings.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	globalSettings.BorderSizePixel = 0
 	globalSettings.Position = UDim2.fromScale(0.298, 0.104)
@@ -1433,7 +1433,7 @@ function MacLib:Window(Settings)
 		local profileModal = Instance.new("Frame")
 		profileModal.Name = "ProfileModal"
 		profileModal.AnchorPoint = Vector2.new(0, 1)
-		profileModal.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+		profileModal.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 		profileModal.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		profileModal.BorderSizePixel = 0
 		profileModal.Position = UDim2.new(0, 18, 1, -18)
@@ -2356,7 +2356,7 @@ function MacLib:Window(Settings)
 				section.Name = "Section"
 				section.AutomaticSize = Enum.AutomaticSize.Y
 				section.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				section.BackgroundTransparency = 0.98
+				section.BackgroundTransparency = 0.94
 				section.BorderColor3 = Color3.fromRGB(0, 0, 0)
 				section.BorderSizePixel = 0
 				section.Position = UDim2.fromScale(0, 6.78e-08)
@@ -2519,7 +2519,7 @@ function MacLib:Window(Settings)
 					local toggle1 = Instance.new("ImageButton")
 					toggle1.Name = "Toggle"
 					toggle1.Image = assets.toggleBackground
-					toggle1.ImageColor3 = Color3.fromRGB(87, 86, 86)
+					toggle1.ImageColor3 = Color3.fromRGB(125, 125, 125)
 					toggle1.AutoButtonColor = false
 					toggle1.AnchorPoint = Vector2.new(1, 0.5)
 					toggle1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -2528,7 +2528,7 @@ function MacLib:Window(Settings)
 					toggle1.BorderSizePixel = 0
 					toggle1.Position = UDim2.fromScale(1, 0.5)
 					toggle1.Size = UDim2.fromOffset(41, 21)
-					toggle1.ImageTransparency = 0.5
+					toggle1.ImageTransparency = 0.2
 
 					local toggleUIPadding = Instance.new("UIPadding")
 					toggleUIPadding.Name = "ToggleUIPadding"
@@ -2551,12 +2551,12 @@ function MacLib:Window(Settings)
 					togglerHead.Size = UDim2.fromOffset(15, 15)
 					togglerHead.ZIndex = 2
 					togglerHead.Parent = toggle1
-					togglerHead.ImageTransparency = 0.8
+					togglerHead.ImageTransparency = 0.15
 
 					toggle1.Parent = toggle
 
-					local toggle1Transparency = {Enabled = 0, Disabled = 0.5}
-					local togglerHeadTransparency = {Enabled = 0, Disabled = 0.85}
+					local toggle1Transparency = {Enabled = 0, Disabled = 0.2}
+					local togglerHeadTransparency = {Enabled = 0, Disabled = 0.15}
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
@@ -2661,7 +2661,7 @@ function MacLib:Window(Settings)
 					checkboxButton.AutoButtonColor = false
 					checkboxButton.AnchorPoint = Vector2.new(1, 0.5)
 					checkboxButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					checkboxButton.BackgroundTransparency = 0.95
+					checkboxButton.BackgroundTransparency = 0.88
 					checkboxButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					checkboxButton.BorderSizePixel = 0
 					checkboxButton.Position = UDim2.fromScale(1, 0.5)
@@ -2676,8 +2676,8 @@ function MacLib:Window(Settings)
 					local checkboxStroke = Instance.new("UIStroke")
 					checkboxStroke.Name = "CheckboxStroke"
 					checkboxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-					checkboxStroke.Color = Color3.fromRGB(255, 255, 255)
-					checkboxStroke.Transparency = 0.9
+					checkboxStroke.Color = Color3.fromRGB(150, 150, 150)
+					checkboxStroke.Transparency = 0.55
 					checkboxStroke.Parent = checkboxButton
 
 					local checkmark = Instance.new("TextLabel")
@@ -2706,10 +2706,14 @@ function MacLib:Window(Settings)
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-						EnabledBackgroundTransparency = 0.82,
-						DisabledBackgroundTransparency = 0.95,
-						EnabledStrokeTransparency = 0.45,
-						DisabledStrokeTransparency = 0.9,
+						EnabledBackgroundColor = Color3.fromRGB(255, 255, 255),
+						DisabledBackgroundColor = Color3.fromRGB(130, 130, 130),
+						EnabledStrokeColor = Color3.fromRGB(255, 255, 255),
+						DisabledStrokeColor = Color3.fromRGB(150, 150, 150),
+						EnabledBackgroundTransparency = 0.62,
+						DisabledBackgroundTransparency = 0.76,
+						EnabledStrokeTransparency = 0.25,
+						DisabledStrokeTransparency = 0.35,
 						EnabledCheckTransparency = 0,
 						DisabledCheckTransparency = 1
 					}
@@ -2720,11 +2724,15 @@ function MacLib:Window(Settings)
 						local enabled = State == true
 
 						Tween(checkboxButton, TweenSettings.Info, {
+							BackgroundColor3 = enabled and TweenSettings.EnabledBackgroundColor
+								or TweenSettings.DisabledBackgroundColor,
 							BackgroundTransparency = enabled and TweenSettings.EnabledBackgroundTransparency
 								or TweenSettings.DisabledBackgroundTransparency
 						}):Play()
 
 						Tween(checkboxStroke, TweenSettings.Info, {
+							Color = enabled and TweenSettings.EnabledStrokeColor
+								or TweenSettings.DisabledStrokeColor,
 							Transparency = enabled and TweenSettings.EnabledStrokeTransparency
 								or TweenSettings.DisabledStrokeTransparency
 						}):Play()
@@ -3396,6 +3404,10 @@ function MacLib:Window(Settings)
 					end
 
 					return KeybindFunctions
+				end
+
+				function SectionFunctions:KeyPicker(Settings, Flag)
+					return self:Keybind(Settings, Flag)
 				end
 
 				function SectionFunctions:Dropdown(Settings, Flag)
@@ -4074,7 +4086,7 @@ function MacLib:Window(Settings)
 					prompt.Name = "Prompt"
 					prompt.AnchorPoint = Vector2.new(0.5, 0.5)
 					prompt.AutomaticSize = Enum.AutomaticSize.Y
-					prompt.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+					prompt.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 					prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					prompt.BorderSizePixel = 0
 					prompt.Position = UDim2.fromScale(0.5, 0.5)
@@ -5254,6 +5266,16 @@ function MacLib:Window(Settings)
 					return ColorpickerFunctions
 				end
 
+				function SectionFunctions:ColorPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:Colourpicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:ColourPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+
 				function SectionFunctions:Header(Settings, Flag)
 					local HeaderFunctions = {Settings = Settings}
 
@@ -5789,7 +5811,7 @@ function MacLib:Window(Settings)
 		notification.Name = "Notification"
 		notification.AnchorPoint = Vector2.new(0.5, 0.5)
 		notification.AutomaticSize = Enum.AutomaticSize.Y
-		notification.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+		notification.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 		notification.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		notification.BorderSizePixel = 0
 		notification.Position = UDim2.fromScale(0.5, 0.5)
@@ -6024,7 +6046,7 @@ function MacLib:Window(Settings)
 		prompt.Name = "Prompt"
 		prompt.AnchorPoint = Vector2.new(0.5, 0.5)
 		prompt.AutomaticSize = Enum.AutomaticSize.Y
-		prompt.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+		prompt.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 		prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		prompt.BorderSizePixel = 0
 		prompt.Position = UDim2.fromScale(0.5, 0.5)
@@ -6839,7 +6861,7 @@ local function createLoadingGui(settings)
 	local holder = Instance.new("Frame")
 	holder.Name = "Holder"
 	holder.AnchorPoint = Vector2.new(0.5, 0.5)
-	holder.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	holder.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 	holder.BorderSizePixel = 0
 	holder.Position = UDim2.fromScale(0.5, 0.5)
 	holder.Size = UDim2.fromOffset(320, 128)
@@ -6985,7 +7007,7 @@ local function createDraggableLabel(text)
 	local label = Instance.new("TextButton")
 	label.Name = "StatusLabel"
 	label.AutoButtonColor = false
-	label.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	label.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 	label.BackgroundTransparency = 0.1
 	label.BorderSizePixel = 0
 	label.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
@@ -7154,6 +7176,12 @@ local function wrapLabel(rawLabel, groupProxy)
 	function proxy:AddKeyPicker(flag, settings)
 		return groupProxy:_AddKeyPicker(flag, settings, nil, self)
 	end
+	function proxy:KeyPicker(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function proxy:addKeyPicker(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
 	function proxy:AddKeybind(flag, settings)
 		return self:AddKeyPicker(flag, settings)
 	end
@@ -7171,6 +7199,15 @@ local function makeGroupProxy(section)
 
 	function groupProxy:_AddKeyPicker(flag, settings, ownerToggle, ownerProxy)
 		return installKeyPicker(flag, settings, ownerToggle, section, ownerProxy)
+	end
+	function groupProxy:AddKeyPicker(flag, settings)
+		return self:_AddKeyPicker(flag, settings, nil, self)
+	end
+	function groupProxy:KeyPicker(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function groupProxy:addKeyPicker(flag, settings)
+		return self:AddKeyPicker(flag, settings)
 	end
 
 	function groupProxy:AddLabel(text)
@@ -7272,8 +7309,20 @@ local function makeGroupProxy(section)
 		function toggleProxy:addKeybind(keyFlag, keySettings)
 			return self:AddKeyPicker(keyFlag, keySettings)
 		end
+		function toggleProxy:addKeyPicker(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 		function toggleProxy:AddColorPicker(colorFlag, colorSettings)
 			return groupProxy:AddColorPicker(colorFlag, colorSettings, self)
+		end
+		function toggleProxy:addColorPicker(colorFlag, colorSettings)
+			return self:AddColorPicker(colorFlag, colorSettings)
+		end
+		function toggleProxy:AddColorpicker(colorFlag, colorSettings)
+			return self:AddColorPicker(colorFlag, colorSettings)
+		end
+		function toggleProxy:addColorpicker(colorFlag, colorSettings)
+			return self:AddColorPicker(colorFlag, colorSettings)
 		end
 
 		MacLib.Toggles[flag] = toggleProxy
@@ -7289,7 +7338,7 @@ local function makeGroupProxy(section)
 		return addBooleanOption(flag, settings, "Toggle")
 	end
 	function groupProxy:AddKeybind(flag, settings)
-		return self:_AddKeyPicker(flag, settings, nil, self)
+		return self:AddKeyPicker(flag, settings)
 	end
 	function groupProxy:addKeybind(flag, settings)
 		return self:AddKeybind(flag, settings)
@@ -7482,9 +7531,27 @@ local function makeGroupProxy(section)
 		function colorProxy:addKeybind(keyFlag, keySettings)
 			return self:AddKeyPicker(keyFlag, keySettings)
 		end
+		function colorProxy:addKeyPicker(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function colorProxy:KeyPicker(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 
 		MacLib.Options[flag] = colorProxy
 		return colorProxy
+	end
+	function groupProxy:AddColorpicker(flag, settings, ownerToggle)
+		return self:AddColorPicker(flag, settings, ownerToggle)
+	end
+	function groupProxy:addColorPicker(flag, settings, ownerToggle)
+		return self:AddColorPicker(flag, settings, ownerToggle)
+	end
+	function groupProxy:addColorpicker(flag, settings, ownerToggle)
+		return self:AddColorPicker(flag, settings, ownerToggle)
+	end
+	function groupProxy:ColorPicker(flag, settings, ownerToggle)
+		return self:AddColorPicker(flag, settings, ownerToggle)
 	end
 
 	return groupProxy
@@ -7756,12 +7823,12 @@ end
 local function compatNormalizeTheme(theme)
 	local payload = compatGetThemePayload(theme) or {}
 	return {
-		Background = compatColorFromHex(payload.BackgroundColor or payload.Background or payload.WindowBackground, Color3.fromRGB(15, 15, 15)),
-		Main = compatColorFromHex(payload.MainColor or payload.Main or payload.ElementBackground, Color3.fromRGB(25, 25, 25)),
+		Background = compatColorFromHex(payload.BackgroundColor or payload.Background or payload.WindowBackground, Color3.fromRGB(24, 24, 24)),
+		Main = compatColorFromHex(payload.MainColor or payload.Main or payload.ElementBackground, Color3.fromRGB(36, 36, 36)),
 		Accent = compatColorFromHex(payload.AccentColor or payload.Accent, Color3.fromRGB(255, 255, 255)),
-		Outline = compatColorFromHex(payload.OutlineColor or payload.Outline or payload.BorderColor, Color3.fromRGB(255, 255, 255)),
+		Outline = compatColorFromHex(payload.OutlineColor or payload.Outline or payload.BorderColor, Color3.fromRGB(82, 82, 82)),
 		Font = compatColorFromHex(payload.FontColor or payload.TextColor or payload.Font, Color3.fromRGB(255, 255, 255)),
-		MutedFont = compatColorFromHex(payload.MutedFontColor or payload.MutedTextColor, Color3.fromRGB(190, 190, 190))
+		MutedFont = compatColorFromHex(payload.MutedFontColor or payload.MutedTextColor, Color3.fromRGB(205, 205, 205))
 	}
 end
 
@@ -7792,6 +7859,7 @@ local function compatApplyThemeToRoot(root, theme)
 		Cancel = true,
 		ProfileButton = true,
 		ProfileCard = true,
+		CheckboxButton = true,
 		DiscordButton = true,
 		WebsiteButton = true,
 		LogoutButton = true
@@ -7814,6 +7882,8 @@ local function compatApplyThemeToRoot(root, theme)
 			if obj.BackgroundTransparency < 0.99 then
 				if obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
+				elseif obj.Name == "CheckboxButton" then
+					obj.BackgroundColor3 = normalized.Outline
 				else
 					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
 				end
@@ -7848,34 +7918,34 @@ MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
 	Default = {
 		"Default",
 		{
-			BackgroundColor = "0a0a0a",
-			MainColor = "181818",
+			BackgroundColor = "151515",
+			MainColor = "242424",
 			AccentColor = "ffffff",
-			OutlineColor = "3a3a3a",
-			FontColor = "f5f5f5",
-			MutedFontColor = "a8a8a8"
+			OutlineColor = "565656",
+			FontColor = "ffffff",
+			MutedFontColor = "c8c8c8"
 		}
 	},
 	TiRex = {
 		"TiRex",
 		{
-			BackgroundColor = "080808",
-			MainColor = "1c1c1c",
+			BackgroundColor = "141414",
+			MainColor = "262626",
 			AccentColor = "ffffff",
-			OutlineColor = "424242",
-			FontColor = "f7f7f7",
-			MutedFontColor = "b0b0b0"
+			OutlineColor = "5c5c5c",
+			FontColor = "ffffff",
+			MutedFontColor = "cccccc"
 		}
 	},
 	Professional = {
 		"Professional",
 		{
-			BackgroundColor = "050505",
-			MainColor = "141414",
+			BackgroundColor = "121212",
+			MainColor = "222222",
 			AccentColor = "ffffff",
-			OutlineColor = "2f2f2f",
-			FontColor = "fafafa",
-			MutedFontColor = "9f9f9f"
+			OutlineColor = "4e4e4e",
+			FontColor = "ffffff",
+			MutedFontColor = "c0c0c0"
 		}
 	}
 }
