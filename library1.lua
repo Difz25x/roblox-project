@@ -202,6 +202,7 @@ local lucideState = {
 	BaseUrl = "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/%s.svg",
 	SvgCache = {},
 	SegmentCache = {},
+	FastIcons = true,
 	Aliases = {
 		["check-circle"] = "circle-check",
 		["alert-triangle"] = "triangle-alert",
@@ -545,7 +546,10 @@ local function createLucideIcon(icon, size, color, transparency)
 	size = size or 18
 	color = color or Color3.fromRGB(255, 255, 255)
 	local iconName = normalizeLucideIconName(icon)
-	local segments = iconName and parseLucideSvgSegments(iconName)
+	local segments = nil
+	if iconName and not lucideState.FastIcons then
+		segments = parseLucideSvgSegments(iconName)
+	end
 
 	local container = Instance.new("CanvasGroup")
 	container.Name = "LucideIcon"
@@ -564,7 +568,7 @@ local function createLucideIcon(icon, size, color, transparency)
 		fallback.BackgroundTransparency = 1
 		fallback.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 		fallback.Size = UDim2.fromScale(1, 1)
-		fallback.Text = string.upper(tostring(icon or "?"):sub(1, 1))
+		fallback.Text = string.upper(tostring(iconName or icon or "?"):sub(1, 1))
 		fallback.TextColor3 = color
 		fallback.TextSize = math.max(10, size - 4)
 		fallback.TextTransparency = 0
@@ -7282,7 +7286,17 @@ function MacLib:Window(Settings)
 		table.insert(assetList, assetId)
 	end
 
-	ContentProvider:PreloadAsync(assetList)
+	if Settings.PreloadAssets == true or Settings.BlockingPreload == true then
+		pcall(function()
+			ContentProvider:PreloadAsync(assetList)
+		end)
+	else
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync(assetList)
+			end)
+		end)
+	end
 	macLib.Enabled = true
 	windowState = true
 	setWindowMouseState(true)
