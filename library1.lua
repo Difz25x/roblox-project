@@ -664,7 +664,7 @@ local function drawIconLine(parent, segment, size, color, transparency)
 	line.Parent = parent
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
+	corner.CornerRadius = UDim.new(0, 0)
 	corner.Parent = line
 end
 
@@ -950,7 +950,7 @@ function MacLib:Window(Settings)
 	
 	local baseUICorner = Instance.new("UICorner")
 	baseUICorner.Name = "BaseUICorner"
-	baseUICorner.CornerRadius = UDim.new(0, 10)
+	baseUICorner.CornerRadius = UDim.new(0, 0)
 	baseUICorner.Parent = base
 
 	local baseUIStroke = Instance.new("UIStroke")
@@ -1049,7 +1049,7 @@ function MacLib:Window(Settings)
 
 	local uICorner = Instance.new("UICorner")
 	uICorner.Name = "UICorner"
-	uICorner.CornerRadius = UDim.new(1, 0)
+	uICorner.CornerRadius = UDim.new(0, 0)
 	uICorner.Parent = exit
 
 	exit.Parent = controls
@@ -1068,7 +1068,7 @@ function MacLib:Window(Settings)
 
 	local uICorner1 = Instance.new("UICorner")
 	uICorner1.Name = "UICorner"
-	uICorner1.CornerRadius = UDim.new(1, 0)
+	uICorner1.CornerRadius = UDim.new(0, 0)
 	uICorner1.Parent = minimize
 
 	minimize.Parent = controls
@@ -1087,7 +1087,7 @@ function MacLib:Window(Settings)
 
 	local uICorner2 = Instance.new("UICorner")
 	uICorner2.Name = "UICorner"
-	uICorner2.CornerRadius = UDim.new(1, 0)
+	uICorner2.CornerRadius = UDim.new(0, 0)
 	uICorner2.Parent = maximize
 
 	maximize.Parent = controls
@@ -1333,7 +1333,7 @@ function MacLib:Window(Settings)
 
 	local uICorner3 = Instance.new("UICorner")
 	uICorner3.Name = "UICorner"
-	uICorner3.CornerRadius = UDim.new(1, 0)
+	uICorner3.CornerRadius = UDim.new(0, 0)
 	uICorner3.Parent = headshot
 
 	local baseUIStroke2 = Instance.new("UIStroke")
@@ -1734,7 +1734,7 @@ function MacLib:Window(Settings)
 
 	local globalSettingsUICorner = Instance.new("UICorner")
 	globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-	globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+	globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
 	globalSettingsUICorner.Parent = globalSettings
 
 	local globalSettingsUIPadding = Instance.new("UIPadding")
@@ -1795,7 +1795,7 @@ function MacLib:Window(Settings)
 		profileButton.Parent = userInfo
 
 		local profileButtonCorner = Instance.new("UICorner")
-		profileButtonCorner.CornerRadius = UDim.new(0, 8)
+		profileButtonCorner.CornerRadius = UDim.new(0, 0)
 		profileButtonCorner.Parent = profileButton
 
 		local profileButtonStroke = Instance.new("UIStroke")
@@ -1817,7 +1817,7 @@ function MacLib:Window(Settings)
 		profileModal.Parent = base
 
 		local profileModalCorner = Instance.new("UICorner")
-		profileModalCorner.CornerRadius = UDim.new(0, 7)
+		profileModalCorner.CornerRadius = UDim.new(0, 0)
 		profileModalCorner.Parent = profileModal
 
 		local profileModalStroke = Instance.new("UIStroke")
@@ -1872,7 +1872,7 @@ function MacLib:Window(Settings)
 		card.Parent = profileModal
 
 		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, 8)
+		cardCorner.CornerRadius = UDim.new(0, 0)
 		cardCorner.Parent = card
 
 		local cardStroke = Instance.new("UIStroke")
@@ -1893,7 +1893,7 @@ function MacLib:Window(Settings)
 		avatar.Parent = card
 
 		local avatarCorner = Instance.new("UICorner")
-		avatarCorner.CornerRadius = UDim.new(0, 7)
+		avatarCorner.CornerRadius = UDim.new(0, 0)
 		avatarCorner.Parent = avatar
 
 		local tier = Instance.new("TextLabel")
@@ -1910,7 +1910,7 @@ function MacLib:Window(Settings)
 		tier.Parent = card
 
 		local tierCorner = Instance.new("UICorner")
-		tierCorner.CornerRadius = UDim.new(0, 4)
+		tierCorner.CornerRadius = UDim.new(0, 0)
 		tierCorner.Parent = tier
 
 		local rows = Instance.new("Frame")
@@ -2021,7 +2021,7 @@ function MacLib:Window(Settings)
 			button.Parent = actions
 
 			local buttonCorner = Instance.new("UICorner")
-			buttonCorner.CornerRadius = UDim.new(0, 5)
+			buttonCorner.CornerRadius = UDim.new(0, 0)
 			buttonCorner.Parent = button
 
 			local buttonStroke = Instance.new("UIStroke")
@@ -2908,13 +2908,13 @@ function MacLib:Window(Settings)
 					toggle1.ImageColor3 = Color3.fromRGB(125, 125, 125)
 					toggle1.AutoButtonColor = false
 					toggle1.AnchorPoint = Vector2.new(1, 0.5)
-					toggle1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					toggle1.BackgroundTransparency = 1
+					toggle1.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+					toggle1.BackgroundTransparency = 0.76
 					toggle1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					toggle1.BorderSizePixel = 0
 					toggle1.Position = UDim2.fromScale(1, 0.5)
 					toggle1.Size = UDim2.fromOffset(41, 21)
-					toggle1.ImageTransparency = 0.2
+					toggle1.ImageTransparency = 1
 
 					local toggleUIPadding = Instance.new("UIPadding")
 					toggleUIPadding.Name = "ToggleUIPadding"
@@ -2930,19 +2930,19 @@ function MacLib:Window(Settings)
 					togglerHead.ImageColor3 = Color3.fromRGB(255, 255, 255)
 					togglerHead.AnchorPoint = Vector2.new(1, 0.5)
 					togglerHead.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					togglerHead.BackgroundTransparency = 1
+					togglerHead.BackgroundTransparency = 0
 					togglerHead.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					togglerHead.BorderSizePixel = 0
 					togglerHead.Position = UDim2.fromScale(0.5, 0.5)
 					togglerHead.Size = UDim2.fromOffset(15, 15)
 					togglerHead.ZIndex = 2
 					togglerHead.Parent = toggle1
-					togglerHead.ImageTransparency = 0.15
+					togglerHead.ImageTransparency = 1
 
 					toggle1.Parent = toggle
 
-					local toggle1Transparency = {Enabled = 0, Disabled = 0.2}
-					local togglerHeadTransparency = {Enabled = 0, Disabled = 0.15}
+					local toggle1Transparency = {Enabled = 0.62, Disabled = 0.76}
+					local togglerHeadTransparency = {Enabled = 0, Disabled = 0.1}
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
@@ -2959,11 +2959,14 @@ function MacLib:Window(Settings)
 						local position = State and TweenSettings.EnabledPosition or TweenSettings.DisabledPosition
 
 						Tween(toggle1, TweenSettings.Info, {
-							ImageTransparency = transparencyValues[1]
+							ImageTransparency = 1,
+							BackgroundColor3 = State and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
+							BackgroundTransparency = transparencyValues[1]
 						}):Play()
 
 						Tween(togglerHead, TweenSettings.Info, {
-							ImageTransparency = transparencyValues[2]
+							ImageTransparency = 1,
+							BackgroundTransparency = transparencyValues[2]
 						}):Play()
 
 						Tween(togglerHead, TweenSettings.Info, {
@@ -3064,7 +3067,7 @@ function MacLib:Window(Settings)
 
 					local checkboxCorner = Instance.new("UICorner")
 					checkboxCorner.Name = "CheckboxCorner"
-					checkboxCorner.CornerRadius = UDim.new(0, 4)
+					checkboxCorner.CornerRadius = UDim.new(0, 0)
 					checkboxCorner.Parent = checkboxButton
 
 					local checkboxStroke = Instance.new("UIStroke")
@@ -3233,31 +3236,34 @@ function MacLib:Window(Settings)
 
 					local sliderValue = Instance.new("TextBox")
 					sliderValue.Name = "SliderValue"
+					sliderValue.Active = true
 					sliderValue.ClearTextOnFocus = false
 					sliderValue.CursorPosition = -1
 					sliderValue.FontFace = Font.new(assets.interFont)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
 					sliderValue.TextSize = 11
-					sliderValue.TextScaled = true
+					sliderValue.TextScaled = false
 					sliderValue.TextTransparency = 0
 					sliderValue.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 					sliderValue.TextStrokeTransparency = 0.18
 					sliderValue.TextXAlignment = Enum.TextXAlignment.Center
 					sliderValue.TextYAlignment = Enum.TextYAlignment.Center
 					sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
-					sliderValue.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					sliderValue.AnchorPoint = Vector2.new(0.5, 0.5)
+					sliderValue.AutomaticSize = Enum.AutomaticSize.X
+					sliderValue.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 					sliderValue.BackgroundTransparency = 1
 					sliderValue.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderValue.BorderSizePixel = 0
 					sliderValue.LayoutOrder = 1
-					sliderValue.Position = UDim2.fromOffset(10, 0)
-					sliderValue.Size = UDim2.new(1, -20, 1, 0)
+					sliderValue.Position = UDim2.fromScale(0.5, 0.5)
+					sliderValue.Size = UDim2.fromOffset(70, 16)
 					sliderValue.ClipsDescendants = true
 					sliderValue.ZIndex = 20
 
 					local sliderValueUICorner = Instance.new("UICorner")
 					sliderValueUICorner.Name = "SliderValueUICorner"
-					sliderValueUICorner.CornerRadius = UDim.new(0, 4)
+					sliderValueUICorner.CornerRadius = UDim.new(0, 0)
 					sliderValueUICorner.Parent = sliderValue
 
 					local sliderValueUIStroke = Instance.new("UIStroke")
@@ -3276,8 +3282,14 @@ function MacLib:Window(Settings)
 					local sliderValueTextSize = Instance.new("UITextSizeConstraint")
 					sliderValueTextSize.Name = "SliderValueTextSizeConstraint"
 					sliderValueTextSize.MaxTextSize = 11
-					sliderValueTextSize.MinTextSize = 7
+					sliderValueTextSize.MinTextSize = 9
 					sliderValueTextSize.Parent = sliderValue
+
+					local sliderValueSizeConstraint = Instance.new("UISizeConstraint")
+					sliderValueSizeConstraint.Name = "SliderValueSizeConstraint"
+					sliderValueSizeConstraint.MinSize = Vector2.new(42, 16)
+					sliderValueSizeConstraint.MaxSize = Vector2.new(126, 16)
+					sliderValueSizeConstraint.Parent = sliderValue
 
 					local sliderElementsUIListLayout = Instance.new("UIListLayout")
 					sliderElementsUIListLayout.Name = "SliderElementsUIListLayout"
@@ -3306,12 +3318,12 @@ function MacLib:Window(Settings)
 
 					local sliderBarCorner = Instance.new("UICorner")
 					sliderBarCorner.Name = "SliderBarCorner"
-					sliderBarCorner.CornerRadius = UDim.new(0, 2)
+					sliderBarCorner.CornerRadius = UDim.new(0, 0)
 					sliderBarCorner.Parent = sliderBar
 
 					local sliderFill = Instance.new("Frame")
 					sliderFill.Name = "SliderFill"
-					sliderFill.BackgroundColor3 = Color3.fromRGB(125, 85, 255)
+					sliderFill.BackgroundColor3 = Color3.fromRGB(132, 132, 140)
 					sliderFill.BackgroundTransparency = 0
 					sliderFill.BorderSizePixel = 0
 					sliderFill.Size = UDim2.fromScale(0, 1)
@@ -3320,7 +3332,7 @@ function MacLib:Window(Settings)
 
 					local sliderFillCorner = Instance.new("UICorner")
 					sliderFillCorner.Name = "SliderFillCorner"
-					sliderFillCorner.CornerRadius = UDim.new(0, 2)
+					sliderFillCorner.CornerRadius = UDim.new(0, 0)
 					sliderFillCorner.Parent = sliderFill
 
 					local sliderHitbox = Instance.new("TextButton")
@@ -3339,14 +3351,15 @@ function MacLib:Window(Settings)
 					local sliderHead = Instance.new("ImageButton")
 					sliderHead.Name = "SliderHead"
 					sliderHead.Image = assets.sliderhead
+					sliderHead.ImageTransparency = 1
 					sliderHead.AutoButtonColor = false
 					sliderHead.AnchorPoint = Vector2.new(0.5, 0.5)
 					sliderHead.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					sliderHead.BackgroundTransparency = 1
+					sliderHead.BackgroundTransparency = 0
 					sliderHead.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderHead.BorderSizePixel = 0
 					sliderHead.Position = UDim2.fromScale(1, 0.5)
-					sliderHead.Size = UDim2.fromOffset(12, 12)
+					sliderHead.Size = UDim2.fromOffset(10, 14)
 					sliderHead.ZIndex = sliderBar.ZIndex + 2
 					sliderHead.Parent = sliderBar
 
@@ -3411,6 +3424,7 @@ function MacLib:Window(Settings)
 
 					local ValueDisplayMethod = DisplayMethods[SliderFunctions.Settings.DisplayMethod] or DisplayMethods.Value
 					local finalValue
+					local sliderEditing = false
 
 					local function formatSliderValue(value)
 						local _, maxValue, precision = getSliderBounds()
@@ -3421,6 +3435,17 @@ function MacLib:Window(Settings)
 							.. "/"
 							.. ValueDisplayMethod(maxValue, precision)
 							.. suffix
+					end
+
+					local function formatSliderInputValue(value)
+						local _, _, precision = getSliderBounds()
+						return ValueDisplayMethod(value, precision)
+					end
+
+					local function setSliderDisplayText(value)
+						if not sliderEditing then
+							sliderValue.Text = formatSliderValue(value)
+						end
 					end
 
 					local function getPointerX(input)
@@ -3447,6 +3472,35 @@ function MacLib:Window(Settings)
 						return sliderBar.AbsolutePosition.X
 					end
 
+					local function getPointerPosition(input)
+						if input and input.Position then
+							return Vector2.new(input.Position.X, input.Position.Y)
+						end
+
+						local ok, mouseLocation = pcall(function()
+							return UserInputService:GetMouseLocation()
+						end)
+						if ok and mouseLocation then
+							return mouseLocation
+						end
+
+						return nil
+					end
+
+					local function isPointerOverValueInput(input)
+						local pos = getPointerPosition(input)
+						if not pos then
+							return false
+						end
+
+						local valuePos = sliderValue.AbsolutePosition
+						local valueSize = sliderValue.AbsoluteSize
+						return pos.X >= valuePos.X
+							and pos.X <= valuePos.X + valueSize.X
+							and pos.Y >= valuePos.Y
+							and pos.Y <= valuePos.Y + valueSize.Y
+					end
+
 					local function setValueFromX(x, ignorecallback)
 						local minValue, maxValue, precision = getSliderBounds()
 						local range = maxValue - minValue
@@ -3459,7 +3513,7 @@ function MacLib:Window(Settings)
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
 						SliderFunctions.State = finalValue
-						sliderValue.Text = formatSliderValue(finalValue)
+						setSliderDisplayText(finalValue)
 
 						if not ignorecallback and previousValue ~= finalValue then
 							optionCall(SliderFunctions.Settings.Callback, finalValue)
@@ -3495,7 +3549,7 @@ function MacLib:Window(Settings)
 						SliderFunctions.Value = finalValue
 						SliderFunctions.State = finalValue
 
-						sliderValue.Text = formatSliderValue(finalValue)
+						setSliderDisplayText(finalValue)
 
 						if not ignorecallback and previousValue ~= finalValue then
 							optionCall(SliderFunctions.Settings.Callback, finalValue)
@@ -3509,6 +3563,9 @@ function MacLib:Window(Settings)
 
 					local function beginSliderInput(input)
 						if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+							return
+						end
+						if isPointerOverValueInput(input) then
 							return
 						end
 
@@ -3537,10 +3594,6 @@ function MacLib:Window(Settings)
 						beginSliderInput(input)
 					end)
 
-					sliderValue.InputBegan:Connect(function(input)
-						beginSliderInput(input)
-					end)
-
 					local function finishSliderInput()
 						if not dragging then return end
 						dragging = false
@@ -3557,9 +3610,22 @@ function MacLib:Window(Settings)
 						end
 					end)
 
+					sliderValue.Focused:Connect(function()
+						sliderEditing = true
+						sliderValue.Text = formatSliderInputValue(finalValue or SliderFunctions.Settings.Default)
+						sliderValue.TextStrokeTransparency = 1
+						sliderValue.BackgroundTransparency = 0.15
+						sliderValueUIStroke.Transparency = 0.55
+						sliderValue.CursorPosition = #sliderValue.Text + 1
+					end)
+
 					sliderValue.FocusLost:Connect(function(enterPressed)
 						local value, isPercent = optionExtractNumber(sliderValue.Text)
 						local minValue, maxValue = getSliderBounds()
+						sliderEditing = false
+						sliderValue.TextStrokeTransparency = 0.18
+						sliderValue.BackgroundTransparency = 1
+						sliderValueUIStroke.Transparency = 1
 
 						if value then
 							if isPercent then
@@ -3685,7 +3751,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -3904,7 +3970,7 @@ function MacLib:Window(Settings)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
-					binderBoxUICorner.CornerRadius = UDim.new(0, 4)
+					binderBoxUICorner.CornerRadius = UDim.new(0, 0)
 					binderBoxUICorner.Parent = binderBox
 
 					local binderBoxUIStroke = Instance.new("UIStroke")
@@ -3980,23 +4046,23 @@ function MacLib:Window(Settings)
 							binderBox.Text = "..."
 							binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-								BackgroundTransparency = 0.62
+								BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+								BackgroundTransparency = 0.08
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								Color = Color3.fromRGB(255, 255, 255),
-								Transparency = 0.25
+								Transparency = 0.12
 							}):Play()
 						else
 							binderBox.Text = getBindText(binded)
 							binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
-								BackgroundTransparency = binded and 0.62 or 0.76
+								BackgroundColor3 = binded and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(130, 130, 130),
+								BackgroundTransparency = binded and 0.08 or 0.76
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150),
-								Transparency = binded and 0.25 or 0.35
+								Color = binded and Color3.fromRGB(224, 224, 224) or Color3.fromRGB(150, 150, 150),
+								Transparency = binded and 0.12 or 0.35
 							}):Play()
 						end
 					end
@@ -4224,7 +4290,7 @@ function MacLib:Window(Settings)
 
 					local dropdownUICorner = Instance.new("UICorner")
 					dropdownUICorner.Name = "DropdownUICorner"
-					dropdownUICorner.CornerRadius = UDim.new(0, 6)
+					dropdownUICorner.CornerRadius = UDim.new(0, 0)
 					dropdownUICorner.Parent = dropdown
 
 					local dropdownImage = Instance.new("ImageLabel")
@@ -4836,7 +4902,7 @@ function MacLib:Window(Settings)
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
-					uICorner.CornerRadius = UDim.new(0, 6)
+					uICorner.CornerRadius = UDim.new(0, 0)
 					uICorner.Parent = colorC
 
 					local interact = Instance.new("TextButton")
@@ -4856,7 +4922,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 8)
+					uICorner1.CornerRadius = UDim.new(0, 0)
 					uICorner1.Parent = colorCbg
 
 					colorCbg.Parent = colorpicker
@@ -4872,7 +4938,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 10)
+					baseUICorner.CornerRadius = UDim.new(0, 0)
 					baseUICorner.Parent = colorPicker
 
 					local prompt = Instance.new("Frame")
@@ -4899,7 +4965,7 @@ function MacLib:Window(Settings)
 
 					local globalSettingsUICorner = Instance.new("UICorner")
 					globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-					globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+					globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
 					globalSettingsUICorner.Parent = prompt
 
 					local uIListLayout = Instance.new("UIListLayout")
@@ -4957,7 +5023,7 @@ function MacLib:Window(Settings)
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
-					uICorner.CornerRadius = UDim.new(1, 0)
+					uICorner.CornerRadius = UDim.new(0, 0)
 					uICorner.Parent = slide
 
 					local uIStroke = Instance.new("UIStroke")
@@ -4970,7 +5036,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 6)
+					uICorner1.CornerRadius = UDim.new(0, 0)
 					uICorner1.Parent = value
 
 					local uIStroke1 = Instance.new("UIStroke")
@@ -5022,7 +5088,7 @@ function MacLib:Window(Settings)
 
 					local wheelCorner = Instance.new("UICorner")
 					wheelCorner.Name = "WheelCorner"
-					wheelCorner.CornerRadius = UDim.new(0, 8)
+					wheelCorner.CornerRadius = UDim.new(0, 0)
 					wheelCorner.Parent = wheel1
 
 					local wheelStroke = Instance.new("UIStroke")
@@ -5163,7 +5229,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -5246,7 +5312,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner1 = Instance.new("UICorner")
 					inputBoxUICorner1.Name = "InputBoxUICorner"
-					inputBoxUICorner1.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner1.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner1.Parent = inputBox1
 
 					local inputBoxUIStroke1 = Instance.new("UIStroke")
@@ -5329,7 +5395,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner2 = Instance.new("UICorner")
 					inputBoxUICorner2.Name = "InputBoxUICorner"
-					inputBoxUICorner2.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner2.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner2.Parent = inputBox2
 
 					local inputBoxUIStroke2 = Instance.new("UIStroke")
@@ -5413,7 +5479,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner3 = Instance.new("UICorner")
 					inputBoxUICorner3.Name = "InputBoxUICorner"
-					inputBoxUICorner3.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner3.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner3.Parent = inputBox3
 
 					local inputBoxUIStroke3 = Instance.new("UIStroke")
@@ -5496,7 +5562,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner4 = Instance.new("UICorner")
 					inputBoxUICorner4.Name = "InputBoxUICorner"
-					inputBoxUICorner4.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner4.CornerRadius = UDim.new(0, 0)
 					inputBoxUICorner4.Parent = inputBox4
 
 					local inputBoxUIStroke4 = Instance.new("UIStroke")
@@ -5658,7 +5724,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 10)
+					baseUICorner.CornerRadius = UDim.new(0, 0)
 					baseUICorner.Parent = confirm
 
 					confirm.Parent = interactions
@@ -5684,7 +5750,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner1 = Instance.new("UICorner")
 					baseUICorner1.Name = "BaseUICorner"
-					baseUICorner1.CornerRadius = UDim.new(0, 10)
+					baseUICorner1.CornerRadius = UDim.new(0, 0)
 					baseUICorner1.Parent = cancel
 
 					local uIPadding2 = Instance.new("UIPadding")
@@ -6714,7 +6780,7 @@ function MacLib:Window(Settings)
 
 		local notificationUICorner = Instance.new("UICorner")
 		notificationUICorner.Name = "NotificationUICorner"
-		notificationUICorner.CornerRadius = UDim.new(0, 10)
+		notificationUICorner.CornerRadius = UDim.new(0, 0)
 		notificationUICorner.Parent = notification
 
 		local notificationUIScale = Instance.new("UIScale")
@@ -6925,7 +6991,7 @@ function MacLib:Window(Settings)
 
 		local dialogUICorner = Instance.new("UICorner")
 		dialogUICorner.Name = "BaseUICorner"
-		dialogUICorner.CornerRadius = UDim.new(0, 10)
+		dialogUICorner.CornerRadius = UDim.new(0, 0)
 		dialogUICorner.Parent = dialog
 
 		local prompt = Instance.new("Frame")
@@ -6952,7 +7018,7 @@ function MacLib:Window(Settings)
 
 		local globalSettingsUICorner = Instance.new("UICorner")
 		globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-		globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+		globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
 		globalSettingsUICorner.Parent = prompt
 
 		local globalSettingsUIPadding = Instance.new("UIPadding")
@@ -7099,7 +7165,7 @@ function MacLib:Window(Settings)
 
 			local baseUICorner1 = Instance.new("UICorner")
 			baseUICorner1.Name = "BaseUICorner"
-			baseUICorner1.CornerRadius = UDim.new(0, 10)
+			baseUICorner1.CornerRadius = UDim.new(0, 0)
 			baseUICorner1.Parent = button
 
 			button.Parent = interactions
@@ -7612,6 +7678,7 @@ local compatState = {
 	Windows = {},
 	KeyPickers = {},
 	StatusLabels = {},
+	SquareCornerRoots = {},
 	InputBound = false,
 	InputBeganConnection = nil,
 	InputEndedConnection = nil
@@ -7766,7 +7833,7 @@ local function createLoadingGui(settings)
 	holder.Parent = gui
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
+	corner.CornerRadius = UDim.new(0, 0)
 	corner.Parent = holder
 
 	local stroke = Instance.new("UIStroke")
@@ -7828,7 +7895,7 @@ local function createLoadingGui(settings)
 	progressBack.Parent = holder
 
 	local progressCorner = Instance.new("UICorner")
-	progressCorner.CornerRadius = UDim.new(1, 0)
+	progressCorner.CornerRadius = UDim.new(0, 0)
 	progressCorner.Parent = progressBack
 
 	local progress = Instance.new("Frame")
@@ -7839,7 +7906,7 @@ local function createLoadingGui(settings)
 	progress.Parent = progressBack
 
 	local progressFillCorner = Instance.new("UICorner")
-	progressFillCorner.CornerRadius = UDim.new(1, 0)
+	progressFillCorner.CornerRadius = UDim.new(0, 0)
 	progressFillCorner.Parent = progress
 
 	local loading = {
@@ -7918,7 +7985,7 @@ local function createDraggableLabel(text)
 	label.Parent = gui
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
+	corner.CornerRadius = UDim.new(0, 0)
 	corner.Parent = label
 
 	local stroke = Instance.new("UIStroke")
@@ -8116,7 +8183,7 @@ local function wrapLabel(rawLabel, groupProxy)
 		binderBox.Parent = labelFrame
 
 		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 4)
+		corner.CornerRadius = UDim.new(0, 0)
 		corner.Parent = binderBox
 
 		local stroke = Instance.new("UIStroke")
@@ -8167,17 +8234,17 @@ local function wrapLabel(rawLabel, groupProxy)
 		local function updateInlineVisual(isBinding)
 			if isBinding then
 				binderBox.Text = "..."
-				binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				binderBox.BackgroundTransparency = 0.62
+				binderBox.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+				binderBox.BackgroundTransparency = 0.08
 				stroke.Color = Color3.fromRGB(255, 255, 255)
-				stroke.Transparency = 0.25
+				stroke.Transparency = 0.12
 			else
 				binderBox.Text = formatKeyName(keyProxy.Value)
 				local hasValue = keyProxy.Value and keyProxy.Value ~= "None"
-				binderBox.BackgroundColor3 = hasValue and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130)
-				binderBox.BackgroundTransparency = hasValue and 0.62 or 0.76
-				stroke.Color = hasValue and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150)
-				stroke.Transparency = hasValue and 0.25 or 0.35
+				binderBox.BackgroundColor3 = hasValue and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(130, 130, 130)
+				binderBox.BackgroundTransparency = hasValue and 0.08 or 0.76
+				stroke.Color = hasValue and Color3.fromRGB(224, 224, 224) or Color3.fromRGB(150, 150, 150)
+				stroke.Transparency = hasValue and 0.12 or 0.35
 			end
 		end
 
@@ -8938,6 +9005,13 @@ local function compatApplyThemeToRoot(root, theme)
 	end
 
 	local normalized = compatNormalizeTheme(theme)
+	if not compatState.SquareCornerRoots[root] and root.DescendantAdded then
+		compatState.SquareCornerRoots[root] = root.DescendantAdded:Connect(function(obj)
+			if obj:IsA("UICorner") then
+				obj.CornerRadius = UDim.new(0, 0)
+			end
+		end)
+	end
 	local backgroundNames = {
 		Base = true,
 		Holder = true,
@@ -8966,7 +9040,9 @@ local function compatApplyThemeToRoot(root, theme)
 	}
 
 	for _, obj in ipairs(root:GetDescendants()) do
-		if obj:IsA("UIStroke") then
+		if obj:IsA("UICorner") then
+			obj.CornerRadius = UDim.new(0, 0)
+		elseif obj:IsA("UIStroke") then
 			if obj.Parent and obj.Parent.Name == "BinderBox" then
 				-- Keep keybind boxes in the same state-driven style as checkboxes.
 			else
@@ -8995,6 +9071,8 @@ local function compatApplyThemeToRoot(root, theme)
 					-- Keybind boxes manage their own enabled/empty/binding colors.
 				elseif obj.Name == "CheckboxButton" then
 					obj.BackgroundColor3 = normalized.Outline
+				elseif obj.Name == "Toggle" and obj:IsA("ImageButton") then
+					obj.BackgroundColor3 = normalized.Outline
 				else
 					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
 				end
@@ -9011,7 +9089,7 @@ local function compatApplyThemeToRoot(root, theme)
 				elseif obj.Name == "SliderFill" then
 					local accent = normalized.Accent
 					if math.abs(accent.R - accent.G) < 0.04 and math.abs(accent.G - accent.B) < 0.04 and accent.R > 0.82 then
-						accent = Color3.fromRGB(125, 85, 255)
+						accent = Color3.fromRGB(132, 132, 140)
 					end
 					obj.BackgroundColor3 = accent
 				elseif mainNames[obj.Name] then
@@ -9023,7 +9101,11 @@ local function compatApplyThemeToRoot(root, theme)
 				obj.ImageColor3 = normalized.Font
 			elseif obj.Name == "SliderBar" then
 				obj.BackgroundColor3 = normalized.Main:Lerp(normalized.Font, 0.12)
-			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" or obj.Name == "Checkmark" then
+			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" then
+				obj.ImageTransparency = 1
+				obj.BackgroundColor3 = normalized.Font
+				obj.BackgroundTransparency = obj.Name == "TogglerHead" and obj.BackgroundTransparency or 0
+			elseif obj.Name == "Checkmark" then
 				obj.ImageColor3 = normalized.Accent
 			elseif obj.Name == "Wheel" and obj:FindFirstChild("WheelHueGradient") then
 				-- Keep the generated colorpicker hue field from being themed to gray.
@@ -9040,33 +9122,44 @@ MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
 		"Default",
 		{
 			BackgroundColor = "151515",
-			MainColor = "242424",
-			AccentColor = "ffffff",
-			OutlineColor = "565656",
+			MainColor = "252525",
+			AccentColor = "e0e0e0",
+			OutlineColor = "ffffff",
 			FontColor = "ffffff",
-			MutedFontColor = "c8c8c8"
+			MutedFontColor = "d6d6d6"
+		}
+	},
+	["Minimalist White/Silver"] = {
+		"Minimalist White/Silver",
+		{
+			BackgroundColor = "151515",
+			MainColor = "252525",
+			AccentColor = "e0e0e0",
+			OutlineColor = "ffffff",
+			FontColor = "ffffff",
+			MutedFontColor = "d6d6d6"
 		}
 	},
 	TiRex = {
 		"TiRex",
 		{
-			BackgroundColor = "141414",
-			MainColor = "262626",
-			AccentColor = "ffffff",
-			OutlineColor = "5c5c5c",
+			BackgroundColor = "151515",
+			MainColor = "252525",
+			AccentColor = "e0e0e0",
+			OutlineColor = "ffffff",
 			FontColor = "ffffff",
-			MutedFontColor = "cccccc"
+			MutedFontColor = "d6d6d6"
 		}
 	},
 	Professional = {
 		"Professional",
 		{
-			BackgroundColor = "121212",
-			MainColor = "222222",
-			AccentColor = "ffffff",
-			OutlineColor = "4e4e4e",
+			BackgroundColor = "101010",
+			MainColor = "1d1d1f",
+			AccentColor = "e0e0e0",
+			OutlineColor = "ffffff",
 			FontColor = "ffffff",
-			MutedFontColor = "c0c0c0"
+			MutedFontColor = "d8d8d8"
 		}
 	}
 }
