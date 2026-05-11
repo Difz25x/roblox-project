@@ -34,6 +34,118 @@ local currentTabInstance = nil
 local tabIndex = 0
 local unloaded = false
 
+local function optionFirstNonNil(...)
+	local values = { ... }
+	for i = 1, #values do
+		if values[i] ~= nil then
+			return values[i]
+		end
+	end
+	return nil
+end
+
+local function optionText(settings, flag, fallback)
+	settings = settings or {}
+	return tostring(optionFirstNonNil(settings.Text, settings.Name, flag, fallback or "Option"))
+end
+
+local function optionArgs(settings, flag)
+	if type(settings) == "string" and type(flag) == "function" then
+		return { Name = settings, Callback = flag }, nil
+	end
+	if type(settings) == "string" and (type(flag) == "table" or flag == nil) then
+		return flag or {}, settings
+	end
+	if settings ~= nil and type(settings) ~= "table" then
+		return { Text = tostring(settings) }, flag
+	end
+	return settings or {}, flag
+end
+
+local optionUnpack = table.unpack or unpack
+
+local function optionCall(callback, ...)
+	if type(callback) ~= "function" then
+		return
+	end
+
+	local args = { ... }
+	local function invoke()
+		local ok, err = pcall(callback, optionUnpack(args))
+		if not ok then
+			warn("[MacLib] callback error: " .. tostring(err))
+		end
+	end
+	if task and type(task.spawn) == "function" then
+		task.spawn(invoke)
+	else
+		coroutine.wrap(invoke)()
+	end
+end
+
+local function optionRound(value, precision)
+	value = tonumber(value) or 0
+	precision = tonumber(precision)
+	if not precision or precision <= 0 then
+		return math.floor(value + 0.5)
+	end
+	local scale = 10 ^ precision
+	return math.floor(value * scale + 0.5) / scale
+end
+
+local function optionClampNumber(value, minValue, maxValue)
+	value = tonumber(value)
+	minValue = tonumber(minValue) or 0
+	maxValue = tonumber(maxValue) or minValue
+	if maxValue < minValue then
+		minValue, maxValue = maxValue, minValue
+	end
+	return math.clamp(value or minValue, minValue, maxValue)
+end
+
+local function optionExtractNumber(text)
+	if typeof(text) == "number" then
+		return text, false
+	end
+
+	text = tostring(text or "")
+	text = text:gsub(",", "")
+	local numberText, percent = text:match("([%-]?%d+%.?%d*)%s*(%%?)")
+	if not numberText then
+		return nil, false
+	end
+	return tonumber(numberText), percent == "%"
+end
+
+local function optionResolveInput(input)
+	if typeof(input) == "EnumItem" then
+		return input
+	end
+
+	local name = tostring(input or "")
+	name = name:gsub("^Enum%.KeyCode%.", "")
+	name = name:gsub("^KeyCode%.", "")
+	name = name:gsub("^Enum%.UserInputType%.", "")
+	name = name:gsub("^UserInputType%.", "")
+	if name == "" or name == "None" or name == "nil" then
+		return nil
+	end
+
+	local okKey, keyCode = pcall(function()
+		return Enum.KeyCode[name]
+	end)
+	if not okKey then
+		keyCode = nil
+	end
+	if keyCode then
+		return keyCode
+	end
+	local okInput, inputType = pcall(function()
+		return Enum.UserInputType[name]
+	end)
+	return okInput and inputType or nil
+end
+
 local assets = {
 	interFont = "rbxassetid://12187365364",
 	tirexIcon = "rbxassetid://91835354225469",
@@ -573,7 +685,7 @@ function MacLib:Window(Settings)
 	baseUISizeConstraint.Name = "BaseUISizeConstraint"
 	baseUISizeConstraint.MinSize = Settings.MinimumSize or Settings.MinSize or MIN_WINDOW_SIZE
 	baseUISizeConstraint.Parent = base
-
+	
 	local baseUICorner = Instance.new("UICorner")
 	baseUICorner.Name = "BaseUICorner"
 	baseUICorner.CornerRadius = UDim.new(0, 10)
@@ -2113,12 +2225,7 @@ function MacLib:Window(Settings)
 		globalSetting.MouseButton1Click:Connect(function()
 			toggled = not toggled
 			Toggle(toggled)
-
-			task.spawn(function()
-				if Settings.Callback then
-					Settings.Callback(toggled)
-				end
-			end)
+			optionCall(Settings.Callback, toggled)
 		end)
 
 		function GlobalSettingFunctions:UpdateName(NewName)
@@ -2390,6 +2497,8 @@ function MacLib:Window(Settings)
 				sectionUIPadding.Parent = section
 
 				function SectionFunctions:Button(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Button")
 					local ButtonFunctions = {Settings = Settings}
 					local button = Instance.new("Frame")
 					button.Name = "Button"
@@ -2457,9 +2566,7 @@ function MacLib:Window(Settings)
 					end
 
 					local function Callback()
-						if ButtonFunctions.Settings.Callback then
-							ButtonFunctions.Settings.Callback()
-						end
+						optionCall(ButtonFunctions.Settings.Callback)
 					end
 
 					buttonInteract.MouseEnter:Connect(function()
@@ -2484,6 +2591,9 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Toggle(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Toggle")
+					Settings.Default = Settings.Default == true
 					local ToggleFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Toggle" }
 					local toggle = Instance.new("Frame")
 					toggle.Name = "Toggle"
@@ -2585,9 +2695,8 @@ function MacLib:Window(Settings)
 						}):Play()
 
 						ToggleFunctions.State = State
-						if callback then
-							callback(togglebool)
-						end
+						ToggleFunctions.Value = State
+						optionCall(callback, togglebool)
 					end
 
 					NewState(togglebool)
@@ -2603,10 +2712,16 @@ function MacLib:Window(Settings)
 						Toggle()
 					end
 					function ToggleFunctions:UpdateState(State)
-						togglebool = State
+						togglebool = State == true
 						NewState(togglebool, ToggleFunctions.Settings.Callback)
 					end
+					function ToggleFunctions:SetValue(State)
+						self:UpdateState(State)
+					end
 					function ToggleFunctions:GetState()
+						return togglebool
+					end
+					function ToggleFunctions:GetValue()
 						return togglebool
 					end
 					function ToggleFunctions:UpdateName(Name)
@@ -2623,6 +2738,9 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Checkbox(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Checkbox")
+					Settings.Default = Settings.Default == true
 					local CheckboxFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Toggle" }
 					local checkbox = Instance.new("Frame")
 					checkbox.Name = "Checkbox"
@@ -2744,9 +2862,7 @@ function MacLib:Window(Settings)
 
 						CheckboxFunctions.State = enabled
 						CheckboxFunctions.Value = enabled
-						if callback then
-							callback(enabled)
-						end
+						optionCall(callback, enabled)
 					end
 
 					NewState(checkboxBool)
@@ -2772,6 +2888,9 @@ function MacLib:Window(Settings)
 					function CheckboxFunctions:GetState()
 						return checkboxBool
 					end
+					function CheckboxFunctions:GetValue()
+						return checkboxBool
+					end
 					function CheckboxFunctions:UpdateName(Name)
 						checkboxName.Text = Name
 					end
@@ -2786,6 +2905,15 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Slider(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Slider")
+					Settings.Minimum = tonumber(optionFirstNonNil(Settings.Minimum, Settings.Min)) or 0
+					Settings.Maximum = tonumber(optionFirstNonNil(Settings.Maximum, Settings.Max)) or 100
+					if Settings.Maximum < Settings.Minimum then
+						Settings.Minimum, Settings.Maximum = Settings.Maximum, Settings.Minimum
+					end
+					Settings.Precision = tonumber(optionFirstNonNil(Settings.Precision, Settings.Rounding)) or 0
+					Settings.Default = optionClampNumber(optionFirstNonNil(Settings.Default, Settings.Value, Settings.Minimum), Settings.Minimum, Settings.Maximum)
 					local SliderFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Slider" }
 					local slider = Instance.new("Frame")
 					slider.Name = "Slider"
@@ -2829,10 +2957,13 @@ function MacLib:Window(Settings)
 
 					local sliderValue = Instance.new("TextBox")
 					sliderValue.Name = "SliderValue"
+					sliderValue.ClearTextOnFocus = false
+					sliderValue.CursorPosition = -1
 					sliderValue.FontFace = Font.new(assets.interFont)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
 					sliderValue.TextSize = 12
 					sliderValue.TextTransparency = 0.1
+					sliderValue.TextXAlignment = Enum.TextXAlignment.Center
 					--sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
 					sliderValue.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					sliderValue.BackgroundTransparency = 0.95
@@ -2874,6 +3005,7 @@ function MacLib:Window(Settings)
 
 					local sliderBar = Instance.new("ImageLabel")
 					sliderBar.Name = "SliderBar"
+					sliderBar.Active = true
 					sliderBar.Image = assets.sliderbar
 					sliderBar.ImageColor3 = Color3.fromRGB(87, 86, 86)
 					sliderBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -2925,7 +3057,8 @@ function MacLib:Window(Settings)
 							return formattedValue .. "°"
 						end,
 						Percent = function(sliderValue, precision)
-							local percentage = (sliderValue - SliderFunctions.Settings.Minimum) / (SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum) * 100
+							local range = SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum
+							local percentage = range == 0 and 0 or ((sliderValue - SliderFunctions.Settings.Minimum) / range) * 100
 							return precision and string.format("%." .. precision .. "f", percentage) .. "%" or tostring(math.round(percentage)) .. "%"
 						end,
 						Value = function(sliderValue, precision)
@@ -2936,33 +3069,44 @@ function MacLib:Window(Settings)
 					local ValueDisplayMethod = DisplayMethods[SliderFunctions.Settings.DisplayMethod] or DisplayMethods.Value
 					local finalValue
 
+					local function formatSliderValue(value)
+						return (Settings.Prefix or "") .. ValueDisplayMethod(value, SliderFunctions.Settings.Precision) .. (Settings.Suffix or "")
+					end
+
 					local function SetValue(val, ignorecallback)
 						local posXScale
+						local minValue = SliderFunctions.Settings.Minimum
+						local maxValue = SliderFunctions.Settings.Maximum
+						local range = maxValue - minValue
 
-						if typeof(val) == "Instance" then
+						if (typeof(val) == "InputObject" or type(val) == "table") and val.Position then
 							local input = val
-							posXScale = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+							local width = math.max(sliderBar.AbsoluteSize.X, 1)
+							posXScale = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / width, 0, 1)
 						else
-							local value = val
-							posXScale = (value - SliderFunctions.Settings.Minimum) / (SliderFunctions.Settings.Maximum - Settings.Minimum)
+							local value, isPercent = optionExtractNumber(val)
+							if value == nil then
+								value = finalValue or SliderFunctions.Settings.Default or minValue
+							elseif isPercent then
+								value = minValue + (value / 100) * range
+							end
+							value = optionClampNumber(optionRound(value, SliderFunctions.Settings.Precision), minValue, maxValue)
+							posXScale = range == 0 and 0 or ((value - minValue) / range)
 						end
 
 						local pos = UDim2.new(posXScale, 0, 0.5, 0)
 						sliderHead.Position = pos
 
-						finalValue = posXScale * (SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum) + Settings.Minimum
+						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, SliderFunctions.Settings.Precision), minValue, maxValue)
+						SliderFunctions.Value = finalValue
+						SliderFunctions.State = finalValue
 
-						sliderValue.Text = (Settings.Prefix or "") .. ValueDisplayMethod(finalValue, SliderFunctions.Settings.Precision) .. (Settings.Suffix or "")
+						sliderValue.Text = formatSliderValue(finalValue)
 
 						if not ignorecallback then
-							task.spawn(function()
-								if SliderFunctions.Settings.Callback then
-									SliderFunctions.Settings.Callback(finalValue)
-								end
-							end)
+							optionCall(SliderFunctions.Settings.Callback, finalValue)
+							optionCall(SliderFunctions.Settings.Changed, finalValue)
 						end
-
-						SliderFunctions.Value = finalValue
 					end
 
 					SetValue(SliderFunctions.Settings.Default, true)
@@ -2974,23 +3118,29 @@ function MacLib:Window(Settings)
 						end
 					end)
 
+					sliderBar.InputBegan:Connect(function(input)
+						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+							dragging = true
+							SetValue(input)
+						end
+					end)
+
+					local function finishSliderInput()
+						if not dragging then return end
+						dragging = false
+						optionCall(SliderFunctions.Settings.onInputComplete, finalValue)
+					end
+
 					sliderHead.InputEnded:Connect(function(input)
 						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = false
-							if SliderFunctions.Settings.onInputComplete then
-								SliderFunctions.Settings.onInputComplete(finalValue)
-							end
+							finishSliderInput()
 						end
 					end)
 
 					sliderValue.FocusLost:Connect(function(enterPressed)
-						local inputText = sliderValue.Text
-						local value, isPercent = inputText:match("^(%-?%d+%.?%d*)(%%?)$")
+						local value, isPercent = optionExtractNumber(sliderValue.Text)
 
 						if value then
-							value = tonumber(value)
-							isPercent = isPercent == "%"
-
 							if isPercent then
 								value = SliderFunctions.Settings.Minimum + (value / 100) * (SliderFunctions.Settings.Maximum - SliderFunctions.Settings.Minimum)
 							end
@@ -2998,17 +3148,21 @@ function MacLib:Window(Settings)
 							local newValue = math.clamp(value, SliderFunctions.Settings.Minimum, SliderFunctions.Settings.Maximum)
 							SetValue(newValue)
 						else
-							sliderValue.Text = ValueDisplayMethod(sliderValue)
+							sliderValue.Text = formatSliderValue(finalValue or SliderFunctions.Settings.Default)
 						end
 
-						if SliderFunctions.Settings.onInputComplete then
-							SliderFunctions.Settings.onInputComplete(finalValue)
-						end
+						optionCall(SliderFunctions.Settings.onInputComplete, finalValue)
 					end)
 
 					UserInputService.InputChanged:Connect(function(input)
 						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 							SetValue(input)
+						end
+					end)
+
+					UserInputService.InputEnded:Connect(function(input)
+						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+							finishSliderInput()
 						end
 					end)
 
@@ -3018,7 +3172,7 @@ function MacLib:Window(Settings)
 						local sliderNameWidth = sliderName.AbsoluteSize.X
 						local totalWidth = sliderElements.AbsoluteSize.X
 
-						local newBarWidth = (totalWidth - (padding + sliderValueWidth + sliderNameWidth + 20)) / baseUIScale.Scale
+						local newBarWidth = math.max(40, (totalWidth - (padding + sliderValueWidth + sliderNameWidth + 20)) / math.max(baseUIScale.Scale, 0.001))
 						sliderBar.Size = UDim2.new(sliderBar.Size.X.Scale, newBarWidth, sliderBar.Size.Y.Scale, sliderBar.Size.Y.Offset)
 					end
 
@@ -3028,15 +3182,21 @@ function MacLib:Window(Settings)
 					section:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateSliderBarSize)
 
 					function SliderFunctions:UpdateName(Name)
-						sliderName = Name
+						sliderName.Text = Name
 					end
 					function SliderFunctions:SetVisibility(State)
 						slider.Visible = State
 					end
-					function SliderFunctions:UpdateValue(Value)
-						SetValue(tonumber(Value), true)
+					function SliderFunctions:SetValue(Value, ignorecallback)
+						SetValue(Value, ignorecallback)
+					end
+					function SliderFunctions:UpdateValue(Value, ignorecallback)
+						SetValue(Value, ignorecallback ~= false)
 					end
 					function SliderFunctions:GetValue()
+						return finalValue
+					end
+					function SliderFunctions:GetState()
 						return finalValue
 					end
 
@@ -3047,6 +3207,12 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Input(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Input")
+					Settings.Default = tostring(optionFirstNonNil(Settings.Default, Settings.Value, ""))
+					Settings.Placeholder = tostring(optionFirstNonNil(Settings.Placeholder, Settings.PlaceholderText, ""))
+					Settings.AcceptedCharacters = Settings.Numeric and "Numeric" or (Settings.AcceptedCharacters or "All")
+					Settings.ClearTextOnFocus = Settings.ClearTextOnFocus == true
 					local InputFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Input" }
 					local input = Instance.new("Frame")
 					input.Name = "Input"
@@ -3080,8 +3246,9 @@ function MacLib:Window(Settings)
 
 					local inputBox = Instance.new("TextBox")
 					inputBox.Name = "InputBox"
+					inputBox.ClearTextOnFocus = InputFunctions.Settings.ClearTextOnFocus
 					inputBox.FontFace = Font.new(assets.interFont)
-					inputBox.Text = "Hello world!"
+					inputBox.Text = ""
 					inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 					inputBox.TextSize = 12
 					inputBox.TextTransparency = 0.1
@@ -3138,9 +3305,18 @@ function MacLib:Window(Settings)
 							return applyCharacterLimit(value)
 						end,
 						Numeric = function(value)
-							local result = value:match("^%-?%d*$") and value or value:gsub("[^%d-]", ""):gsub("(%-)", function(match, pos)
-								return pos == 1 and match or ""
+							local text = tostring(value or "")
+							local sign = text:sub(1, 1) == "-" and "-" or ""
+							text = text:gsub("[^%d%.]", "")
+							local dotUsed = false
+							text = text:gsub("%.", function()
+								if dotUsed then
+									return ""
+								end
+								dotUsed = true
+								return "."
 							end)
+							local result = sign .. text
 							return applyCharacterLimit(result)
 						end,
 						Alphabetic = function(value)
@@ -3172,25 +3348,49 @@ function MacLib:Window(Settings)
 					checkSize()
 					InputName:GetPropertyChangedSignal("AbsoluteSize"):Connect(checkSize)
 
+					local updatingText = false
+
+					local function setInputText(text, callback)
+						local filteredText = AcceptedCharacters(tostring(text or ""))
+						if filteredText == "" and InputFunctions.Settings.AllowEmpty == false then
+							filteredText = tostring(optionFirstNonNil(InputFunctions.Settings.EmptyReset, InputFunctions.Settings.Default, ""))
+						end
+
+						updatingText = true
+						InputBox.Text = filteredText
+						updatingText = false
+
+						InputFunctions.Text = filteredText
+						InputFunctions.Value = filteredText
+
+						if callback then
+							optionCall(InputFunctions.Settings.Callback, filteredText)
+							optionCall(InputFunctions.Settings.Changed, filteredText)
+						end
+						return filteredText
+					end
+
 					InputBox.FocusLost:Connect(function()
 						local inputText = InputBox.Text
-						local filteredText = AcceptedCharacters(inputText)
-						InputBox.Text = filteredText
-						task.spawn(function()
-							if InputFunctions.Settings.Callback then
-								InputFunctions.Settings.Callback(filteredText)
-							end
-						end)
+						setInputText(inputText, true)
 					end)
-					InputBox.Text = InputFunctions.Settings.Default or ""
-					InputBox.PlaceholderText = InputFunctions.Settings.Placeholder or ""
+					InputBox.Text = InputFunctions.Settings.Default
+					InputBox.PlaceholderText = InputFunctions.Settings.Placeholder
 
 					InputBox:GetPropertyChangedSignal("Text"):Connect(function()
-						InputBox.Text = AcceptedCharacters(InputBox.Text)
-						if InputFunctions.Settings.onChanged then
-							InputFunctions.Settings.onChanged(InputBox.Text)
+						if updatingText then
+							return
 						end
-						InputFunctions.Text = InputBox.Text
+
+						local filteredText = AcceptedCharacters(InputBox.Text)
+						if filteredText ~= InputBox.Text then
+							updatingText = true
+							InputBox.Text = filteredText
+							updatingText = false
+						end
+						InputFunctions.Text = filteredText
+						InputFunctions.Value = filteredText
+						optionCall(InputFunctions.Settings.onChanged or InputFunctions.Settings.ChangedCallback, filteredText)
 					end)
 
 					function InputFunctions:UpdateName(Name)
@@ -3202,19 +3402,23 @@ function MacLib:Window(Settings)
 					function InputFunctions:GetInput()
 						return InputBox.Text
 					end
+					function InputFunctions:GetValue()
+						return InputBox.Text
+					end
+					function InputFunctions:GetState()
+						return InputBox.Text
+					end
 					function InputFunctions:UpdatePlaceholder(Placeholder)
 						inputBox.PlaceholderText = Placeholder
 					end
 					function InputFunctions:UpdateText(Text)
-						local filteredText = AcceptedCharacters(Text)
-						InputBox.Text = filteredText
-						InputFunctions.Text = filteredText
-						task.spawn(function()
-							if InputFunctions.Settings.Callback then
-								InputFunctions.Settings.Callback(filteredText)
-							end
-						end)
+						setInputText(Text, true)
 					end
+					function InputFunctions:SetValue(Text)
+						setInputText(Text, true)
+					end
+
+					setInputText(InputFunctions.Settings.Default, false)
 
 					if Flag then
 						MacLib.Options[Flag] = InputFunctions
@@ -3223,6 +3427,8 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Keybind(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Keybind")
 					local KeybindFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Keybind" }
 					local keybind = Instance.new("Frame")
 					keybind.Name = "Keybind"
@@ -3254,25 +3460,24 @@ function MacLib:Window(Settings)
 					keybindName.Position = UDim2.fromScale(0, 0.5)
 					keybindName.Parent = keybind
 
-					local binderBox = Instance.new("TextBox")
+					local binderBox = Instance.new("TextButton")
 					binderBox.Name = "BinderBox"
-					binderBox.CursorPosition = -1
 					binderBox.FontFace = Font.new(assets.interFont)
-					binderBox.PlaceholderText = "None"
 					binderBox.Text = ""
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.TextSize = 12
-					binderBox.TextTransparency = 0.1
+					binderBox.TextSize = 11
+					binderBox.TextScaled = true
+					binderBox.TextTransparency = 0
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
-					binderBox.AutomaticSize = Enum.AutomaticSize.X
-					binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.BackgroundTransparency = 0.95
+					binderBox.AutoButtonColor = false
+					binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+					binderBox.BackgroundTransparency = 0.76
 					binderBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					binderBox.BorderSizePixel = 0
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(76, 24)
+					binderBox.Size = UDim2.fromOffset(28, 28)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
@@ -3282,122 +3487,213 @@ function MacLib:Window(Settings)
 					local binderBoxUIStroke = Instance.new("UIStroke")
 					binderBoxUIStroke.Name = "BinderBoxUIStroke"
 					binderBoxUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-					binderBoxUIStroke.Color = Color3.fromRGB(255, 255, 255)
-					binderBoxUIStroke.Transparency = 0.9
+					binderBoxUIStroke.Color = Color3.fromRGB(150, 150, 150)
+					binderBoxUIStroke.Transparency = 0.35
 					binderBoxUIStroke.Parent = binderBox
+
+					local binderBoxTextSize = Instance.new("UITextSizeConstraint")
+					binderBoxTextSize.Name = "BinderBoxTextSizeConstraint"
+					binderBoxTextSize.MaxTextSize = 11
+					binderBoxTextSize.MinTextSize = 7
+					binderBoxTextSize.Parent = binderBox
 
 					local binderBoxUIPadding = Instance.new("UIPadding")
 					binderBoxUIPadding.Name = "BinderBoxUIPadding"
-					binderBoxUIPadding.PaddingLeft = UDim.new(0, 5)
-					binderBoxUIPadding.PaddingRight = UDim.new(0, 5)
+					binderBoxUIPadding.PaddingLeft = UDim.new(0, 2)
+					binderBoxUIPadding.PaddingRight = UDim.new(0, 2)
 					binderBoxUIPadding.Parent = binderBox
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
-					binderBoxUISizeConstraint.MinSize = Vector2.new(72, 24)
-					binderBoxUISizeConstraint.MaxSize = Vector2.new(160, 24)
+					binderBoxUISizeConstraint.MinSize = Vector2.new(28, 28)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(28, 28)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
 
-					local focused
 					local isBinding = false
 					local reset = false
-					local binded = KeybindFunctions.Settings.Default
+					local binded = optionResolveInput(optionFirstNonNil(
+						KeybindFunctions.Settings.Default,
+						KeybindFunctions.Settings.Value,
+						KeybindFunctions.Settings.Key,
+						KeybindFunctions.Settings.Bind,
+						KeybindFunctions.Settings.Keybind
+					))
+					local suppressBinderClickUntil = 0
 
 					local function getBindText(bind)
-						return bind and bind.Name or "None"
+						local name
+						if typeof(bind) == "EnumItem" then
+							name = bind.Name
+						else
+							name = tostring(bind or "")
+						end
+
+						if name == "" or name == "None" or name == "nil" then
+							return "-"
+						end
+
+						local shortNames = {
+							MouseButton1 = "M1",
+							MouseButton2 = "M2",
+							MouseButton3 = "M3",
+							LeftShift = "LS",
+							RightShift = "RS",
+							LeftControl = "LC",
+							RightControl = "RC",
+							LeftAlt = "LA",
+							RightAlt = "RA",
+							Return = "Ent",
+							Backspace = "Bk"
+						}
+
+						return shortNames[name] or string.sub(name, 1, 3)
 					end
 
-					local function resetFocusState()
-						focused = false
+					local function updateBindVisual(binding)
+						if binding then
+							binderBox.Text = "..."
+							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
+								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+								BackgroundTransparency = 0.55
+							}):Play()
+							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
+								Color = Color3.fromRGB(255, 255, 255),
+								Transparency = 0.15
+							}):Play()
+						else
+							binderBox.Text = getBindText(binded)
+							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
+								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
+								BackgroundTransparency = binded and 0.62 or 0.76
+							}):Play()
+							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
+								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150),
+								Transparency = binded and 0.25 or 0.35
+							}):Play()
+						end
+					end
+
+					local function resetBindingState()
 						isBinding = false
-						binderBox:ReleaseFocus()
+						updateBindVisual(false)
 					end
 
-					binderBox.Text = getBindText(binded)
+					local function canBindInput(input)
+						return input.UserInputType == Enum.UserInputType.Keyboard
+							or input.UserInputType == Enum.UserInputType.MouseButton1
+							or input.UserInputType == Enum.UserInputType.MouseButton2
+							or input.UserInputType == Enum.UserInputType.MouseButton3
+					end
 
-					binderBox.Focused:Connect(function()
-						focused = true
-					end)
+					local function setBind(newBind)
+						binded = optionResolveInput(newBind)
+						updateBindVisual(false)
+						optionCall(KeybindFunctions.Settings.onBinded, binded)
+						optionCall(KeybindFunctions.Settings.Changed, binded)
+					end
 
-					binderBox.FocusLost:Connect(function()
-						focused = false
+					binderBox.MouseButton1Click:Connect(function()
+						if tick() < suppressBinderClickUntil then
+							return
+						end
+
+						if isBinding then
+							resetBindingState()
+							return
+						end
+
+						isBinding = true
+						updateBindVisual(true)
 					end)
 
 					UserInputService.InputBegan:Connect(function(inp)
-						if focused and not isBinding then
-							isBinding = true
+						if isBinding then
+							if not canBindInput(inp) then
+								return
+							end
 
-							local Event
-							Event = UserInputService.InputBegan:Connect(function(input)
-								if KeybindFunctions.Settings.Blacklist and (table.find(KeybindFunctions.Settings.Blacklist, input.KeyCode) or table.find(KeybindFunctions.Settings.Blacklist, input.UserInputType)) then
-									binderBox:ReleaseFocus()
-									resetFocusState()
-									Event:Disconnect()
+							if KeybindFunctions.Settings.Blacklist and (table.find(KeybindFunctions.Settings.Blacklist, inp.KeyCode) or table.find(KeybindFunctions.Settings.Blacklist, inp.UserInputType)) then
+								resetBindingState()
+								return
+							end
+
+							if inp.UserInputType == Enum.UserInputType.Keyboard then
+								if inp.KeyCode == Enum.KeyCode.Escape or inp.KeyCode == Enum.KeyCode.Backspace or inp.KeyCode == Enum.KeyCode.Delete then
+									binded = nil
+									resetBindingState()
+									optionCall(KeybindFunctions.Settings.onBinded, binded)
+									optionCall(KeybindFunctions.Settings.Changed, binded)
 									return
 								end
-
-								if input.UserInputType == Enum.UserInputType.Keyboard then
-									binded = input.KeyCode
-									binderBox.Text = input.KeyCode.Name
-								elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
-									binded = input.UserInputType
-									binderBox.Text = input.UserInputType.Name
-								end
-
-								if KeybindFunctions.Settings.onBinded then
-									KeybindFunctions.Settings.onBinded(binded)
-								end
-								reset = true
-								resetFocusState()
-								Event:Disconnect()
-							end)
-						else
-							if not reset and (inp.KeyCode == binded or inp.UserInputType == binded) then
-								if KeybindFunctions.Settings.Callback then
-									KeybindFunctions.Settings.Callback(binded)
-								end
-								if KeybindFunctions.Settings.onBindHeld then
-									KeybindFunctions.Settings.onBindHeld(true, binded)
-								end
+								setBind(inp.KeyCode)
 							else
-								reset = false
+								if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+									suppressBinderClickUntil = tick() + 0.2
+								end
+								setBind(inp.UserInputType)
 							end
+							reset = true
+							isBinding = false
+							return
+						end
+
+						if not reset and binded and (inp.KeyCode == binded or inp.UserInputType == binded) then
+								optionCall(KeybindFunctions.Settings.Callback, binded)
+								optionCall(KeybindFunctions.Settings.onBindHeld, true, binded)
+						else
+							reset = false
 						end
 					end)
 
 					UserInputService.InputEnded:Connect(function(inp)
-						if not focused and not isBinding then
+						if reset then
+							reset = false
+							return
+						end
+
+						if not isBinding then
 							if inp.KeyCode == binded or inp.UserInputType == binded then
-								if Settings.onBindHeld then
-									Settings.onBindHeld(false, binded)
-								end
+								optionCall(KeybindFunctions.Settings.onBindHeld, false, binded)
 							end
 						end
 					end)
 
 					function KeybindFunctions:Bind(Key)
-						binded = Key
-						binderBox.Text = getBindText(Key)
+						setBind(Key)
 					end
 
 					function KeybindFunctions:Unbind()
 						binded = nil
-						binderBox.Text = getBindText(nil)
+						updateBindVisual(false)
 					end
 
 					function KeybindFunctions:GetBind()
 						return binded
 					end
 
+					function KeybindFunctions:SetValue(Key)
+						setBind(Key)
+					end
+
+					function KeybindFunctions:GetValue()
+						return binded
+					end
+
+					function KeybindFunctions:GetState()
+						return binded
+					end
+
 					function KeybindFunctions:UpdateName(Name)
-						keybindName = Name
+						keybindName.Text = Name
 					end
 
 					function KeybindFunctions:SetVisibility(State)
 						keybind.Visible = State
 					end
+
+					updateBindVisual(false)
 
 					if Flag then
 						MacLib.Options[Flag] = KeybindFunctions
@@ -3409,8 +3705,38 @@ function MacLib:Window(Settings)
 				function SectionFunctions:KeyPicker(Settings, Flag)
 					return self:Keybind(Settings, Flag)
 				end
+				function SectionFunctions:keyPicker(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:KeyPicket(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:AddKeyPicker(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:addKeyPicker(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:AddKeyPicket(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:addKeyPicket(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:AddKeybind(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
+				function SectionFunctions:addKeybind(Settings, Flag)
+					return self:Keybind(Settings, Flag)
+				end
 
 				function SectionFunctions:Dropdown(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Dropdown")
+					Settings.Options = Settings.Options or Settings.Values or {}
+					Settings.Multi = Settings.Multi == true
+					Settings.Required = Settings.Required == true or Settings.AllowNull == false
+					Settings.Search = Settings.Search == true or Settings.Searchable == true
 					local DropdownFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Dropdown" }
 					local Selected = {}
 					local OptionObjs = {}
@@ -3447,7 +3773,7 @@ function MacLib:Window(Settings)
 					local dropdownName = Instance.new("TextLabel")
 					dropdownName.Name = "DropdownName"
 					dropdownName.FontFace = Font.new(assets.interFont)
-					dropdownName.Text = Settings.Default and (DropdownFunctions.Settings.Name .. " • " .. table.concat(Selected, ", ")) or (DropdownFunctions.Settings.Name .. "...")
+					dropdownName.Text = DropdownFunctions.Settings.Name .. "..."
 					dropdownName.RichText = true
 					dropdownName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					dropdownName.TextSize = 13
@@ -3455,6 +3781,7 @@ function MacLib:Window(Settings)
 					dropdownName.TextTruncate = Enum.TextTruncate.SplitWord
 					dropdownName.TextXAlignment = Enum.TextXAlignment.Left
 					dropdownName.AutomaticSize = Enum.AutomaticSize.Y
+					dropdownName.Text = DropdownFunctions.Settings.Name .. "..."
 					dropdownName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					dropdownName.BackgroundTransparency = 1
 					dropdownName.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -3575,7 +3902,7 @@ function MacLib:Window(Settings)
 							end
 						end
 
-						local spacing = dropdownFrameUIListLayout.Padding.Offset * (visibleChildrenCount - 1)
+						local spacing = dropdownFrameUIListLayout.Padding.Offset * math.max(visibleChildrenCount - 1, 0)
 
 						return totalHeight + spacing + padding
 					end
@@ -3584,7 +3911,7 @@ function MacLib:Window(Settings)
 						local searchTerm = searchBox.Text:lower()
 
 						for _, v in pairs(OptionObjs) do
-							local optionText = v.NameLabel.Text:lower()
+							local optionText = tostring(v.NameLabel.Text):lower()
 							local isVisible = string.find(optionText, searchTerm) ~= nil
 
 							if v.Button.Visible ~= isVisible then
@@ -3618,6 +3945,9 @@ function MacLib:Window(Settings)
 						local option = OptionObjs[optionName]
 
 						if not option then return end
+						if not State and DropdownFunctions.Settings.Required and #Selected <= 1 and table.find(Selected, optionName) then
+							return
+						end
 
 						local checkmark = option.Checkmark
 						local optionNameLabel = option.NameLabel
@@ -3626,7 +3956,6 @@ function MacLib:Window(Settings)
 							if DropdownFunctions.Settings.Multi then
 								if not table.find(Selected, optionName) then
 									table.insert(Selected, optionName)
-									DropdownFunctions.Value = Selected
 								end
 							else
 								for name, opt in pairs(OptionObjs) do
@@ -3641,7 +3970,6 @@ function MacLib:Window(Settings)
 									end
 								end
 								Selected = {optionName}
-								DropdownFunctions.Value = Selected[1]
 							end
 							Tween(checkmark, TweenInfo.new(tweensettings.duration, tweensettings.easingStyle), {
 								Size = UDim2.new(checkmark.Size.X.Scale, tweensettings.checkSizeIncrease, checkmark.Size.Y.Scale, checkmark.Size.Y.Offset)
@@ -3668,12 +3996,22 @@ function MacLib:Window(Settings)
 							checkmark.TextTransparency = 1
 						end
 
-						if Settings.Required and #Selected == 0 and not State then
-							return
+						if DropdownFunctions.Settings.Multi then
+							local mapped = {}
+							for _, selected in ipairs(Selected) do
+								mapped[selected] = true
+							end
+							DropdownFunctions.Value = mapped
+						else
+							DropdownFunctions.Value = Selected[1]
 						end
 
 						if #Selected > 0 then
-							dropdownName.Text = DropdownFunctions.Settings.Name .. " • " .. table.concat(Selected, ", ")
+							local parts = {}
+							for _, selected in ipairs(Selected) do
+								table.insert(parts, tostring(selected))
+							end
+							dropdownName.Text = DropdownFunctions.Settings.Name .. " • " .. table.concat(parts, ", ")
 						else
 							dropdownName.Text = DropdownFunctions.Settings.Name .. "..."
 						end
@@ -3717,6 +4055,8 @@ function MacLib:Window(Settings)
 					interact.MouseButton1Click:Connect(ToggleDropdown)
 
 					local function addOption(i, v)
+						local optionValue = v
+						local optionDisplay = tostring(v)
 						local option = Instance.new("TextButton")
 						option.Name = "Option"
 						option.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
@@ -3737,7 +4077,7 @@ function MacLib:Window(Settings)
 						local optionName = Instance.new("TextLabel")
 						optionName.Name = "OptionName"
 						optionName.FontFace = Font.new(assets.interFont)
-						optionName.Text = v
+						optionName.Text = optionDisplay
 						optionName.RichText = true
 						optionName.TextColor3 = Color3.fromRGB(255, 255, 255)
 						optionName.TextSize = 13
@@ -3785,7 +4125,7 @@ function MacLib:Window(Settings)
 						option.Parent = dropdownFrame
 
 						dropdownFrame.Parent = dropdown
-						OptionObjs[v] = {
+						OptionObjs[optionValue] = {
 							Index = i,
 							Button = option,
 							NameLabel = optionName,
@@ -3819,41 +4159,46 @@ function MacLib:Window(Settings)
 						local isSelected = false
 						if DropdownFunctions.Settings.Default then
 							if DropdownFunctions.Settings.Multi then
-								isSelected = table.find(DropdownFunctions.Settings.Default, v) and true or false
+								if type(DropdownFunctions.Settings.Default) == "table" then
+									isSelected = table.find(DropdownFunctions.Settings.Default, optionValue) ~= nil
+										or DropdownFunctions.Settings.Default[optionValue] == true
+										or DropdownFunctions.Settings.Default[optionDisplay] == true
+								end
 							else
-								isSelected = (DropdownFunctions.Settings.Default == i) and true or false
+								isSelected = DropdownFunctions.Settings.Default == i
+									or DropdownFunctions.Settings.Default == optionValue
+									or tostring(DropdownFunctions.Settings.Default) == optionDisplay
 							end
 						end
-						Toggle(v, isSelected)
+						Toggle(optionValue, isSelected)
 
-						local option = OptionObjs[v].Button
+						local option = OptionObjs[optionValue].Button
 
 						option.MouseButton1Click:Connect(function()
-							local isSelected = table.find(Selected, v) and true or false
+							local isSelected = table.find(Selected, optionValue) and true or false
 							local newSelected = not isSelected
 
 							if DropdownFunctions.Settings.Required and not newSelected and #Selected <= 1 then
 								return
 							end
 
-							Toggle(v, newSelected)
+							Toggle(optionValue, newSelected)
 
-							task.spawn(function()
-								if DropdownFunctions.Settings.Multi then
-									local Return = {}
-									for _, opt in ipairs(Selected) do
-										Return[opt] = true
-									end
-									if DropdownFunctions.Settings.Callback then
-										DropdownFunctions.Settings.Callback(Return)
-									end
-
-								else
-									if newSelected and DropdownFunctions.Settings.Callback then
-										DropdownFunctions.Settings.Callback(Selected[1] or nil)
-									end
+							if DropdownFunctions.Settings.Multi then
+								local Return = {}
+								for _, opt in ipairs(Selected) do
+									Return[opt] = true
 								end
-							end)
+								DropdownFunctions.Value = Return
+								optionCall(DropdownFunctions.Settings.Callback, Return)
+								optionCall(DropdownFunctions.Settings.Changed, Return)
+							else
+								DropdownFunctions.Value = Selected[1]
+								if newSelected or not DropdownFunctions.Settings.Required then
+									optionCall(DropdownFunctions.Settings.Callback, DropdownFunctions.Value)
+									optionCall(DropdownFunctions.Settings.Changed, DropdownFunctions.Value)
+								end
+							end
 						end)
 
 						if dropped then
@@ -3874,7 +4219,7 @@ function MacLib:Window(Settings)
 						dropdown.Visible = State
 					end
 					function DropdownFunctions:UpdateSelection(newSelection)
-						if not newSelection then return end
+						if not newSelection and DropdownFunctions.Settings.Required then return end
 
 						for option, _ in pairs(OptionObjs) do
 							Toggle(option, false)
@@ -3899,7 +4244,7 @@ function MacLib:Window(Settings)
 							end
 						elseif type(newSelection) == "table" then
 							for option, _ in pairs(OptionObjs) do
-								local isSelected = table.find(newSelection, option) ~= nil
+								local isSelected = table.find(newSelection, option) ~= nil or newSelection[option] == true or newSelection[tostring(option)] == true
 								Toggle(option, isSelected)
 								if isSelected then
 									table.insert(selectedOptions, option)
@@ -3907,20 +4252,32 @@ function MacLib:Window(Settings)
 							end
 						end
 
-						if DropdownFunctions.Settings.Callback then
-							if DropdownFunctions.Settings.Multi then
-								local Return = {}
-								for _, opt in ipairs(selectedOptions) do
-									Return[opt] = true
-								end
-								DropdownFunctions.Settings.Callback(Return)
-							else
-								DropdownFunctions.Settings.Callback(selectedOptions[1] or nil)
+						if DropdownFunctions.Settings.Multi then
+							local Return = {}
+							for _, opt in ipairs(selectedOptions) do
+								Return[opt] = true
 							end
+							DropdownFunctions.Value = Return
+							optionCall(DropdownFunctions.Settings.Callback, Return)
+							optionCall(DropdownFunctions.Settings.Changed, Return)
+						else
+							DropdownFunctions.Value = selectedOptions[1]
+							optionCall(DropdownFunctions.Settings.Callback, DropdownFunctions.Value)
+							optionCall(DropdownFunctions.Settings.Changed, DropdownFunctions.Value)
 						end
+					end
+					function DropdownFunctions:SetValue(newSelection)
+						self:UpdateSelection(newSelection)
+					end
+					function DropdownFunctions:GetValue()
+						return self.Value
+					end
+					function DropdownFunctions:GetState()
+						return self.Value
 					end
 					function DropdownFunctions:InsertOptions(newOptions)
 						if not newOptions then return end
+						DropdownFunctions:ClearOptions()
 						DropdownFunctions.Settings.Options = newOptions
 						for i, v in pairs(newOptions) do
 							addOption(i, v)
@@ -3932,6 +4289,8 @@ function MacLib:Window(Settings)
 						end
 						OptionObjs = {}
 						Selected = {}
+						DropdownFunctions.Value = DropdownFunctions.Settings.Multi and {} or nil
+						dropdownName.Text = DropdownFunctions.Settings.Name .. "..."
 
 						if dropped then
 							dropdown.Size = UDim2.new(1, 0, 0, CalculateDropdownSize())
@@ -3983,11 +4342,19 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Colorpicker(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
+					Settings.Name = optionText(Settings, Flag, "Color")
 					local ColorpickerFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Colorpicker" }
 
-					local isAlpha = ColorpickerFunctions.Settings.Alpha and true or false
-					ColorpickerFunctions.Color = ColorpickerFunctions.Settings.Default
-					ColorpickerFunctions.Alpha = isAlpha and ColorpickerFunctions.Settings.Alpha
+					local alphaDefault = optionFirstNonNil(ColorpickerFunctions.Settings.Alpha, ColorpickerFunctions.Settings.Transparency)
+					local isAlpha = alphaDefault ~= nil
+					local defaultColor = optionFirstNonNil(ColorpickerFunctions.Settings.Default, ColorpickerFunctions.Settings.Color, ColorpickerFunctions.Settings.Value)
+					if typeof(defaultColor) ~= "Color3" then
+						defaultColor = Color3.fromRGB(255, 255, 255)
+					end
+					ColorpickerFunctions.Color = defaultColor
+					ColorpickerFunctions.Value = ColorpickerFunctions.Color
+					ColorpickerFunctions.Alpha = isAlpha and optionClampNumber(alphaDefault, 0, 1) or 0
 
 					local colorpicker = Instance.new("Frame")
 					colorpicker.Name = "Colorpicker"
@@ -4211,15 +4578,58 @@ function MacLib:Window(Settings)
 
 					local wheel1 = Instance.new("ImageButton")
 					wheel1.Name = "Wheel"
-					wheel1.Image = assets.colorWheel
+					wheel1.Image = ""
 					wheel1.AutoButtonColor = false
-					wheel1.Active = false
-					wheel1.BackgroundColor3 = Color3.fromRGB(248, 248, 248)
-					wheel1.BackgroundTransparency = 1
+					wheel1.Active = true
+					wheel1.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+					wheel1.BackgroundTransparency = 0
 					wheel1.BorderColor3 = Color3.fromRGB(27, 42, 53)
 					wheel1.Selectable = false
 					wheel1.Size = UDim2.fromOffset(220, 220)
 					wheel1.SizeConstraint = Enum.SizeConstraint.RelativeYY
+					wheel1.ClipsDescendants = true
+
+					local wheelCorner = Instance.new("UICorner")
+					wheelCorner.Name = "WheelCorner"
+					wheelCorner.CornerRadius = UDim.new(0, 8)
+					wheelCorner.Parent = wheel1
+
+					local wheelStroke = Instance.new("UIStroke")
+					wheelStroke.Name = "WheelStroke"
+					wheelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					wheelStroke.Color = Color3.fromRGB(255, 255, 255)
+					wheelStroke.Transparency = 0.85
+					wheelStroke.Parent = wheel1
+
+					local wheelHueGradient = Instance.new("UIGradient")
+					wheelHueGradient.Name = "WheelHueGradient"
+					wheelHueGradient.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+						ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+						ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+						ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+						ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+						ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+					})
+					wheelHueGradient.Parent = wheel1
+
+					local saturationOverlay = Instance.new("Frame")
+					saturationOverlay.Name = "SaturationOverlay"
+					saturationOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					saturationOverlay.BorderSizePixel = 0
+					saturationOverlay.Size = UDim2.fromScale(1, 1)
+					saturationOverlay.ZIndex = wheel1.ZIndex + 1
+					saturationOverlay.Parent = wheel1
+
+					local saturationGradient = Instance.new("UIGradient")
+					saturationGradient.Name = "SaturationGradient"
+					saturationGradient.Rotation = 90
+					saturationGradient.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, 0),
+						NumberSequenceKeypoint.new(1, 1)
+					})
+					saturationGradient.Parent = saturationOverlay
 
 					local target = Instance.new("ImageLabel")
 					target.Name = "Target"
@@ -4232,6 +4642,7 @@ function MacLib:Window(Settings)
 					target.Position = UDim2.fromScale(0.5, 0.5)
 					target.Size = UDim2.fromOffset(22, 22)
 					target.SizeConstraint = Enum.SizeConstraint.RelativeYY
+					target.ZIndex = wheel1.ZIndex + 2
 					target.Parent = wheel1
 
 					wheel1.Parent = wheel
@@ -4879,7 +5290,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					paragraphHeader.RichText = true
-					paragraphHeader.Text = ColorpickerFunctions.Settings.Name
+					paragraphHeader.Text = ColorpickerFunctions.Settings.Name or ColorpickerFunctions.Settings.Text or tostring(Flag or "Color")
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphHeader.TextSize = 18
 					paragraphHeader.TextTransparency = 0.4
@@ -4955,7 +5366,7 @@ function MacLib:Window(Settings)
 
 					local function hexToRGB(hex)
 						hex = hex:gsub("#","")
-						if #hex ~= 6 then return 0, 0, 0 end
+						if #hex ~= 6 or not hex:match("^[%da-fA-F]+$") then return nil end
 						local r = tonumber(hex:sub(1, 2), 16) or 0
 						local g = tonumber(hex:sub(3, 4), 16) or 0
 						local b = tonumber(hex:sub(5, 6), 16) or 0
@@ -4978,7 +5389,7 @@ function MacLib:Window(Settings)
 						modifierInputs.Red.Text = tostring(math.floor(c.r * 255 + 0.5))
 						modifierInputs.Green.Text = tostring(math.floor(c.g * 255 + 0.5))
 						modifierInputs.Blue.Text = tostring(math.floor(c.b * 255 + 0.5))
-						modifierInputs.Alpha.Text = clampInput(modifierInputs.Alpha.Text, 0, 1)
+						modifierInputs.Alpha.Text = tostring(clampInput(modifierInputs.Alpha.Text, 0, 1))
 
 						local hexColor = string.format("#%02X%02X%02X", 
 							math.floor(c.r * 255 + 0.5),
@@ -4988,51 +5399,45 @@ function MacLib:Window(Settings)
 					end
 
 					local function UpdateSlide(iX)
-						local rY = iX - slider.AbsolutePosition.X
-						local cY = math.clamp(rY, 0, slider.AbsoluteSize.X - slide.AbsoluteSize.X)
-						slide.Position = udim2(0, cY, 0.5, 0)
-						value = 1 - (cY / (slider.AbsoluteSize.X - slide.AbsoluteSize.X))
+						local width = math.max(slider.AbsoluteSize.X, 1)
+						local relX = math.clamp(iX - slider.AbsolutePosition.X, 0, width)
+						local ratio = relX / width
+						slide.Position = udim2(ratio, 0, 0.5, 0)
+						value = 1 - ratio
 						update()
 					end
 
 					local function UpdateRing(iX, iY)
-						local r = wheel.AbsoluteSize.x / 2
-						local d = v2(iX, iY) - wheel.AbsolutePosition - wheel.AbsoluteSize / 2
+						local width = math.max(wheel.AbsoluteSize.X, 1)
+						local height = math.max(wheel.AbsoluteSize.Y, 1)
+						local relX = math.clamp(iX - wheel.AbsolutePosition.X, 0, width)
+						local relY = math.clamp(iY - wheel.AbsolutePosition.Y, 0, height)
 
-						if d:Dot(d) > r * r then
-							d = d.unit * r
-						end
-
-						ring.Position = udim2(0.5, d.x, 0.5, d.y)
-						local phi, len = toPolar(d * v2(1, -1))
-						hue, saturation = radToDeg(phi) / 360, math.clamp(len / r, 0, 1)
+						hue = relX / width
+						saturation = relY / height
+						ring.Position = udim2(hue, 0, saturation, 0)
 						slider.BackgroundColor3 = fromHSV(hue, saturation, 1)
 						update()
 					end
 
 					local function UpdateSlideFromValue(value)
-						local cY = (1 - value) * (slider.AbsoluteSize.X - slide.AbsoluteSize.X)
-						slide.Position = UDim2.new(0, cY, 0.5, 0)
+						slide.Position = UDim2.new(math.clamp(1 - value, 0, 1), 0, 0.5, 0)
 					end
 
 					local function UpdateRingFromHSV(hue, saturation)
-						local r = wheel.AbsoluteSize.X / 2
-						local phi = degToRad(hue * 360)
-						local len = saturation * r
-						local x = len * math.cos(phi)
-						local y = len * math.sin(phi)
-
-						ring.Position = UDim2.new(0.5, -x, 0.5, y)
+						ring.Position = UDim2.new(math.clamp(hue, 0, 1), 0, math.clamp(saturation, 0, 1), 0)
 						slider.BackgroundColor3 = fromHSV(hue, saturation, 1)
 					end
+
+					local updateFromSettings
 
 					local function updateFromRGB()
 						local r = clampInput(modifierInputs.Red.Text, 0, 255)
 						local g = clampInput(modifierInputs.Green.Text, 0, 255)
 						local b = clampInput(modifierInputs.Blue.Text, 0, 255)
-						modifierInputs.Red.Text = r
-						modifierInputs.Green.Text = g
-						modifierInputs.Blue.Text = b
+						modifierInputs.Red.Text = tostring(r)
+						modifierInputs.Green.Text = tostring(g)
+						modifierInputs.Blue.Text = tostring(b)
 
 						hue, saturation, value = Color3.fromRGB(r, g, b):ToHSV()
 
@@ -5044,14 +5449,18 @@ function MacLib:Window(Settings)
 					local function updateFromHex()
 						local hex = modifierInputs.Hex.Text
 						local r, g, b = hexToRGB(hex)
+						if not r then
+							updateFromSettings()
+							return
+						end
 
 						r = clampInput(r, 0, 255)
 						g = clampInput(g, 0, 255)
 						b = clampInput(b, 0, 255)
 
-						modifierInputs.Red.Text = r
-						modifierInputs.Green.Text = g
-						modifierInputs.Blue.Text = b
+						modifierInputs.Red.Text = tostring(r)
+						modifierInputs.Green.Text = tostring(g)
+						modifierInputs.Blue.Text = tostring(b)
 
 						hue, saturation, value = Color3.fromRGB(r, g, b):ToHSV()
 						UpdateSlideFromValue(value)
@@ -5059,14 +5468,14 @@ function MacLib:Window(Settings)
 						update()
 					end
 
-					local function updateFromSettings()
+					updateFromSettings = function()
 						local r = math.floor(ColorpickerFunctions.Color.R * 255 + 0.5)
 						local g = math.floor(ColorpickerFunctions.Color.G * 255 + 0.5)
 						local b = math.floor(ColorpickerFunctions.Color.B * 255 + 0.5)
-						modifierInputs.Red.Text = r
-						modifierInputs.Green.Text = g
-						modifierInputs.Blue.Text = b
-						modifierInputs.Alpha.Text = isAlpha and ColorpickerFunctions.Alpha or 0
+						modifierInputs.Red.Text = tostring(r)
+						modifierInputs.Green.Text = tostring(g)
+						modifierInputs.Blue.Text = tostring(b)
+						modifierInputs.Alpha.Text = tostring(isAlpha and ColorpickerFunctions.Alpha or 0)
 
 						local hexColor = string.format("#%02X%02X%02X", r,g,b)
 						modifierInputs.Hex.Text = hexColor
@@ -5120,9 +5529,7 @@ function MacLib:Window(Settings)
 					end)
 
 					local function onFocusEnter(instance)
-						local placeholder = instance.Text
-						instance.Text = ""
-						instance.PlaceholderText = placeholder
+						instance.PlaceholderText = instance.Text
 					end
 
 					modifierInputs.Hex.FocusLost:Connect(updateFromHex)
@@ -5201,7 +5608,8 @@ function MacLib:Window(Settings)
 						colorpickerOut()
 						local c = fromHSV(hue, saturation, value)
 						ColorpickerFunctions.Color = Color3.fromRGB(c.r * 255, c.g * 255, c.b * 255)
-						ColorpickerFunctions.Alpha = isAlpha and clampInput(modifierInputs.Alpha.Text, 0, 1)
+						ColorpickerFunctions.Value = ColorpickerFunctions.Color
+						ColorpickerFunctions.Alpha = isAlpha and clampInput(modifierInputs.Alpha.Text, 0, 1) or 0
 
 						color1.BackgroundColor3 = ColorpickerFunctions.Color
 						color1.BackgroundTransparency = isAlpha and ColorpickerFunctions.Alpha or 0
@@ -5209,11 +5617,8 @@ function MacLib:Window(Settings)
 						colorC.BackgroundColor3 = ColorpickerFunctions.Color
 						colorC.BackgroundTransparency = isAlpha and ColorpickerFunctions.Alpha or 0
 
-						if ColorpickerFunctions.Settings.Callback then
-							task.spawn(function()
-								ColorpickerFunctions.Settings.Callback(ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
-							end)
-						end
+						optionCall(ColorpickerFunctions.Settings.Callback, ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
+						optionCall(ColorpickerFunctions.Settings.Changed, ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
 					end)
 
 					updateFromSettings()
@@ -5226,15 +5631,19 @@ function MacLib:Window(Settings)
 					end
 
 					function ColorpickerFunctions:SetColor(color3)
+						if typeof(color3) ~= "Color3" then
+							return
+						end
 						ColorpickerFunctions.Color = color3
+						ColorpickerFunctions.Value = color3
 						colorC.BackgroundColor3 = color3
 
 						local r = math.floor(ColorpickerFunctions.Color.R * 255 + 0.5)
 						local g = math.floor(ColorpickerFunctions.Color.G * 255 + 0.5)
 						local b = math.floor(ColorpickerFunctions.Color.B * 255 + 0.5)
-						modifierInputs.Red.Text = r
-						modifierInputs.Green.Text = g
-						modifierInputs.Blue.Text = b
+						modifierInputs.Red.Text = tostring(r)
+						modifierInputs.Green.Text = tostring(g)
+						modifierInputs.Blue.Text = tostring(b)
 
 						local hexColor = string.format("#%02X%02X%02X", r,g,b)
 						modifierInputs.Hex.Text = hexColor
@@ -5247,17 +5656,24 @@ function MacLib:Window(Settings)
 						UpdateSlideFromValue(value)
 						UpdateRingFromHSV(hue, saturation)
 
-						if ColorpickerFunctions.Settings.Callback then
-							task.spawn(function()
-								ColorpickerFunctions.Settings.Callback(ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
-							end)
-						end
+						optionCall(ColorpickerFunctions.Settings.Callback, ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
+						optionCall(ColorpickerFunctions.Settings.Changed, ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
 					end
 
 					function ColorpickerFunctions:SetAlpha(alpha)
-						ColorpickerFunctions.Alpha = alpha
-						colorC.Transparency = alpha
+						ColorpickerFunctions.Alpha = optionClampNumber(alpha, 0, 1)
+						colorC.BackgroundTransparency = ColorpickerFunctions.Alpha
+						color1.BackgroundTransparency = ColorpickerFunctions.Alpha
+						colour.BackgroundTransparency = ColorpickerFunctions.Alpha
 						updateFromSettings()
+					end
+
+					function ColorpickerFunctions:GetValue()
+						return ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha
+					end
+
+					function ColorpickerFunctions:GetState()
+						return ColorpickerFunctions:GetValue()
 					end
 
 					if Flag then
@@ -5269,14 +5685,39 @@ function MacLib:Window(Settings)
 				function SectionFunctions:ColorPicker(Settings, Flag)
 					return self:Colorpicker(Settings, Flag)
 				end
+				function SectionFunctions:AddColorPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:addColorPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:AddColorpicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:addColorpicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
 				function SectionFunctions:Colourpicker(Settings, Flag)
 					return self:Colorpicker(Settings, Flag)
 				end
 				function SectionFunctions:ColourPicker(Settings, Flag)
 					return self:Colorpicker(Settings, Flag)
 				end
+				function SectionFunctions:AddColourPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:addColourPicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:AddColourpicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
+				function SectionFunctions:addColourpicker(Settings, Flag)
+					return self:Colorpicker(Settings, Flag)
+				end
 
 				function SectionFunctions:Header(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
 					local HeaderFunctions = {Settings = Settings}
 
 					local header = Instance.new("Frame")
@@ -5303,7 +5744,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					headerText.RichText = true
-					headerText.Text = HeaderFunctions.Settings.Text or HeaderFunctions.Settings.Name
+					headerText.Text = optionText(HeaderFunctions.Settings, Flag, "Header")
 					headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					headerText.TextSize = 16
 					headerText.TextTransparency = 0.3
@@ -5331,6 +5772,7 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Label(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
 					local LabelFunctions = {Settings = Settings}
 
 					local label = Instance.new("Frame")
@@ -5347,7 +5789,7 @@ function MacLib:Window(Settings)
 					labelText.Name = "LabelText"
 					labelText.FontFace = Font.new(assets.interFont)
 					labelText.RichText = true
-					labelText.Text = LabelFunctions.Settings.Text or LabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
+					labelText.Text = optionText(LabelFunctions.Settings, Flag, "Label") -- Settings.Name Deprecated use Settings.Text
 					labelText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					labelText.TextSize = 13
 					labelText.TextTransparency = 0.5
@@ -5375,6 +5817,7 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:SubLabel(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
 					local SubLabelFunctions = {Settings = Settings}
 
 					local subLabel = Instance.new("Frame")
@@ -5391,7 +5834,7 @@ function MacLib:Window(Settings)
 					subLabelText.Name = "SubLabelText"
 					subLabelText.FontFace = Font.new(assets.interFont)
 					subLabelText.RichText = true
-					subLabelText.Text = SubLabelFunctions.Settings.Text or SubLabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
+					subLabelText.Text = optionText(SubLabelFunctions.Settings, Flag, "SubLabel") -- Settings.Name Deprecated use Settings.Text
 					subLabelText.TextColor3 = Color3.fromRGB(255, 255, 255)
 					subLabelText.TextSize = 12
 					subLabelText.TextTransparency = 0.7
@@ -5419,6 +5862,7 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Paragraph(Settings, Flag)
+					Settings, Flag = optionArgs(Settings, Flag)
 					local ParagraphFunctions = {Settings = Settings}
 
 					local paragraph = Instance.new("Frame")
@@ -5439,7 +5883,7 @@ function MacLib:Window(Settings)
 						Enum.FontStyle.Normal
 					)
 					paragraphHeader.RichText = true
-					paragraphHeader.Text = ParagraphFunctions.Settings.Header
+					paragraphHeader.Text = tostring(optionFirstNonNil(ParagraphFunctions.Settings.Header, ParagraphFunctions.Settings.Title, ParagraphFunctions.Settings.Name, Flag, ""))
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphHeader.TextSize = 15
 					paragraphHeader.TextTransparency = 0.4
@@ -5463,7 +5907,7 @@ function MacLib:Window(Settings)
 					paragraphBody.Name = "ParagraphBody"
 					paragraphBody.FontFace = Font.new(assets.interFont)
 					paragraphBody.RichText = true
-					paragraphBody.Text = ParagraphFunctions.Settings.Body
+					paragraphBody.Text = tostring(optionFirstNonNil(ParagraphFunctions.Settings.Body, ParagraphFunctions.Settings.Content, ParagraphFunctions.Settings.Text, ""))
 					paragraphBody.TextColor3 = Color3.fromRGB(255, 255, 255)
 					paragraphBody.TextSize = 13
 					paragraphBody.TextTransparency = 0.5
@@ -5563,7 +6007,7 @@ function MacLib:Window(Settings)
 				end
 
 				function SectionFunctions:Custom(Settings, Flag)
-					Settings = Settings or {}
+					Settings, Flag = optionArgs(Settings, Flag)
 					local CustomFunctions = { Settings = Settings }
 
 					local custom = Instance.new("Frame")
@@ -6243,9 +6687,7 @@ function MacLib:Window(Settings)
 
 			button.MouseButton1Click:Connect(function()
 				if dialogCanvas.GroupTransparency ~= 0 then return end
-				if v.Callback then
-					v.Callback()
-				end
+				optionCall(v.Callback)
 
 				dialogOut()
 			end)
@@ -6337,9 +6779,7 @@ function MacLib:Window(Settings)
 	local onUnloadCallback
 
 	function WindowFunctions:Unload()
-		if onUnloadCallback then
-			onUnloadCallback()  
-		end
+		optionCall(onUnloadCallback)
 		setWindowMouseState(false)
 		macLib:Destroy()
 		unloaded = true
@@ -6458,7 +6898,7 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.state then
+				if MacLib.Options[Flag] and data.state ~= nil then
 					MacLib.Options[Flag]:UpdateState(data.state)
 				end
 			end
@@ -6542,13 +6982,16 @@ function MacLib:Window(Settings)
 		["Colorpicker"] = {
 			Save = function(Flag, data)
 				local function Color3ToHex(color)
+					if typeof(color) ~= "Color3" then
+						return nil
+					end
 					return string.format("#%02X%02X%02X", math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255))
 				end
 
 				return {
 					type = "Colorpicker", 
 					flag = Flag, 
-					color = Color3ToHex(data.Color) or nil,
+					color = Color3ToHex(data.Color or data.Value) or nil,
 					alpha = data.Alpha
 				}
 			end,
@@ -6730,14 +7173,17 @@ local function runCallback(callback, ...)
 	end
 
 	local args = { ... }
+	local function invoke()
+		local ok, err = pcall(callback, unpackArgs(args))
+		if not ok then
+			warn("[MacLib] callback error: " .. tostring(err))
+		end
+	end
+
 	if task and type(task.spawn) == "function" then
-		task.spawn(function()
-			callback(unpackArgs(args))
-		end)
+		task.spawn(invoke)
 	else
-		coroutine.wrap(function()
-			callback(unpackArgs(args))
-		end)()
+		coroutine.wrap(invoke)()
 	end
 end
 
@@ -7182,6 +7628,15 @@ local function wrapLabel(rawLabel, groupProxy)
 	function proxy:addKeyPicker(flag, settings)
 		return self:AddKeyPicker(flag, settings)
 	end
+	function proxy:KeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function proxy:AddKeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function proxy:addKeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
 	function proxy:AddKeybind(flag, settings)
 		return self:AddKeyPicker(flag, settings)
 	end
@@ -7207,6 +7662,15 @@ local function makeGroupProxy(section)
 		return self:AddKeyPicker(flag, settings)
 	end
 	function groupProxy:addKeyPicker(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function groupProxy:KeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function groupProxy:AddKeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function groupProxy:addKeyPicket(flag, settings)
 		return self:AddKeyPicker(flag, settings)
 	end
 
@@ -7312,6 +7776,15 @@ local function makeGroupProxy(section)
 		function toggleProxy:addKeyPicker(keyFlag, keySettings)
 			return self:AddKeyPicker(keyFlag, keySettings)
 		end
+		function toggleProxy:KeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function toggleProxy:AddKeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function toggleProxy:addKeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 		function toggleProxy:AddColorPicker(colorFlag, colorSettings)
 			return groupProxy:AddColorPicker(colorFlag, colorSettings, self)
 		end
@@ -7342,6 +7815,12 @@ local function makeGroupProxy(section)
 	end
 	function groupProxy:addKeybind(flag, settings)
 		return self:AddKeybind(flag, settings)
+	end
+	function groupProxy:AddKeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
+	end
+	function groupProxy:addKeyPicket(flag, settings)
+		return self:AddKeyPicker(flag, settings)
 	end
 
 	function groupProxy:AddSlider(flag, settings)
@@ -7537,6 +8016,15 @@ local function makeGroupProxy(section)
 		function colorProxy:KeyPicker(keyFlag, keySettings)
 			return self:AddKeyPicker(keyFlag, keySettings)
 		end
+		function colorProxy:KeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function colorProxy:AddKeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
+		function colorProxy:addKeyPicket(keyFlag, keySettings)
+			return self:AddKeyPicker(keyFlag, keySettings)
+		end
 
 		MacLib.Options[flag] = colorProxy
 		return colorProxy
@@ -7551,6 +8039,9 @@ local function makeGroupProxy(section)
 		return self:AddColorPicker(flag, settings, ownerToggle)
 	end
 	function groupProxy:ColorPicker(flag, settings, ownerToggle)
+		return self:AddColorPicker(flag, settings, ownerToggle)
+	end
+	function groupProxy:Colorpicker(flag, settings, ownerToggle)
 		return self:AddColorPicker(flag, settings, ownerToggle)
 	end
 
@@ -7880,9 +8371,11 @@ local function compatApplyThemeToRoot(root, theme)
 				obj.PlaceholderColor3 = normalized.MutedFont
 			end
 			if obj.BackgroundTransparency < 0.99 then
-				if obj.Name == "ProfileTier" then
+				if obj.Name == "Value" and obj:FindFirstChild("Slide") then
+					-- Keep the colorpicker value slider hue intact.
+				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
-				elseif obj.Name == "CheckboxButton" then
+				elseif obj.Name == "CheckboxButton" or obj.Name == "BinderBox" then
 					obj.BackgroundColor3 = normalized.Outline
 				else
 					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
@@ -7906,6 +8399,8 @@ local function compatApplyThemeToRoot(root, theme)
 				obj.ImageColor3 = normalized.Font
 			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" or obj.Name == "Checkmark" then
 				obj.ImageColor3 = normalized.Accent
+			elseif obj.Name == "Wheel" and obj:FindFirstChild("WheelHueGradient") then
+				-- Keep the generated colorpicker hue field from being themed to gray.
 			elseif obj.BackgroundTransparency < 0.99 then
 				obj.BackgroundColor3 = normalized.Main
 			end
