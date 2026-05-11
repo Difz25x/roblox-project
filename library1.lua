@@ -200,8 +200,17 @@ end
 
 local lucideState = {
 	BaseUrl = "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/%s.svg",
+	DirectModuleUrl = "https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua",
+	DirectModuleCache = "TiRex/lucide/lucide-roblox-direct.lua",
+	SvgCacheFolder = "TiRex/lucide/svg",
 	SvgCache = {},
 	SegmentCache = {},
+	Waiters = {},
+	PendingSvg = {},
+	DirectModule = nil,
+	DirectLoading = false,
+	DirectLoaded = false,
+	DirectFailed = false,
 	FastIcons = true,
 	Aliases = {
 		["check-circle"] = "circle-check",
@@ -211,6 +220,56 @@ local lucideState = {
 		["clapperboard"] = "clapperboard",
 	}
 }
+
+local function ensureCachePath(path, isFile)
+	if type(isfolder) ~= "function" or type(makefolder) ~= "function" then
+		return false
+	end
+
+	local folderPath = isFile and tostring(path or ""):match("^(.*)/[^/]+$") or tostring(path or "")
+	if not folderPath or folderPath == "" then
+		return true
+	end
+
+	local current = ""
+	for segment in folderPath:gmatch("[^/]+") do
+		current = current == "" and segment or (current .. "/" .. segment)
+		local okExists, exists = pcall(isfolder, current)
+		if not okExists or not exists then
+			pcall(makefolder, current)
+		end
+	end
+
+	return true
+end
+
+local function readCacheFile(path)
+	if type(isfile) ~= "function" or type(readfile) ~= "function" then
+		return nil
+	end
+
+	local okExists, exists = pcall(isfile, path)
+	if not okExists or not exists then
+		return nil
+	end
+
+	local okRead, body = pcall(readfile, path)
+	if okRead and type(body) == "string" and body ~= "" then
+		return body
+	end
+
+	return nil
+end
+
+local function writeCacheFile(path, body)
+	if type(writefile) ~= "function" or type(body) ~= "string" or body == "" then
+		return false
+	end
+
+	ensureCachePath(path, true)
+	local okWrite = pcall(writefile, path, body)
+	return okWrite == true
+end
 
 local function normalizeLucideIconName(value)
 	if type(value) ~= "string" then
@@ -237,6 +296,13 @@ local function fetchLucideSvg(iconName)
 		return lucideState.SvgCache[iconName]
 	end
 
+	local cachePath = lucideState.SvgCacheFolder .. "/" .. tostring(iconName) .. ".svg"
+	local cachedBody = readCacheFile(cachePath)
+	if type(cachedBody) == "string" and cachedBody:find("<svg", 1, true) then
+		lucideState.SvgCache[iconName] = cachedBody
+		return cachedBody
+	end
+
 	local url = string.format(lucideState.BaseUrl, iconName)
 	local ok, body = pcall(function()
 		return game:HttpGet(url)
@@ -247,7 +313,67 @@ local function fetchLucideSvg(iconName)
 	end
 
 	lucideState.SvgCache[iconName] = body
+	writeCacheFile(cachePath, body)
 	return body
+end
+
+local function loadLucideDirectModule()
+	if lucideState.DirectLoaded then
+		return lucideState.DirectModule
+	end
+	if lucideState.DirectFailed then
+		return nil
+	end
+
+	local source = readCacheFile(lucideState.DirectModuleCache)
+	if type(source) ~= "string" or source == "" then
+		local okFetch, body = pcall(function()
+			return game:HttpGet(lucideState.DirectModuleUrl)
+		end)
+		if not okFetch or type(body) ~= "string" or body == "" then
+			lucideState.DirectFailed = true
+			return nil
+		end
+		source = body
+		writeCacheFile(lucideState.DirectModuleCache, source)
+	end
+
+	local loadFn = loadstring or load
+	if type(loadFn) ~= "function" then
+		lucideState.DirectFailed = true
+		return nil
+	end
+
+	local okModule, module = pcall(function()
+		local loader, loadErr = loadFn(source)
+		if type(loader) ~= "function" then
+			error(loadErr or "failed to compile lucide direct module", 0)
+		end
+		return loader()
+	end)
+
+	if not okModule or type(module) ~= "table" or type(module.GetAsset) ~= "function" then
+		lucideState.DirectFailed = true
+		return nil
+	end
+
+	lucideState.DirectModule = module
+	lucideState.DirectLoaded = true
+	lucideState.DirectFailed = false
+	return module
+end
+
+local function getDirectLucideAsset(iconName)
+	if not lucideState.DirectLoaded or type(lucideState.DirectModule) ~= "table" then
+		return nil
+	end
+
+	local okAsset, asset = pcall(lucideState.DirectModule.GetAsset, iconName)
+	if okAsset and type(asset) == "table" and type(asset.Url) == "string" then
+		return asset
+	end
+
+	return nil
 end
 
 local function parseSvgAttributes(tag)
@@ -542,14 +668,152 @@ local function drawIconLine(parent, segment, size, color, transparency)
 	corner.Parent = line
 end
 
+local function clearLucideContainer(container)
+	for _, child in ipairs(container:GetChildren()) do
+		child:Destroy()
+	end
+end
+
+local function renderLucideFallback(container, iconName, icon, size, color)
+	clearLucideContainer(container)
+
+	local fallback = Instance.new("TextLabel")
+	fallback.Name = "Fallback"
+	fallback.BackgroundTransparency = 1
+	fallback.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+	fallback.Size = UDim2.fromScale(1, 1)
+	fallback.Text = string.upper(tostring(iconName or icon or "?"):sub(1, 1))
+	fallback.TextColor3 = color
+	fallback.TextSize = math.max(10, size - 4)
+	fallback.TextTransparency = 0.35
+	fallback.Parent = container
+end
+
+local function renderLucideSegments(container, segments, size, color)
+	clearLucideContainer(container)
+	for _, segment in ipairs(segments) do
+		drawIconLine(container, segment, size, color, 0)
+	end
+end
+
+local function renderLucideSprite(container, asset, size, color)
+	clearLucideContainer(container)
+
+	local image = Instance.new("ImageLabel")
+	image.Name = "LucideSprite"
+	image.BackgroundTransparency = 1
+	image.BorderSizePixel = 0
+	image.Image = asset.Url
+	image.ImageColor3 = color
+	image.ImageTransparency = 0
+	image.ImageRectOffset = asset.ImageRectOffset or Vector2.zero
+	image.ImageRectSize = asset.ImageRectSize or Vector2.zero
+	image.Size = UDim2.fromOffset(size, size)
+	image.Parent = container
+end
+
+local function resolveLucideWaiters(iconName)
+	local waiters = lucideState.Waiters[iconName]
+	if not waiters then
+		return true
+	end
+
+	local asset = getDirectLucideAsset(iconName)
+	local segments = nil
+	if not asset and type(lucideState.SegmentCache[iconName]) == "table" then
+		segments = lucideState.SegmentCache[iconName]
+	end
+
+	if not asset and not segments then
+		return false
+	end
+
+	lucideState.Waiters[iconName] = nil
+	for _, waiter in ipairs(waiters) do
+		local container = waiter.Container
+		if typeof(container) == "Instance" and container.Parent then
+			if asset then
+				renderLucideSprite(container, asset, waiter.Size, waiter.Color)
+			else
+				renderLucideSegments(container, segments, waiter.Size, waiter.Color)
+			end
+		end
+	end
+
+	return true
+end
+
+local function startLucideSvgLoad(iconName)
+	if lucideState.PendingSvg[iconName] then
+		return
+	end
+
+	lucideState.PendingSvg[iconName] = true
+	task.spawn(function()
+		local segments = parseLucideSvgSegments(iconName)
+		lucideState.PendingSvg[iconName] = nil
+
+		if type(segments) == "table" then
+			resolveLucideWaiters(iconName)
+		elseif lucideState.Waiters[iconName] then
+			lucideState.Waiters[iconName] = nil
+		end
+	end)
+end
+
+local function startLucideDirectLoad()
+	if lucideState.DirectLoaded or lucideState.DirectLoading or lucideState.DirectFailed then
+		return
+	end
+
+	lucideState.DirectLoading = true
+	task.spawn(function()
+		loadLucideDirectModule()
+		lucideState.DirectLoading = false
+
+		local queuedIcons = {}
+		for iconName in pairs(lucideState.Waiters) do
+			queuedIcons[#queuedIcons + 1] = iconName
+		end
+
+		for _, iconName in ipairs(queuedIcons) do
+			if not resolveLucideWaiters(iconName) then
+				startLucideSvgLoad(iconName)
+			end
+		end
+	end)
+end
+
+local function queueLucideIconRender(iconName, container, size, color)
+	local asset = getDirectLucideAsset(iconName)
+	if asset then
+		renderLucideSprite(container, asset, size, color)
+		return
+	end
+
+	if type(lucideState.SegmentCache[iconName]) == "table" then
+		renderLucideSegments(container, lucideState.SegmentCache[iconName], size, color)
+		return
+	end
+
+	lucideState.Waiters[iconName] = lucideState.Waiters[iconName] or {}
+	table.insert(lucideState.Waiters[iconName], {
+		Container = container,
+		Size = size,
+		Color = color
+	})
+
+	if lucideState.DirectLoaded or lucideState.DirectFailed then
+		startLucideSvgLoad(iconName)
+	else
+		startLucideDirectLoad()
+	end
+end
+
 local function createLucideIcon(icon, size, color, transparency)
 	size = size or 18
 	color = color or Color3.fromRGB(255, 255, 255)
 	local iconName = normalizeLucideIconName(icon)
-	local segments = nil
-	if iconName and not lucideState.FastIcons then
-		segments = parseLucideSvgSegments(iconName)
-	end
 
 	local container = Instance.new("CanvasGroup")
 	container.Name = "LucideIcon"
@@ -558,21 +822,15 @@ local function createLucideIcon(icon, size, color, transparency)
 	container.GroupTransparency = transparency or 0
 	container.Size = UDim2.fromOffset(size, size)
 
-	if segments and #segments > 0 then
-		for _, segment in ipairs(segments) do
-			drawIconLine(container, segment, size, color, 0)
-		end
+	if iconName and getDirectLucideAsset(iconName) then
+		renderLucideSprite(container, getDirectLucideAsset(iconName), size, color)
+	elseif iconName and type(lucideState.SegmentCache[iconName]) == "table" then
+		renderLucideSegments(container, lucideState.SegmentCache[iconName], size, color)
 	else
-		local fallback = Instance.new("TextLabel")
-		fallback.Name = "Fallback"
-		fallback.BackgroundTransparency = 1
-		fallback.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-		fallback.Size = UDim2.fromScale(1, 1)
-		fallback.Text = string.upper(tostring(iconName or icon or "?"):sub(1, 1))
-		fallback.TextColor3 = color
-		fallback.TextSize = math.max(10, size - 4)
-		fallback.TextTransparency = 0
-		fallback.Parent = container
+		renderLucideFallback(container, iconName, icon, size, color)
+		if iconName then
+			queueLucideIconRender(iconName, container, size, color)
+		end
 	end
 
 	return container
@@ -2979,18 +3237,21 @@ function MacLib:Window(Settings)
 					sliderValue.CursorPosition = -1
 					sliderValue.FontFace = Font.new(assets.interFont)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
-					sliderValue.TextSize = 12
+					sliderValue.TextSize = 11
+					sliderValue.TextScaled = true
 					sliderValue.TextTransparency = 0.1
 					sliderValue.TextXAlignment = Enum.TextXAlignment.Center
-					--sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
+					sliderValue.TextYAlignment = Enum.TextYAlignment.Center
+					sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
 					sliderValue.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					sliderValue.BackgroundTransparency = 0.95
+					sliderValue.BackgroundTransparency = 1
 					sliderValue.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderValue.BorderSizePixel = 0
 					sliderValue.LayoutOrder = 1
-					sliderValue.Position = UDim2.fromScale(-0.0789, 0.171)
-					sliderValue.Size = UDim2.fromOffset(41, 21)
+					sliderValue.Position = UDim2.fromScale(0, 0)
+					sliderValue.Size = UDim2.fromScale(1, 1)
 					sliderValue.ClipsDescendants = true
+					sliderValue.ZIndex = 6
 
 					local sliderValueUICorner = Instance.new("UICorner")
 					sliderValueUICorner.Name = "SliderValueUICorner"
@@ -3001,16 +3262,20 @@ function MacLib:Window(Settings)
 					sliderValueUIStroke.Name = "SliderValueUIStroke"
 					sliderValueUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 					sliderValueUIStroke.Color = Color3.fromRGB(255, 255, 255)
-					sliderValueUIStroke.Transparency = 0.9
+					sliderValueUIStroke.Transparency = 1
 					sliderValueUIStroke.Parent = sliderValue
 
 					local sliderValueUIPadding = Instance.new("UIPadding")
 					sliderValueUIPadding.Name = "SliderValueUIPadding"
-					sliderValueUIPadding.PaddingLeft = UDim.new(0, 2)
-					sliderValueUIPadding.PaddingRight = UDim.new(0, 2)
+					sliderValueUIPadding.PaddingLeft = UDim.new(0, 4)
+					sliderValueUIPadding.PaddingRight = UDim.new(0, 4)
 					sliderValueUIPadding.Parent = sliderValue
 
-					sliderValue.Parent = sliderElements
+					local sliderValueTextSize = Instance.new("UITextSizeConstraint")
+					sliderValueTextSize.Name = "SliderValueTextSizeConstraint"
+					sliderValueTextSize.MaxTextSize = 12
+					sliderValueTextSize.MinTextSize = 7
+					sliderValueTextSize.Parent = sliderValue
 
 					local sliderElementsUIListLayout = Instance.new("UIListLayout")
 					sliderElementsUIListLayout.Name = "SliderElementsUIListLayout"
@@ -3026,14 +3291,35 @@ function MacLib:Window(Settings)
 					sliderBar.Active = true
 					sliderBar.AutoButtonColor = false
 					sliderBar.Image = assets.sliderbar
+					sliderBar.ImageTransparency = 1
 					sliderBar.ImageColor3 = Color3.fromRGB(87, 86, 86)
-					sliderBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					sliderBar.BackgroundTransparency = 1
+					sliderBar.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
+					sliderBar.BackgroundTransparency = 0.12
 					sliderBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderBar.BorderSizePixel = 0
+					sliderBar.LayoutOrder = 1
 					sliderBar.Position = UDim2.fromScale(0.219, 0.457)
-					sliderBar.Size = UDim2.fromOffset(123, 3)
+					sliderBar.Size = UDim2.fromOffset(123, 16)
 					sliderBar.ZIndex = 2
+
+					local sliderBarCorner = Instance.new("UICorner")
+					sliderBarCorner.Name = "SliderBarCorner"
+					sliderBarCorner.CornerRadius = UDim.new(0, 2)
+					sliderBarCorner.Parent = sliderBar
+
+					local sliderFill = Instance.new("Frame")
+					sliderFill.Name = "SliderFill"
+					sliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					sliderFill.BackgroundTransparency = 0.2
+					sliderFill.BorderSizePixel = 0
+					sliderFill.Size = UDim2.fromScale(0, 1)
+					sliderFill.ZIndex = sliderBar.ZIndex + 1
+					sliderFill.Parent = sliderBar
+
+					local sliderFillCorner = Instance.new("UICorner")
+					sliderFillCorner.Name = "SliderFillCorner"
+					sliderFillCorner.CornerRadius = UDim.new(0, 2)
+					sliderFillCorner.Parent = sliderFill
 
 					local sliderHitbox = Instance.new("TextButton")
 					sliderHitbox.Name = "SliderHitbox"
@@ -3061,6 +3347,8 @@ function MacLib:Window(Settings)
 					sliderHead.Size = UDim2.fromOffset(12, 12)
 					sliderHead.ZIndex = sliderBar.ZIndex + 2
 					sliderHead.Parent = sliderBar
+
+					sliderValue.Parent = sliderBar
 
 					sliderBar.Parent = sliderElements
 
@@ -3123,7 +3411,14 @@ function MacLib:Window(Settings)
 					local finalValue
 
 					local function formatSliderValue(value)
-						return (Settings.Prefix or "") .. ValueDisplayMethod(value, SliderFunctions.Settings.Precision) .. (Settings.Suffix or "")
+						local _, maxValue, precision = getSliderBounds()
+						local prefix = tostring(optionFirstNonNil(SliderFunctions.Settings.Prefix, Settings.Prefix, ""))
+						local suffix = tostring(optionFirstNonNil(SliderFunctions.Settings.Suffix, Settings.Suffix, ""))
+						return prefix
+							.. ValueDisplayMethod(value, precision)
+							.. "/"
+							.. ValueDisplayMethod(maxValue, precision)
+							.. suffix
 					end
 
 					local function getPointerX(input)
@@ -3158,6 +3453,7 @@ function MacLib:Window(Settings)
 						local previousValue = finalValue
 
 						sliderHead.Position = UDim2.new(posXScale, 0, 0.5, 0)
+						sliderFill.Size = UDim2.fromScale(posXScale, 1)
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
 						SliderFunctions.State = finalValue
@@ -3185,12 +3481,13 @@ function MacLib:Window(Settings)
 								value = minValue + (value / 100) * range
 							end
 							value = optionClampNumber(optionRound(value, precision), minValue, maxValue)
-							posXScale = range == 0 and 0 or ((value - minValue) / range)
+							posXScale = range == 0 and 0 or math.clamp(((value - minValue) / range), 0, 1)
 						end
 
 						local pos = UDim2.new(posXScale, 0, 0.5, 0)
 						local previousValue = finalValue
 						sliderHead.Position = pos
+						sliderFill.Size = UDim2.fromScale(posXScale, 1)
 
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
@@ -3235,6 +3532,10 @@ function MacLib:Window(Settings)
 					end)
 
 					sliderHitbox.InputBegan:Connect(function(input)
+						beginSliderInput(input)
+					end)
+
+					sliderValue.InputBegan:Connect(function(input)
 						beginSliderInput(input)
 					end)
 
@@ -3285,12 +3586,10 @@ function MacLib:Window(Settings)
 					end)
 
 					local function updateSliderBarSize()
-						local padding = sliderElementsUIListLayout.Padding.Offset
-						local sliderValueWidth = sliderValue.AbsoluteSize.X
 						local sliderNameWidth = sliderName.AbsoluteSize.X
 						local totalWidth = sliderElements.AbsoluteSize.X
 
-						local newBarWidth = math.max(40, (totalWidth - (padding + sliderValueWidth + sliderNameWidth + 20)) / math.max(baseUIScale.Scale, 0.001))
+						local newBarWidth = math.max(92, (totalWidth - (sliderNameWidth + 24)) / math.max(baseUIScale.Scale, 0.001))
 						sliderBar.Size = UDim2.new(sliderBar.Size.X.Scale, newBarWidth, sliderBar.Size.Y.Scale, sliderBar.Size.Y.Offset)
 					end
 
@@ -3555,7 +3854,7 @@ function MacLib:Window(Settings)
 					keybind.BackgroundTransparency = 1
 					keybind.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybind.BorderSizePixel = 0
-					keybind.Size = UDim2.new(1, 0, 0, 42)
+					keybind.Size = UDim2.new(1, 0, 0, 38)
 					keybind.Parent = section
 
 					local keybindName = Instance.new("TextLabel")
@@ -3576,28 +3875,28 @@ function MacLib:Window(Settings)
 					keybindName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybindName.BorderSizePixel = 0
 					keybindName.Position = UDim2.fromScale(0, 0.5)
-					keybindName.Size = UDim2.new(1, -96, 0, 0)
+					keybindName.Size = UDim2.new(1, -36, 0, 0)
 					keybindName.Parent = keybind
 
 					local binderBox = Instance.new("TextButton")
 					binderBox.Name = "BinderBox"
 					binderBox.FontFace = Font.new(assets.interFont)
 					binderBox.Text = ""
-					binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
-					binderBox.TextSize = 12
-					binderBox.TextScaled = false
+					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+					binderBox.TextSize = 11
+					binderBox.TextScaled = true
 					binderBox.TextTransparency = 0
 					binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
 					binderBox.AutoButtonColor = false
-					binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.BackgroundTransparency = 0.15
+					binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+					binderBox.BackgroundTransparency = 0.76
 					binderBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					binderBox.BorderSizePixel = 0
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(78, 30)
+					binderBox.Size = UDim2.fromOffset(21, 21)
 					binderBox.ZIndex = 10
 
 					local binderBoxUICorner = Instance.new("UICorner")
@@ -3608,26 +3907,26 @@ function MacLib:Window(Settings)
 					local binderBoxUIStroke = Instance.new("UIStroke")
 					binderBoxUIStroke.Name = "BinderBoxUIStroke"
 					binderBoxUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-					binderBoxUIStroke.Color = Color3.fromRGB(220, 220, 220)
-					binderBoxUIStroke.Transparency = 0.2
+					binderBoxUIStroke.Color = Color3.fromRGB(150, 150, 150)
+					binderBoxUIStroke.Transparency = 0.35
 					binderBoxUIStroke.Parent = binderBox
 
 					local binderBoxTextSize = Instance.new("UITextSizeConstraint")
 					binderBoxTextSize.Name = "BinderBoxTextSizeConstraint"
-					binderBoxTextSize.MaxTextSize = 12
-					binderBoxTextSize.MinTextSize = 9
+					binderBoxTextSize.MaxTextSize = 11
+					binderBoxTextSize.MinTextSize = 7
 					binderBoxTextSize.Parent = binderBox
 
 					local binderBoxUIPadding = Instance.new("UIPadding")
 					binderBoxUIPadding.Name = "BinderBoxUIPadding"
-					binderBoxUIPadding.PaddingLeft = UDim.new(0, 6)
-					binderBoxUIPadding.PaddingRight = UDim.new(0, 6)
+					binderBoxUIPadding.PaddingLeft = UDim.new(0, 1)
+					binderBoxUIPadding.PaddingRight = UDim.new(0, 1)
 					binderBoxUIPadding.Parent = binderBox
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
-					binderBoxUISizeConstraint.MinSize = Vector2.new(78, 30)
-					binderBoxUISizeConstraint.MaxSize = Vector2.new(78, 30)
+					binderBoxUISizeConstraint.MinSize = Vector2.new(21, 21)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(21, 21)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
@@ -3652,7 +3951,7 @@ function MacLib:Window(Settings)
 						end
 
 						if name == "" or name == "None" or name == "nil" then
-							return "NONE"
+							return "-"
 						end
 
 						local shortNames = {
@@ -3665,35 +3964,35 @@ function MacLib:Window(Settings)
 							RightControl = "RC",
 							LeftAlt = "LA",
 							RightAlt = "RA",
-							Return = "Ent",
-							Backspace = "Bk"
+							Return = "EN",
+							Backspace = "BK"
 						}
 
-						return shortNames[name] or string.sub(name, 1, 3)
+						return shortNames[name] or string.sub(name, 1, 2)
 					end
 
 					local function updateBindVisual(binding)
 						if binding then
-							binderBox.Text = "Press"
-							binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
+							binderBox.Text = "..."
+							binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-								BackgroundTransparency = 0.1
+								BackgroundTransparency = 0.62
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								Color = Color3.fromRGB(255, 255, 255),
-								Transparency = 0
+								Transparency = 0.25
 							}):Play()
 						else
 							binderBox.Text = getBindText(binded)
-							binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
+							binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-								BackgroundTransparency = binded and 0.12 or 0.15
+								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
+								BackgroundTransparency = binded and 0.62 or 0.76
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220),
-								Transparency = binded and 0.05 or 0.08
+								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150),
+								Transparency = binded and 0.25 or 0.35
 							}):Play()
 						end
 					end
@@ -7788,25 +8087,26 @@ local function wrapLabel(rawLabel, groupProxy)
 
 		labelFrame.ClipsDescendants = false
 		if typeof(labelText) == "Instance" then
-			labelText.Size = UDim2.new(1, -96, 1, 0)
+			labelText.Size = UDim2.new(1, -36, 1, 0)
 			labelText.TextTransparency = 0.35
 		end
 
 		local binderBox = Instance.new("TextButton")
 		binderBox.Name = "BinderBox"
 		binderBox.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
-		binderBox.Text = "NONE"
-		binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
-		binderBox.TextSize = 12
+		binderBox.Text = "-"
+		binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+		binderBox.TextSize = 11
+		binderBox.TextScaled = true
 		binderBox.TextTransparency = 0
 		binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 		binderBox.AnchorPoint = Vector2.new(1, 0.5)
 		binderBox.AutoButtonColor = false
-		binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		binderBox.BackgroundTransparency = 0.12
+		binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+		binderBox.BackgroundTransparency = 0.76
 		binderBox.BorderSizePixel = 0
 		binderBox.Position = UDim2.fromScale(1, 0.5)
-		binderBox.Size = UDim2.fromOffset(78, 30)
+		binderBox.Size = UDim2.fromOffset(21, 21)
 		binderBox.ZIndex = 10
 		binderBox.Parent = labelFrame
 
@@ -7816,21 +8116,26 @@ local function wrapLabel(rawLabel, groupProxy)
 
 		local stroke = Instance.new("UIStroke")
 		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		stroke.Color = Color3.fromRGB(255, 255, 255)
-		stroke.Transparency = 0.08
+		stroke.Color = Color3.fromRGB(150, 150, 150)
+		stroke.Transparency = 0.35
 		stroke.Parent = binderBox
 
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, 6)
-		padding.PaddingRight = UDim.new(0, 6)
+		padding.PaddingLeft = UDim.new(0, 1)
+		padding.PaddingRight = UDim.new(0, 1)
 		padding.Parent = binderBox
+
+		local textSize = Instance.new("UITextSizeConstraint")
+		textSize.MaxTextSize = 11
+		textSize.MinTextSize = 7
+		textSize.Parent = binderBox
 
 		local binding = false
 		local suppressUntil = 0
 		local function formatKeyName(value)
 			local name = normalizeKeyName(value)
 			if name == "None" or name == "" or name == "nil" then
-				return "NONE"
+				return "-"
 			end
 			local shortNames = {
 				MouseButton1 = "M1",
@@ -7842,21 +8147,26 @@ local function wrapLabel(rawLabel, groupProxy)
 				RightControl = "RC",
 				LeftAlt = "LA",
 				RightAlt = "RA",
-				Return = "ENT",
+				Return = "EN",
 				Backspace = "BK"
 			}
-			return shortNames[name] or string.sub(name, 1, 6)
+			return shortNames[name] or string.sub(name, 1, 2)
 		end
 
 		local function updateInlineVisual(isBinding)
 			if isBinding then
-				binderBox.Text = "PRESS"
-				binderBox.BackgroundTransparency = 0.02
-				stroke.Transparency = 0
+				binderBox.Text = "..."
+				binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				binderBox.BackgroundTransparency = 0.62
+				stroke.Color = Color3.fromRGB(255, 255, 255)
+				stroke.Transparency = 0.25
 			else
 				binderBox.Text = formatKeyName(keyProxy.Value)
-				binderBox.BackgroundTransparency = 0.12
-				stroke.Transparency = 0.08
+				local hasValue = keyProxy.Value and keyProxy.Value ~= "None"
+				binderBox.BackgroundColor3 = hasValue and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130)
+				binderBox.BackgroundTransparency = hasValue and 0.62 or 0.76
+				stroke.Color = hasValue and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150)
+				stroke.Transparency = hasValue and 0.25 or 0.35
 			end
 		end
 
@@ -8646,12 +8956,16 @@ local function compatApplyThemeToRoot(root, theme)
 
 	for _, obj in ipairs(root:GetDescendants()) do
 		if obj:IsA("UIStroke") then
-			obj.Color = normalized.Outline
+			if obj.Parent and obj.Parent.Name == "BinderBox" then
+				-- Keep keybind boxes in the same state-driven style as checkboxes.
+			else
+				obj.Color = normalized.Outline
+			end
 		elseif obj:IsA("Frame") and obj.Name == "Line" and obj.Parent and obj.Parent:IsA("CanvasGroup") then
 			obj.BackgroundColor3 = normalized.Font
 		elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
 			if obj.Name == "BinderBox" then
-				obj.TextColor3 = normalized.Background
+				obj.TextColor3 = normalized.Font
 				obj.TextTransparency = 0
 			elseif obj.Name == "ProfileTier" then
 				obj.TextColor3 = normalized.Background
@@ -8667,8 +8981,7 @@ local function compatApplyThemeToRoot(root, theme)
 				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
 				elseif obj.Name == "BinderBox" then
-					obj.BackgroundColor3 = normalized.Font
-					obj.BackgroundTransparency = 0.12
+					-- Keybind boxes manage their own enabled/empty/binding colors.
 				elseif obj.Name == "CheckboxButton" then
 					obj.BackgroundColor3 = normalized.Outline
 				else
@@ -8684,12 +8997,14 @@ local function compatApplyThemeToRoot(root, theme)
 			if obj.BackgroundTransparency < 0.99 then
 				if backgroundNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Background
+				elseif obj.Name == "SliderFill" then
+					obj.BackgroundColor3 = normalized.Accent
 				elseif mainNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Main
 				end
 			end
 		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" then
+			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" or obj.Name == "LucideSprite" then
 				obj.ImageColor3 = normalized.Font
 			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" or obj.Name == "Checkmark" then
 				obj.ImageColor3 = normalized.Accent
