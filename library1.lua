@@ -3017,9 +3017,10 @@ function MacLib:Window(Settings)
 					sliderElementsUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 					sliderElementsUIListLayout.Parent = sliderElements
 
-					local sliderBar = Instance.new("ImageLabel")
+					local sliderBar = Instance.new("ImageButton")
 					sliderBar.Name = "SliderBar"
 					sliderBar.Active = true
+					sliderBar.AutoButtonColor = false
 					sliderBar.Image = assets.sliderbar
 					sliderBar.ImageColor3 = Color3.fromRGB(87, 86, 86)
 					sliderBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -3028,10 +3029,25 @@ function MacLib:Window(Settings)
 					sliderBar.BorderSizePixel = 0
 					sliderBar.Position = UDim2.fromScale(0.219, 0.457)
 					sliderBar.Size = UDim2.fromOffset(123, 3)
+					sliderBar.ZIndex = 2
+
+					local sliderHitbox = Instance.new("TextButton")
+					sliderHitbox.Name = "SliderHitbox"
+					sliderHitbox.Text = ""
+					sliderHitbox.AutoButtonColor = false
+					sliderHitbox.Active = true
+					sliderHitbox.AnchorPoint = Vector2.new(0.5, 0.5)
+					sliderHitbox.BackgroundTransparency = 1
+					sliderHitbox.BorderSizePixel = 0
+					sliderHitbox.Position = UDim2.fromScale(0.5, 0.5)
+					sliderHitbox.Size = UDim2.new(1, 18, 0, 28)
+					sliderHitbox.ZIndex = sliderBar.ZIndex + 1
+					sliderHitbox.Parent = sliderBar
 
 					local sliderHead = Instance.new("ImageButton")
 					sliderHead.Name = "SliderHead"
 					sliderHead.Image = assets.sliderhead
+					sliderHead.AutoButtonColor = false
 					sliderHead.AnchorPoint = Vector2.new(0.5, 0.5)
 					sliderHead.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					sliderHead.BackgroundTransparency = 1
@@ -3039,6 +3055,7 @@ function MacLib:Window(Settings)
 					sliderHead.BorderSizePixel = 0
 					sliderHead.Position = UDim2.fromScale(1, 0.5)
 					sliderHead.Size = UDim2.fromOffset(12, 12)
+					sliderHead.ZIndex = sliderBar.ZIndex + 2
 					sliderHead.Parent = sliderBar
 
 					sliderBar.Parent = sliderElements
@@ -3105,15 +3122,57 @@ function MacLib:Window(Settings)
 						return (Settings.Prefix or "") .. ValueDisplayMethod(value, SliderFunctions.Settings.Precision) .. (Settings.Suffix or "")
 					end
 
+					local function getPointerX(input)
+						if input and input.UserInputType == Enum.UserInputType.Touch and input.Position then
+							return input.Position.X
+						end
+
+						local mouse = LocalPlayer and LocalPlayer:GetMouse()
+						if mouse then
+							return mouse.X
+						end
+
+						local ok, mouseLocation = pcall(function()
+							return UserInputService:GetMouseLocation()
+						end)
+						if ok and mouseLocation then
+							return mouseLocation.X
+						end
+
+						if input and input.Position then
+							return input.Position.X
+						end
+
+						return sliderBar.AbsolutePosition.X
+					end
+
+					local function setValueFromX(x, ignorecallback)
+						local minValue, maxValue, precision = getSliderBounds()
+						local range = maxValue - minValue
+						local width = math.max(sliderBar.AbsoluteSize.X, 1)
+						local posXScale = math.clamp((tonumber(x) or sliderBar.AbsolutePosition.X) - sliderBar.AbsolutePosition.X, 0, width) / width
+						local previousValue = finalValue
+
+						sliderHead.Position = UDim2.new(posXScale, 0, 0.5, 0)
+						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
+						SliderFunctions.Value = finalValue
+						SliderFunctions.State = finalValue
+						sliderValue.Text = formatSliderValue(finalValue)
+
+						if not ignorecallback and previousValue ~= finalValue then
+							optionCall(SliderFunctions.Settings.Callback, finalValue)
+							optionCall(SliderFunctions.Settings.Changed, finalValue)
+						end
+					end
+
 					local function SetValue(val, ignorecallback)
 						local posXScale
 						local minValue, maxValue, precision = getSliderBounds()
 						local range = maxValue - minValue
 
 						if (typeof(val) == "InputObject" or type(val) == "table") and val.Position then
-							local input = val
-							local width = math.max(sliderBar.AbsoluteSize.X, 1)
-							posXScale = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / width, 0, 1)
+							setValueFromX(getPointerX(val), ignorecallback)
+							return
 						else
 							local value, isPercent = optionExtractNumber(val)
 							if value == nil then
@@ -3126,6 +3185,7 @@ function MacLib:Window(Settings)
 						end
 
 						local pos = UDim2.new(posXScale, 0, 0.5, 0)
+						local previousValue = finalValue
 						sliderHead.Position = pos
 
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
@@ -3134,7 +3194,7 @@ function MacLib:Window(Settings)
 
 						sliderValue.Text = formatSliderValue(finalValue)
 
-						if not ignorecallback then
+						if not ignorecallback and previousValue ~= finalValue then
 							optionCall(SliderFunctions.Settings.Callback, finalValue)
 							optionCall(SliderFunctions.Settings.Changed, finalValue)
 						end
@@ -3142,23 +3202,45 @@ function MacLib:Window(Settings)
 
 					SetValue(SliderFunctions.Settings.Default, true)
 
-					sliderHead.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = true
-							SetValue(input)
+					local dragRenderConnection
+
+					local function beginSliderInput(input)
+						if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+							return
 						end
+
+						dragging = true
+						setValueFromX(getPointerX(input))
+
+						if dragRenderConnection then
+							dragRenderConnection:Disconnect()
+						end
+						dragRenderConnection = RunService.RenderStepped:Connect(function()
+							if dragging then
+								setValueFromX(getPointerX())
+							end
+						end)
+					end
+
+					sliderHead.InputBegan:Connect(function(input)
+						beginSliderInput(input)
 					end)
 
 					sliderBar.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = true
-							SetValue(input)
-						end
+						beginSliderInput(input)
+					end)
+
+					sliderHitbox.InputBegan:Connect(function(input)
+						beginSliderInput(input)
 					end)
 
 					local function finishSliderInput()
 						if not dragging then return end
 						dragging = false
+						if dragRenderConnection then
+							dragRenderConnection:Disconnect()
+							dragRenderConnection = nil
+						end
 						optionCall(SliderFunctions.Settings.onInputComplete, finalValue)
 					end
 
@@ -3188,7 +3270,7 @@ function MacLib:Window(Settings)
 
 					UserInputService.InputChanged:Connect(function(input)
 						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-							SetValue(input)
+							setValueFromX(getPointerX(input))
 						end
 					end)
 
@@ -3497,15 +3579,15 @@ function MacLib:Window(Settings)
 					binderBox.Name = "BinderBox"
 					binderBox.FontFace = Font.new(assets.interFont)
 					binderBox.Text = ""
-					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+					binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
 					binderBox.TextSize = 12
 					binderBox.TextScaled = false
 					binderBox.TextTransparency = 0
 					binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
 					binderBox.AutoButtonColor = false
-					binderBox.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
-					binderBox.BackgroundTransparency = 0.25
+					binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					binderBox.BackgroundTransparency = 0.15
 					binderBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					binderBox.BorderSizePixel = 0
 					binderBox.ClipsDescendants = true
@@ -3600,14 +3682,14 @@ function MacLib:Window(Settings)
 							}):Play()
 						else
 							binderBox.Text = getBindText(binded)
-							binderBox.TextColor3 = binded and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(255, 255, 255)
+							binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(120, 120, 120),
-								BackgroundTransparency = binded and 0.12 or 0.25
+								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+								BackgroundTransparency = binded and 0.12 or 0.15
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220),
-								Transparency = binded and 0.05 or 0.2
+								Transparency = binded and 0.05 or 0.08
 							}):Play()
 						end
 					end
@@ -8413,7 +8495,7 @@ local function compatApplyThemeToRoot(root, theme)
 			obj.BackgroundColor3 = normalized.Font
 		elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
 			if obj.Name == "BinderBox" then
-				obj.TextColor3 = normalized.Font
+				obj.TextColor3 = normalized.Background
 				obj.TextTransparency = 0
 			elseif obj.Name == "ProfileTier" then
 				obj.TextColor3 = normalized.Background
@@ -8429,8 +8511,8 @@ local function compatApplyThemeToRoot(root, theme)
 				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
 				elseif obj.Name == "BinderBox" then
-					obj.BackgroundColor3 = normalized.Outline
-					obj.BackgroundTransparency = 0.2
+					obj.BackgroundColor3 = normalized.Font
+					obj.BackgroundTransparency = 0.12
 				elseif obj.Name == "CheckboxButton" then
 					obj.BackgroundColor3 = normalized.Outline
 				else
