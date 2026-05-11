@@ -5941,6 +5941,9 @@ function MacLib:Window(Settings)
 					function LabelFunctions:SetVisibility(State)
 						label.Visible = State
 					end
+					function LabelFunctions:GetFrame()
+						return label, labelText
+					end
 
 					if Flag then
 						MacLib.Options[Flag] = LabelFunctions
@@ -7752,7 +7755,146 @@ local function wrapLabel(rawLabel, groupProxy)
 		end
 	end
 	function proxy:AddKeyPicker(flag, settings)
-		return groupProxy:_AddKeyPicker(flag, settings, nil, self)
+		settings = settings or {}
+		local inlineSettings = {}
+		for key, value in pairs(settings) do
+			inlineSettings[key] = value
+		end
+		inlineSettings.NoUI = true
+
+		local keyProxy = groupProxy:_AddKeyPicker(flag, inlineSettings, nil, self)
+		if not rawLabel or type(rawLabel.GetFrame) ~= "function" then
+			return keyProxy
+		end
+
+		local labelFrame, labelText = rawLabel:GetFrame()
+		if typeof(labelFrame) ~= "Instance" then
+			return keyProxy
+		end
+
+		labelFrame.ClipsDescendants = false
+		if typeof(labelText) == "Instance" then
+			labelText.Size = UDim2.new(1, -96, 1, 0)
+			labelText.TextTransparency = 0.35
+		end
+
+		local binderBox = Instance.new("TextButton")
+		binderBox.Name = "BinderBox"
+		binderBox.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		binderBox.Text = "NONE"
+		binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
+		binderBox.TextSize = 12
+		binderBox.TextTransparency = 0
+		binderBox.TextTruncate = Enum.TextTruncate.AtEnd
+		binderBox.AnchorPoint = Vector2.new(1, 0.5)
+		binderBox.AutoButtonColor = false
+		binderBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		binderBox.BackgroundTransparency = 0.12
+		binderBox.BorderSizePixel = 0
+		binderBox.Position = UDim2.fromScale(1, 0.5)
+		binderBox.Size = UDim2.fromOffset(78, 30)
+		binderBox.ZIndex = 10
+		binderBox.Parent = labelFrame
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 4)
+		corner.Parent = binderBox
+
+		local stroke = Instance.new("UIStroke")
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+		stroke.Transparency = 0.08
+		stroke.Parent = binderBox
+
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 6)
+		padding.PaddingRight = UDim.new(0, 6)
+		padding.Parent = binderBox
+
+		local binding = false
+		local suppressUntil = 0
+		local function formatKeyName(value)
+			local name = normalizeKeyName(value)
+			if name == "None" or name == "" or name == "nil" then
+				return "NONE"
+			end
+			local shortNames = {
+				MouseButton1 = "M1",
+				MouseButton2 = "M2",
+				MouseButton3 = "M3",
+				LeftShift = "LS",
+				RightShift = "RS",
+				LeftControl = "LC",
+				RightControl = "RC",
+				LeftAlt = "LA",
+				RightAlt = "RA",
+				Return = "ENT",
+				Backspace = "BK"
+			}
+			return shortNames[name] or string.sub(name, 1, 6)
+		end
+
+		local function updateInlineVisual(isBinding)
+			if isBinding then
+				binderBox.Text = "PRESS"
+				binderBox.BackgroundTransparency = 0.02
+				stroke.Transparency = 0
+			else
+				binderBox.Text = formatKeyName(keyProxy.Value)
+				binderBox.BackgroundTransparency = 0.12
+				stroke.Transparency = 0.08
+			end
+		end
+
+		binderBox.MouseButton1Click:Connect(function()
+			if tick() < suppressUntil then
+				return
+			end
+			binding = not binding
+			updateInlineVisual(binding)
+		end)
+
+		UserInputService.InputBegan:Connect(function(input)
+			if not binding then
+				return
+			end
+			local isKeyboard = input.UserInputType == Enum.UserInputType.Keyboard
+			local isMouse = input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.MouseButton2
+				or input.UserInputType == Enum.UserInputType.MouseButton3
+			if not isKeyboard and not isMouse then
+				return
+			end
+			if isKeyboard and (input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete) then
+				keyProxy:SetValue("None")
+			elseif isKeyboard then
+				keyProxy:SetValue(input.KeyCode.Name)
+			else
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+					suppressUntil = tick() + 0.2
+				end
+				keyProxy:SetValue(input.UserInputType.Name)
+			end
+			binding = false
+			updateInlineVisual(false)
+		end)
+
+		local oldSetValue = keyProxy.SetValue
+		function keyProxy:SetValue(value)
+			oldSetValue(self, value)
+			updateInlineVisual(false)
+		end
+
+		local oldSetVisibility = keyProxy.SetVisibility
+		function keyProxy:SetVisibility(state)
+			if oldSetVisibility then
+				oldSetVisibility(self, state)
+			end
+			binderBox.Visible = state == true
+		end
+
+		updateInlineVisual(false)
+		return keyProxy
 	end
 	function proxy:KeyPicker(flag, settings)
 		return self:AddKeyPicker(flag, settings)
