@@ -3437,7 +3437,7 @@ function MacLib:Window(Settings)
 					keybind.BackgroundTransparency = 1
 					keybind.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybind.BorderSizePixel = 0
-					keybind.Size = UDim2.new(1, 0, 0, 38)
+					keybind.Size = UDim2.new(1, 0, 0, 42)
 					keybind.Parent = section
 
 					local keybindName = Instance.new("TextLabel")
@@ -3447,17 +3447,18 @@ function MacLib:Window(Settings)
 					keybindName.RichText = true
 					keybindName.TextColor3 = Color3.fromRGB(255, 255, 255)
 					keybindName.TextSize = 13
-					keybindName.TextTransparency = 0.5
+					keybindName.TextTransparency = 0.35
 					keybindName.TextTruncate = Enum.TextTruncate.AtEnd
 					keybindName.TextXAlignment = Enum.TextXAlignment.Left
 					keybindName.TextYAlignment = Enum.TextYAlignment.Top
 					keybindName.AnchorPoint = Vector2.new(0, 0.5)
-					keybindName.AutomaticSize = Enum.AutomaticSize.XY
+					keybindName.AutomaticSize = Enum.AutomaticSize.Y
 					keybindName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					keybindName.BackgroundTransparency = 1
 					keybindName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybindName.BorderSizePixel = 0
 					keybindName.Position = UDim2.fromScale(0, 0.5)
+					keybindName.Size = UDim2.new(1, -82, 0, 0)
 					keybindName.Parent = keybind
 
 					local binderBox = Instance.new("TextButton")
@@ -3465,19 +3466,21 @@ function MacLib:Window(Settings)
 					binderBox.FontFace = Font.new(assets.interFont)
 					binderBox.Text = ""
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.TextSize = 11
-					binderBox.TextScaled = true
-					binderBox.TextTransparency = 0
+					binderBox.TextSize = 12
+					binderBox.TextScaled = false
+					binderBox.TextTransparency = 0.05
+					binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
 					binderBox.AutoButtonColor = false
-					binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-					binderBox.BackgroundTransparency = 0.76
+					binderBox.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+					binderBox.BackgroundTransparency = 0.45
 					binderBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					binderBox.BorderSizePixel = 0
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(28, 28)
+					binderBox.Size = UDim2.fromOffset(64, 28)
+					binderBox.ZIndex = 2
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
@@ -3487,26 +3490,26 @@ function MacLib:Window(Settings)
 					local binderBoxUIStroke = Instance.new("UIStroke")
 					binderBoxUIStroke.Name = "BinderBoxUIStroke"
 					binderBoxUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-					binderBoxUIStroke.Color = Color3.fromRGB(150, 150, 150)
-					binderBoxUIStroke.Transparency = 0.35
+					binderBoxUIStroke.Color = Color3.fromRGB(220, 220, 220)
+					binderBoxUIStroke.Transparency = 0.2
 					binderBoxUIStroke.Parent = binderBox
 
 					local binderBoxTextSize = Instance.new("UITextSizeConstraint")
 					binderBoxTextSize.Name = "BinderBoxTextSizeConstraint"
-					binderBoxTextSize.MaxTextSize = 11
-					binderBoxTextSize.MinTextSize = 7
+					binderBoxTextSize.MaxTextSize = 12
+					binderBoxTextSize.MinTextSize = 9
 					binderBoxTextSize.Parent = binderBox
 
 					local binderBoxUIPadding = Instance.new("UIPadding")
 					binderBoxUIPadding.Name = "BinderBoxUIPadding"
-					binderBoxUIPadding.PaddingLeft = UDim.new(0, 2)
-					binderBoxUIPadding.PaddingRight = UDim.new(0, 2)
+					binderBoxUIPadding.PaddingLeft = UDim.new(0, 6)
+					binderBoxUIPadding.PaddingRight = UDim.new(0, 6)
 					binderBoxUIPadding.Parent = binderBox
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
-					binderBoxUISizeConstraint.MinSize = Vector2.new(28, 28)
-					binderBoxUISizeConstraint.MaxSize = Vector2.new(28, 28)
+					binderBoxUISizeConstraint.MinSize = Vector2.new(64, 28)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(64, 28)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
@@ -3531,7 +3534,7 @@ function MacLib:Window(Settings)
 						end
 
 						if name == "" or name == "None" or name == "nil" then
-							return "-"
+							return "None"
 						end
 
 						local shortNames = {
@@ -3553,24 +3556,26 @@ function MacLib:Window(Settings)
 
 					local function updateBindVisual(binding)
 						if binding then
-							binderBox.Text = "..."
+							binderBox.Text = "Press"
+							binderBox.TextColor3 = Color3.fromRGB(20, 20, 20)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-								BackgroundTransparency = 0.55
+								BackgroundTransparency = 0.1
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 								Color = Color3.fromRGB(255, 255, 255),
-								Transparency = 0.15
+								Transparency = 0
 							}):Play()
 						else
 							binderBox.Text = getBindText(binded)
+							binderBox.TextColor3 = binded and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(255, 255, 255)
 							Tween(binderBox, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
-								BackgroundTransparency = binded and 0.62 or 0.76
+								BackgroundColor3 = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(120, 120, 120),
+								BackgroundTransparency = binded and 0.12 or 0.45
 							}):Play()
 							Tween(binderBoxUIStroke, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 150, 150),
-								Transparency = binded and 0.25 or 0.35
+								Color = binded and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220),
+								Transparency = binded and 0.05 or 0.2
 							}):Play()
 						end
 					end
@@ -4510,8 +4515,13 @@ function MacLib:Window(Settings)
 					local uIGradient = Instance.new("UIGradient")
 					uIGradient.Name = "UIGradient"
 					uIGradient.Color = ColorSequence.new({
-						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-						ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+						ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+						ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+						ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+						ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+						ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 					})
 					uIGradient.Parent = value
 
@@ -4601,17 +4611,8 @@ function MacLib:Window(Settings)
 					wheelStroke.Transparency = 0.85
 					wheelStroke.Parent = wheel1
 
-					local wheelHueGradient = Instance.new("UIGradient")
+					local wheelHueGradient = Instance.new("Folder")
 					wheelHueGradient.Name = "WheelHueGradient"
-					wheelHueGradient.Color = ColorSequence.new({
-						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-						ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
-						ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
-						ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
-						ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
-						ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
-						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-					})
 					wheelHueGradient.Parent = wheel1
 
 					local saturationOverlay = Instance.new("Frame")
@@ -4624,17 +4625,34 @@ function MacLib:Window(Settings)
 
 					local saturationGradient = Instance.new("UIGradient")
 					saturationGradient.Name = "SaturationGradient"
-					saturationGradient.Rotation = 90
+					saturationGradient.Rotation = 0
 					saturationGradient.Transparency = NumberSequence.new({
 						NumberSequenceKeypoint.new(0, 0),
 						NumberSequenceKeypoint.new(1, 1)
 					})
 					saturationGradient.Parent = saturationOverlay
 
+					local valueOverlay = Instance.new("Frame")
+					valueOverlay.Name = "ValueOverlay"
+					valueOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+					valueOverlay.BorderSizePixel = 0
+					valueOverlay.Size = UDim2.fromScale(1, 1)
+					valueOverlay.ZIndex = wheel1.ZIndex + 2
+					valueOverlay.Parent = wheel1
+
+					local valueGradient = Instance.new("UIGradient")
+					valueGradient.Name = "ValueGradient"
+					valueGradient.Rotation = 90
+					valueGradient.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, 1),
+						NumberSequenceKeypoint.new(1, 0)
+					})
+					valueGradient.Parent = valueOverlay
+
 					local target = Instance.new("ImageLabel")
 					target.Name = "Target"
 					target.Image = assets.colorTarget
-					target.ImageColor3 = Color3.fromRGB(0, 0, 0)
+					target.ImageColor3 = Color3.fromRGB(255, 255, 255)
 					target.AnchorPoint = Vector2.new(0.5, 0.5)
 					target.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					target.BackgroundTransparency = 1
@@ -4642,7 +4660,7 @@ function MacLib:Window(Settings)
 					target.Position = UDim2.fromScale(0.5, 0.5)
 					target.Size = UDim2.fromOffset(22, 22)
 					target.SizeConstraint = Enum.SizeConstraint.RelativeYY
-					target.ZIndex = wheel1.ZIndex + 2
+					target.ZIndex = wheel1.ZIndex + 3
 					target.Parent = wheel1
 
 					wheel1.Parent = wheel
@@ -5384,17 +5402,17 @@ function MacLib:Window(Settings)
 					local function update()
 						local c = fromHSV(hue, saturation, value)
 						colour.BackgroundColor3 = c
-						colour.BackgroundTransparency = clampInput(modifierInputs.Alpha.Text, 0, 1)
+						colour.BackgroundTransparency = isAlpha and clampInput(modifierInputs.Alpha.Text, 0, 1) or 0
 
-						modifierInputs.Red.Text = tostring(math.floor(c.r * 255 + 0.5))
-						modifierInputs.Green.Text = tostring(math.floor(c.g * 255 + 0.5))
-						modifierInputs.Blue.Text = tostring(math.floor(c.b * 255 + 0.5))
+						modifierInputs.Red.Text = tostring(math.floor(c.R * 255 + 0.5))
+						modifierInputs.Green.Text = tostring(math.floor(c.G * 255 + 0.5))
+						modifierInputs.Blue.Text = tostring(math.floor(c.B * 255 + 0.5))
 						modifierInputs.Alpha.Text = tostring(clampInput(modifierInputs.Alpha.Text, 0, 1))
 
 						local hexColor = string.format("#%02X%02X%02X", 
-							math.floor(c.r * 255 + 0.5),
-							math.floor(c.g * 255 + 0.5),
-							math.floor(c.b * 255 + 0.5))
+							math.floor(c.R * 255 + 0.5),
+							math.floor(c.G * 255 + 0.5),
+							math.floor(c.B * 255 + 0.5))
 						modifierInputs.Hex.Text = hexColor
 					end
 
@@ -5403,7 +5421,8 @@ function MacLib:Window(Settings)
 						local relX = math.clamp(iX - slider.AbsolutePosition.X, 0, width)
 						local ratio = relX / width
 						slide.Position = udim2(ratio, 0, 0.5, 0)
-						value = 1 - ratio
+						hue = ratio
+						wheel.BackgroundColor3 = fromHSV(hue, 1, 1)
 						update()
 					end
 
@@ -5413,20 +5432,19 @@ function MacLib:Window(Settings)
 						local relX = math.clamp(iX - wheel.AbsolutePosition.X, 0, width)
 						local relY = math.clamp(iY - wheel.AbsolutePosition.Y, 0, height)
 
-						hue = relX / width
-						saturation = relY / height
-						ring.Position = udim2(hue, 0, saturation, 0)
-						slider.BackgroundColor3 = fromHSV(hue, saturation, 1)
+						saturation = relX / width
+						value = 1 - (relY / height)
+						ring.Position = udim2(saturation, 0, 1 - value, 0)
 						update()
 					end
 
-					local function UpdateSlideFromValue(value)
-						slide.Position = UDim2.new(math.clamp(1 - value, 0, 1), 0, 0.5, 0)
+					local function UpdateSlideFromValue(newHue)
+						slide.Position = UDim2.new(math.clamp(newHue, 0, 1), 0, 0.5, 0)
 					end
 
 					local function UpdateRingFromHSV(hue, saturation)
-						ring.Position = UDim2.new(math.clamp(hue, 0, 1), 0, math.clamp(saturation, 0, 1), 0)
-						slider.BackgroundColor3 = fromHSV(hue, saturation, 1)
+						wheel.BackgroundColor3 = fromHSV(hue, 1, 1)
+						ring.Position = UDim2.new(math.clamp(saturation, 0, 1), 0, math.clamp(1 - value, 0, 1), 0)
 					end
 
 					local updateFromSettings
@@ -5441,7 +5459,7 @@ function MacLib:Window(Settings)
 
 						hue, saturation, value = Color3.fromRGB(r, g, b):ToHSV()
 
-						UpdateSlideFromValue(value)
+						UpdateSlideFromValue(hue)
 						UpdateRingFromHSV(hue, saturation)
 						update()
 					end
@@ -5463,7 +5481,7 @@ function MacLib:Window(Settings)
 						modifierInputs.Blue.Text = tostring(b)
 
 						hue, saturation, value = Color3.fromRGB(r, g, b):ToHSV()
-						UpdateSlideFromValue(value)
+						UpdateSlideFromValue(hue)
 						UpdateRingFromHSV(hue, saturation)
 						update()
 					end
@@ -5488,7 +5506,7 @@ function MacLib:Window(Settings)
 						colour.BackgroundColor3 = Color3.fromRGB(r,g,b)
 						colour.BackgroundTransparency = isAlpha and ColorpickerFunctions.Alpha or 0
 
-						UpdateSlideFromValue(value)
+						UpdateSlideFromValue(hue)
 						UpdateRingFromHSV(hue, saturation)
 					end
 
@@ -5607,7 +5625,7 @@ function MacLib:Window(Settings)
 					confirm.MouseButton1Click:Connect(function()
 						colorpickerOut()
 						local c = fromHSV(hue, saturation, value)
-						ColorpickerFunctions.Color = Color3.fromRGB(c.r * 255, c.g * 255, c.b * 255)
+						ColorpickerFunctions.Color = Color3.fromRGB(c.R * 255, c.G * 255, c.B * 255)
 						ColorpickerFunctions.Value = ColorpickerFunctions.Color
 						ColorpickerFunctions.Alpha = isAlpha and clampInput(modifierInputs.Alpha.Text, 0, 1) or 0
 
@@ -5653,7 +5671,7 @@ function MacLib:Window(Settings)
 						color1.BackgroundColor3 = ColorpickerFunctions.Color
 						colour.BackgroundColor3 = Color3.fromRGB(r,g,b)
 
-						UpdateSlideFromValue(value)
+						UpdateSlideFromValue(hue)
 						UpdateRingFromHSV(hue, saturation)
 
 						optionCall(ColorpickerFunctions.Settings.Callback, ColorpickerFunctions.Color, isAlpha and ColorpickerFunctions.Alpha)
