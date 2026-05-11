@@ -32,6 +32,7 @@ local unloaded = false
 
 local assets = {
 	interFont = "rbxassetid://12187365364",
+	tirexIcon = "rbxassetid://91835354225469",
 	userInfoBlurred = "rbxassetid://18824089198",
 	toggleBackground = "rbxassetid://18772190202",
 	togglerHead = "rbxassetid://18772309008",
@@ -66,6 +67,451 @@ end
 
 local function Tween(instance, tweeninfo, propertytable)
 	return TweenService:Create(instance, tweeninfo, propertytable)
+end
+
+local function ResolveImageAsset(value, fallback)
+	if type(value) == "number" then
+		return "rbxassetid://" .. tostring(value)
+	end
+	if type(value) == "string" then
+		if value:match("^%d+$") then
+			return "rbxassetid://" .. value
+		end
+		return value
+	end
+	return fallback or assets.tirexIcon
+end
+
+local lucideState = {
+	BaseUrl = "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/%s.svg",
+	SvgCache = {},
+	SegmentCache = {},
+	Aliases = {
+		["check-circle"] = "circle-check",
+		["alert-triangle"] = "triangle-alert",
+		["swords"] = "sword",
+		["activity"] = "chart-no-axes-column-increasing",
+		["clapperboard"] = "clapperboard",
+	}
+}
+
+local function normalizeLucideIconName(value)
+	if type(value) ~= "string" then
+		return nil
+	end
+
+	local name = value
+	name = name:gsub("^lucide:", "")
+	name = name:gsub("^lucide://", "")
+	name = name:match("lucide%.dev/icons/([^%?#]+)") or name
+	name = name:match("/icons/([^%?#]+)") or name
+	name = name:gsub("%?.*$", ""):gsub("#.*$", ""):gsub("%.svg$", "")
+	name = name:gsub("_", "-"):gsub("%s+", "-"):lower()
+	name = name:gsub("[^%w%-]", "")
+	if name == "" or name:find("^rbxasset") or name:find("^http") then
+		return nil
+	end
+
+	return lucideState.Aliases[name] or name
+end
+
+local function fetchLucideSvg(iconName)
+	if lucideState.SvgCache[iconName] ~= nil then
+		return lucideState.SvgCache[iconName]
+	end
+
+	local url = string.format(lucideState.BaseUrl, iconName)
+	local ok, body = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if not ok or type(body) ~= "string" or not body:find("<svg", 1, true) then
+		lucideState.SvgCache[iconName] = false
+		return nil
+	end
+
+	lucideState.SvgCache[iconName] = body
+	return body
+end
+
+local function parseSvgAttributes(tag)
+	local attributes = {}
+	for key, value in tag:gmatch("([%w%-]+)%s*=%s*\"([^\"]*)\"") do
+		attributes[key] = value
+	end
+	for key, value in tag:gmatch("([%w%-]+)%s*=%s*'([^']*)'") do
+		attributes[key] = value
+	end
+	return attributes
+end
+
+local function toNumber(value, fallback)
+	local number = tonumber(value)
+	if number == nil then
+		return fallback or 0
+	end
+	return number
+end
+
+local function addSegment(segments, x1, y1, x2, y2)
+	x1, y1, x2, y2 = tonumber(x1), tonumber(y1), tonumber(x2), tonumber(y2)
+	if not (x1 and y1 and x2 and y2) then
+		return
+	end
+	if math.abs(x1 - x2) < 0.001 and math.abs(y1 - y2) < 0.001 then
+		return
+	end
+	segments[#segments + 1] = { x1, y1, x2, y2 }
+end
+
+local function addCircleSegments(segments, cx, cy, radius, steps)
+	cx, cy, radius = tonumber(cx), tonumber(cy), tonumber(radius)
+	if not (cx and cy and radius) or radius <= 0 then
+		return
+	end
+
+	steps = steps or 18
+	local previousX = cx + radius
+	local previousY = cy
+	for index = 1, steps do
+		local angle = (math.pi * 2) * (index / steps)
+		local x = cx + math.cos(angle) * radius
+		local y = cy + math.sin(angle) * radius
+		addSegment(segments, previousX, previousY, x, y)
+		previousX, previousY = x, y
+	end
+end
+
+local function parsePointList(points)
+	local values = {}
+	for number in tostring(points or ""):gmatch("[%-]?%d+%.?%d*") do
+		values[#values + 1] = tonumber(number)
+	end
+	return values
+end
+
+local function addPolylineSegments(segments, points, closeShape)
+	local values = parsePointList(points)
+	if #values < 4 then
+		return
+	end
+
+	for index = 1, #values - 3, 2 do
+		addSegment(segments, values[index], values[index + 1], values[index + 2], values[index + 3])
+	end
+	if closeShape then
+		addSegment(segments, values[#values - 1], values[#values], values[1], values[2])
+	end
+end
+
+local function tokenizeSvgPath(pathData)
+	local tokens = {}
+	local data = tostring(pathData or "")
+	local index = 1
+
+	while index <= #data do
+		local char = data:sub(index, index)
+		if char:match("[AaCcHhLlMmQqSsTtVvZz]") then
+			tokens[#tokens + 1] = char
+			index += 1
+		else
+			local number = data:match("^%-?%d*%.?%d+", index)
+			if number and number ~= "" and number ~= "-" and number ~= "." then
+				tokens[#tokens + 1] = number
+				index += #number
+			else
+				index += 1
+			end
+		end
+	end
+
+	return tokens
+end
+
+local function isPathCommand(token)
+	return type(token) == "string" and token:match("^[AaCcHhLlMmQqSsTtVvZz]$") ~= nil
+end
+
+local pathArity = {
+	M = 2, L = 2, H = 1, V = 1, C = 6, S = 4, Q = 4, T = 2, A = 7
+}
+
+local function parsePathSegments(pathData)
+	local tokens = tokenizeSvgPath(pathData)
+	local segments = {}
+	local index = 1
+	local command = nil
+	local currentX, currentY = 0, 0
+	local startX, startY = 0, 0
+
+	local function hasNumbers(count)
+		for offset = 0, count - 1 do
+			if index + offset > #tokens or isPathCommand(tokens[index + offset]) then
+				return false
+			end
+		end
+		return true
+	end
+
+	while index <= #tokens do
+		if isPathCommand(tokens[index]) then
+			command = tokens[index]
+			index = index + 1
+		end
+
+		if not command then
+			break
+		end
+
+		local upper = command:upper()
+		local relative = command ~= upper
+
+		if upper == "Z" then
+			addSegment(segments, currentX, currentY, startX, startY)
+			currentX, currentY = startX, startY
+			command = nil
+		elseif upper == "M" then
+			if not hasNumbers(2) then
+				break
+			end
+			local x = tonumber(tokens[index])
+			local y = tonumber(tokens[index + 1])
+			index = index + 2
+			if relative then
+				x, y = currentX + x, currentY + y
+			end
+			currentX, currentY = x, y
+			startX, startY = x, y
+			command = relative and "l" or "L"
+		else
+			local arity = pathArity[upper]
+			if not arity or not hasNumbers(arity) then
+				if isPathCommand(tokens[index]) then
+					command = tokens[index]
+					index = index + 1
+				else
+					break
+				end
+			else
+				local oldX, oldY = currentX, currentY
+				if upper == "L" then
+					local x = tonumber(tokens[index])
+					local y = tonumber(tokens[index + 1])
+					index = index + 2
+					if relative then
+						x, y = currentX + x, currentY + y
+					end
+					currentX, currentY = x, y
+				elseif upper == "H" then
+					local x = tonumber(tokens[index])
+					index = index + 1
+					currentX = relative and currentX + x or x
+				elseif upper == "V" then
+					local y = tonumber(tokens[index])
+					index = index + 1
+					currentY = relative and currentY + y or y
+				elseif upper == "C" then
+					local x = tonumber(tokens[index + 4])
+					local y = tonumber(tokens[index + 5])
+					index = index + 6
+					if relative then
+						x, y = currentX + x, currentY + y
+					end
+					currentX, currentY = x, y
+				elseif upper == "S" or upper == "Q" then
+					local x = tonumber(tokens[index + 2])
+					local y = tonumber(tokens[index + 3])
+					index = index + 4
+					if relative then
+						x, y = currentX + x, currentY + y
+					end
+					currentX, currentY = x, y
+				elseif upper == "T" then
+					local x = tonumber(tokens[index])
+					local y = tonumber(tokens[index + 1])
+					index = index + 2
+					if relative then
+						x, y = currentX + x, currentY + y
+					end
+					currentX, currentY = x, y
+				elseif upper == "A" then
+					local x = tonumber(tokens[index + 5])
+					local y = tonumber(tokens[index + 6])
+					index = index + 7
+					if relative then
+						x, y = currentX + x, currentY + y
+					end
+					currentX, currentY = x, y
+				end
+				addSegment(segments, oldX, oldY, currentX, currentY)
+			end
+		end
+	end
+
+	return segments
+end
+
+local function parseLucideSvgSegments(iconName)
+	if lucideState.SegmentCache[iconName] ~= nil then
+		return lucideState.SegmentCache[iconName]
+	end
+
+	local svg = fetchLucideSvg(iconName)
+	if not svg then
+		lucideState.SegmentCache[iconName] = false
+		return nil
+	end
+
+	local segments = {}
+	for tag in svg:gmatch("<line%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		addSegment(segments, attr.x1, attr.y1, attr.x2, attr.y2)
+	end
+	for tag in svg:gmatch("<polyline%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		addPolylineSegments(segments, attr.points, false)
+	end
+	for tag in svg:gmatch("<polygon%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		addPolylineSegments(segments, attr.points, true)
+	end
+	for tag in svg:gmatch("<rect%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		local x = toNumber(attr.x, 0)
+		local y = toNumber(attr.y, 0)
+		local width = toNumber(attr.width, 0)
+		local height = toNumber(attr.height, 0)
+		addSegment(segments, x, y, x + width, y)
+		addSegment(segments, x + width, y, x + width, y + height)
+		addSegment(segments, x + width, y + height, x, y + height)
+		addSegment(segments, x, y + height, x, y)
+	end
+	for tag in svg:gmatch("<circle%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		addCircleSegments(segments, attr.cx, attr.cy, attr.r, 20)
+	end
+	for tag in svg:gmatch("<path%s+([^>/]-)/?>") do
+		local attr = parseSvgAttributes(tag)
+		for _, segment in ipairs(parsePathSegments(attr.d)) do
+			segments[#segments + 1] = segment
+		end
+	end
+
+	lucideState.SegmentCache[iconName] = segments
+	return segments
+end
+
+local function drawIconLine(parent, segment, size, color, transparency)
+	local scale = size / 24
+	local x1, y1, x2, y2 = segment[1] * scale, segment[2] * scale, segment[3] * scale, segment[4] * scale
+	local dx, dy = x2 - x1, y2 - y1
+	local length = math.sqrt(dx * dx + dy * dy)
+	if length <= 0.01 then
+		return
+	end
+
+	local line = Instance.new("Frame")
+	line.Name = "Line"
+	line.AnchorPoint = Vector2.new(0.5, 0.5)
+	line.BackgroundColor3 = color
+	line.BackgroundTransparency = transparency or 0
+	line.BorderSizePixel = 0
+	line.Position = UDim2.fromOffset((x1 + x2) / 2, (y1 + y2) / 2)
+	line.Rotation = math.deg(math.atan2(dy, dx))
+	line.Size = UDim2.fromOffset(length, math.max(1, math.floor(size / 12)))
+	line.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = line
+end
+
+local function createLucideIcon(icon, size, color, transparency)
+	size = size or 18
+	color = color or Color3.fromRGB(255, 255, 255)
+	local iconName = normalizeLucideIconName(icon)
+	local segments = iconName and parseLucideSvgSegments(iconName)
+
+	local container = Instance.new("CanvasGroup")
+	container.Name = "LucideIcon"
+	container.BackgroundTransparency = 1
+	container.BorderSizePixel = 0
+	container.GroupTransparency = transparency or 0
+	container.Size = UDim2.fromOffset(size, size)
+
+	if segments and #segments > 0 then
+		for _, segment in ipairs(segments) do
+			drawIconLine(container, segment, size, color, 0)
+		end
+	else
+		local fallback = Instance.new("TextLabel")
+		fallback.Name = "Fallback"
+		fallback.BackgroundTransparency = 1
+		fallback.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.Text = string.upper(tostring(icon or "?"):sub(1, 1))
+		fallback.TextColor3 = color
+		fallback.TextSize = math.max(10, size - 4)
+		fallback.TextTransparency = 0
+		fallback.Parent = container
+	end
+
+	return container
+end
+
+local function createIconInstance(icon, size, color, transparency)
+	icon = ResolveImageAsset(icon, icon)
+
+	if type(icon) ~= "string" then
+		icon = assets.tirexIcon
+	end
+
+	if normalizeLucideIconName(icon) then
+		return createLucideIcon(icon, size, color, transparency)
+	end
+
+	if type(icon) == "string" and (icon:find("^rbxasset") or icon:find("^http")) then
+		local image = Instance.new("ImageLabel")
+		image.Name = "IconImage"
+		image.BackgroundTransparency = 1
+		image.BorderSizePixel = 0
+		image.Image = icon
+		image.ImageColor3 = color or Color3.fromRGB(255, 255, 255)
+		image.ImageTransparency = transparency or 0
+		image.Size = UDim2.fromOffset(size or 18, size or 18)
+		return image
+	end
+
+	return createLucideIcon(icon, size, color, transparency)
+end
+
+local function setIconTransparency(icon, transparency)
+	if not icon then
+		return
+	end
+	if icon:IsA("ImageLabel") or icon:IsA("ImageButton") then
+		icon.ImageTransparency = transparency
+	elseif icon:IsA("CanvasGroup") then
+		icon.GroupTransparency = transparency
+	else
+		for _, child in ipairs(icon:GetDescendants()) do
+			if child:IsA("GuiObject") then
+				child.BackgroundTransparency = transparency
+			end
+		end
+	end
+end
+
+local function tweenIconTransparency(icon, transparency, tweenInfo)
+	if not icon then
+		return
+	end
+	if icon:IsA("ImageLabel") or icon:IsA("ImageButton") then
+		Tween(icon, tweenInfo, { ImageTransparency = transparency }):Play()
+	elseif icon:IsA("CanvasGroup") then
+		Tween(icon, tweenInfo, { GroupTransparency = transparency }):Play()
+	else
+		setIconTransparency(icon, transparency)
+	end
 end
 
 --// Library Functions
@@ -926,6 +1372,12 @@ function MacLib:Window(Settings)
 	globalSettingsUIScale.Parent = globalSettings
 	globalSettings.Parent = base
 	base.Parent = macLib
+	WindowFunctions.Gui = macLib
+	WindowFunctions.Base = base
+	WindowFunctions.Notifications = notifications
+	WindowFunctions.GlobalSettings = globalSettings
+	WindowFunctions.Content = content
+	WindowFunctions.Sidebar = sidebar
 
 	function WindowFunctions:UpdateTitle(NewTitle)
 		title.Text = NewTitle
@@ -933,6 +1385,337 @@ function MacLib:Window(Settings)
 
 	function WindowFunctions:UpdateSubtitle(NewSubtitle)
 		subtitle.Text = NewSubtitle
+	end
+
+	function WindowFunctions:AddProfile(Settings)
+		Settings = Settings or {}
+		if self._Profile and type(self._Profile.Destroy) == "function" then
+			self._Profile:Destroy()
+		end
+
+		informationGroup.Visible = false
+
+		local profileIcon = ResolveImageAsset(Settings.Icon or Settings.Avatar or Settings.Image, assets.tirexIcon)
+		local profile = {}
+
+		local profileButton = Instance.new("ImageButton")
+		profileButton.Name = "ProfileButton"
+		profileButton.AutoButtonColor = false
+		profileButton.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		profileButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		profileButton.BorderSizePixel = 0
+		profileButton.AnchorPoint = Vector2.new(0, 1)
+		profileButton.Position = UDim2.new(0, 15, 1, -25)
+		profileButton.Size = UDim2.fromOffset(42, 42)
+		profileButton.Image = profileIcon
+		profileButton.ScaleType = Enum.ScaleType.Fit
+		profileButton.Parent = userInfo
+
+		local profileButtonCorner = Instance.new("UICorner")
+		profileButtonCorner.CornerRadius = UDim.new(0, 8)
+		profileButtonCorner.Parent = profileButton
+
+		local profileButtonStroke = Instance.new("UIStroke")
+		profileButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		profileButtonStroke.Color = Color3.fromRGB(255, 255, 255)
+		profileButtonStroke.Transparency = 0.88
+		profileButtonStroke.Parent = profileButton
+
+		local profileModal = Instance.new("Frame")
+		profileModal.Name = "ProfileModal"
+		profileModal.AnchorPoint = Vector2.new(0, 1)
+		profileModal.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+		profileModal.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		profileModal.BorderSizePixel = 0
+		profileModal.Position = UDim2.new(0, 18, 1, -18)
+		profileModal.Size = UDim2.fromOffset(342, 246)
+		profileModal.Visible = false
+		profileModal.ZIndex = 10
+		profileModal.Parent = base
+
+		local profileModalCorner = Instance.new("UICorner")
+		profileModalCorner.CornerRadius = UDim.new(0, 7)
+		profileModalCorner.Parent = profileModal
+
+		local profileModalStroke = Instance.new("UIStroke")
+		profileModalStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		profileModalStroke.Color = Color3.fromRGB(255, 255, 255)
+		profileModalStroke.Transparency = 0.86
+		profileModalStroke.Parent = profileModal
+
+		local header = Instance.new("Frame")
+		header.Name = "ProfileHeader"
+		header.BackgroundTransparency = 1
+		header.BorderSizePixel = 0
+		header.Size = UDim2.new(1, 0, 0, 56)
+		header.ZIndex = 11
+		header.Parent = profileModal
+
+		local headerText = Instance.new("TextLabel")
+		headerText.Name = "HeaderText"
+		headerText.BackgroundTransparency = 1
+		headerText.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		headerText.Text = Settings.Title or "Profile"
+		headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
+		headerText.TextSize = 15
+		headerText.TextXAlignment = Enum.TextXAlignment.Left
+		headerText.Position = UDim2.fromOffset(16, 0)
+		headerText.Size = UDim2.new(1, -58, 1, 0)
+		headerText.ZIndex = 11
+		headerText.Parent = header
+
+		local close = Instance.new("TextButton")
+		close.Name = "Close"
+		close.AutoButtonColor = false
+		close.BackgroundTransparency = 1
+		close.BorderSizePixel = 0
+		close.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+		close.Text = "x"
+		close.TextColor3 = Color3.fromRGB(220, 220, 220)
+		close.TextSize = 18
+		close.AnchorPoint = Vector2.new(1, 0.5)
+		close.Position = UDim2.new(1, -17, 0.5, 0)
+		close.Size = UDim2.fromOffset(24, 24)
+		close.ZIndex = 11
+		close.Parent = header
+
+		local card = Instance.new("Frame")
+		card.Name = "ProfileCard"
+		card.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		card.BorderSizePixel = 0
+		card.Position = UDim2.fromOffset(16, 64)
+		card.Size = UDim2.new(1, -32, 0, 124)
+		card.ZIndex = 11
+		card.Parent = profileModal
+
+		local cardCorner = Instance.new("UICorner")
+		cardCorner.CornerRadius = UDim.new(0, 8)
+		cardCorner.Parent = card
+
+		local cardStroke = Instance.new("UIStroke")
+		cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		cardStroke.Color = Color3.fromRGB(255, 255, 255)
+		cardStroke.Transparency = 0.94
+		cardStroke.Parent = card
+
+		local avatar = Instance.new("ImageLabel")
+		avatar.Name = "ProfileAvatar"
+		avatar.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+		avatar.BorderSizePixel = 0
+		avatar.Position = UDim2.fromOffset(14, 15)
+		avatar.Size = UDim2.fromOffset(58, 58)
+		avatar.Image = profileIcon
+		avatar.ScaleType = Enum.ScaleType.Fit
+		avatar.ZIndex = 12
+		avatar.Parent = card
+
+		local avatarCorner = Instance.new("UICorner")
+		avatarCorner.CornerRadius = UDim.new(0, 7)
+		avatarCorner.Parent = avatar
+
+		local tier = Instance.new("TextLabel")
+		tier.Name = "ProfileTier"
+		tier.BackgroundColor3 = Color3.fromRGB(218, 218, 218)
+		tier.BorderSizePixel = 0
+		tier.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+		tier.Text = Settings.Plan or Settings.Tier or "Free"
+		tier.TextColor3 = Color3.fromRGB(0, 0, 0)
+		tier.TextSize = 10
+		tier.Position = UDim2.fromOffset(14, 80)
+		tier.Size = UDim2.fromOffset(58, 19)
+		tier.ZIndex = 12
+		tier.Parent = card
+
+		local tierCorner = Instance.new("UICorner")
+		tierCorner.CornerRadius = UDim.new(0, 4)
+		tierCorner.Parent = tier
+
+		local rows = Instance.new("Frame")
+		rows.Name = "ProfileRows"
+		rows.BackgroundTransparency = 1
+		rows.BorderSizePixel = 0
+		rows.Position = UDim2.fromOffset(84, 16)
+		rows.Size = UDim2.new(1, -100, 1, -26)
+		rows.ZIndex = 12
+		rows.Parent = card
+
+		local rowsLayout = Instance.new("UIListLayout")
+		rowsLayout.Padding = UDim.new(0, 9)
+		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		rowsLayout.Parent = rows
+
+		local valueLabels = {}
+		local function addProfileRow(rowName, rowValue)
+			local row = Instance.new("Frame")
+			row.Name = rowName:gsub("%s+", "") .. "Row"
+			row.BackgroundTransparency = 1
+			row.BorderSizePixel = 0
+			row.Size = UDim2.new(1, 0, 0, 16)
+			row.ZIndex = 12
+			row.Parent = rows
+
+			local label = Instance.new("TextLabel")
+			label.Name = "Label"
+			label.BackgroundTransparency = 1
+			label.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+			label.Text = rowName
+			label.TextColor3 = Color3.fromRGB(170, 170, 170)
+			label.TextSize = 11
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.Size = UDim2.fromOffset(92, 16)
+			label.ZIndex = 13
+			label.Parent = row
+
+			local value = Instance.new("TextLabel")
+			value.Name = "Value"
+			value.BackgroundTransparency = 1
+			value.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+			value.Text = tostring(rowValue or "-")
+			value.TextColor3 = Color3.fromRGB(245, 245, 245)
+			value.TextSize = 11
+			value.TextXAlignment = Enum.TextXAlignment.Right
+			value.TextTruncate = Enum.TextTruncate.AtEnd
+			value.Position = UDim2.fromOffset(94, 0)
+			value.Size = UDim2.new(1, -94, 0, 16)
+			value.ZIndex = 13
+			value.Parent = row
+
+			valueLabels[rowName] = value
+			return value
+		end
+
+		addProfileRow("Username", Settings.Username or Settings.User or (LocalPlayer and LocalPlayer.Name) or "Player")
+		addProfileRow("Expires In", Settings.ExpiresIn or Settings.Expires or Settings.Expiry or "Lifetime")
+		addProfileRow("Game", Settings.Game or "Violence District")
+
+		local actions = Instance.new("Frame")
+		actions.Name = "ProfileActions"
+		actions.BackgroundTransparency = 1
+		actions.BorderSizePixel = 0
+		actions.Position = UDim2.new(0, 68, 1, -39)
+		actions.Size = UDim2.new(1, -84, 0, 29)
+		actions.ZIndex = 11
+		actions.Parent = profileModal
+
+		local actionsLayout = Instance.new("UIListLayout")
+		actionsLayout.Padding = UDim.new(0, 8)
+		actionsLayout.FillDirection = Enum.FillDirection.Horizontal
+		actionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		actionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		actionsLayout.Parent = actions
+
+		local function runProfileAction(action, fallbackClose)
+			if type(action) == "function" then
+				task.spawn(action)
+				return
+			end
+			if type(action) == "string" and action ~= "" and type(setclipboard) == "function" then
+				setclipboard(action)
+				WindowFunctions:Notify({
+					Title = "TiRex",
+					Description = "Copied to clipboard.",
+					Lifetime = 2
+				})
+				return
+			end
+			if fallbackClose then
+				profile:Hide()
+			end
+		end
+
+		local function addActionButton(text, action, fallbackClose)
+			local button = Instance.new("TextButton")
+			button.Name = text:gsub("%s+", "") .. "Button"
+			button.AutoButtonColor = false
+			button.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+			button.BorderSizePixel = 0
+			button.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+			button.Text = text
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+			button.TextSize = 11
+			button.Size = UDim2.fromOffset(82, 29)
+			button.ZIndex = 12
+			button.Parent = actions
+
+			local buttonCorner = Instance.new("UICorner")
+			buttonCorner.CornerRadius = UDim.new(0, 5)
+			buttonCorner.Parent = button
+
+			local buttonStroke = Instance.new("UIStroke")
+			buttonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			buttonStroke.Color = Color3.fromRGB(255, 255, 255)
+			buttonStroke.Transparency = 0.92
+			buttonStroke.Parent = button
+
+			button.MouseEnter:Connect(function()
+				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
+					BackgroundColor3 = Color3.fromRGB(42, 42, 42)
+				}):Play()
+			end)
+			button.MouseLeave:Connect(function()
+				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
+					BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+				}):Play()
+			end)
+			button.MouseButton1Click:Connect(function()
+				runProfileAction(action, fallbackClose)
+			end)
+		end
+
+		addActionButton("Discord", Settings.Discord or Settings.DiscordCallback, false)
+		addActionButton("Website", Settings.Website or Settings.WebsiteCallback, false)
+		addActionButton("Logout", Settings.Logout or Settings.LogoutCallback or Settings.OnLogout, true)
+
+		profileButton.MouseEnter:Connect(function()
+			Tween(profileButtonStroke, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
+				Transparency = 0.55
+			}):Play()
+		end)
+		profileButton.MouseLeave:Connect(function()
+			Tween(profileButtonStroke, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
+				Transparency = 0.88
+			}):Play()
+		end)
+		profileButton.MouseButton1Click:Connect(function()
+			profileModal.Visible = not profileModal.Visible
+		end)
+		close.MouseButton1Click:Connect(function()
+			profile:Hide()
+		end)
+
+		function profile:Show()
+			profileModal.Visible = true
+		end
+		function profile:Hide()
+			profileModal.Visible = false
+		end
+		function profile:SetIcon(newIcon)
+			profileIcon = ResolveImageAsset(newIcon, assets.tirexIcon)
+			profileButton.Image = profileIcon
+			avatar.Image = profileIcon
+		end
+		function profile:SetUsername(value)
+			valueLabels.Username.Text = tostring(value or "-")
+		end
+		function profile:SetExpires(value)
+			valueLabels["Expires In"].Text = tostring(value or "-")
+		end
+		function profile:SetGame(value)
+			valueLabels.Game.Text = tostring(value or "-")
+		end
+		function profile:SetPlan(value)
+			tier.Text = tostring(value or "Free")
+		end
+		function profile:Destroy()
+			profileButton:Destroy()
+			profileModal:Destroy()
+			if self == WindowFunctions._Profile then
+				WindowFunctions._Profile = nil
+			end
+		end
+
+		self._Profile = profile
+		return profile
 	end
 
 	local hovering
@@ -1429,10 +2212,8 @@ function MacLib:Window(Settings)
 			local tabImage
 
 			if Settings.Image then
-				tabImage = Instance.new("ImageLabel")
+				tabImage = createIconInstance(Settings.Image, 18, Color3.fromRGB(255, 255, 255), 0.5)
 				tabImage.Name = "TabImage"
-				tabImage.Image = Settings.Image
-				tabImage.ImageTransparency = 0.5
 				tabImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 				tabImage.BackgroundTransparency = 1
 				tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1830,6 +2611,161 @@ function MacLib:Window(Settings)
 						MacLib.Options[Flag] = ToggleFunctions
 					end
 					return ToggleFunctions
+				end
+
+				function SectionFunctions:Checkbox(Settings, Flag)
+					local CheckboxFunctions = { Settings = Settings, IgnoreConfig = false, Class = "Toggle" }
+					local checkbox = Instance.new("Frame")
+					checkbox.Name = "Checkbox"
+					checkbox.AutomaticSize = Enum.AutomaticSize.Y
+					checkbox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+					checkbox.BackgroundTransparency = 1
+					checkbox.BorderColor3 = Color3.fromRGB(0, 0, 0)
+					checkbox.BorderSizePixel = 0
+					checkbox.Size = UDim2.new(1, 0, 0, 38)
+					checkbox.Parent = section
+
+					local checkboxName = Instance.new("TextLabel")
+					checkboxName.Name = "CheckboxName"
+					checkboxName.FontFace = Font.new(assets.interFont)
+					checkboxName.Text = CheckboxFunctions.Settings.Name
+					checkboxName.RichText = true
+					checkboxName.TextColor3 = Color3.fromRGB(255, 255, 255)
+					checkboxName.TextSize = 13
+					checkboxName.TextTransparency = 0.5
+					checkboxName.TextTruncate = Enum.TextTruncate.AtEnd
+					checkboxName.TextXAlignment = Enum.TextXAlignment.Left
+					checkboxName.TextYAlignment = Enum.TextYAlignment.Top
+					checkboxName.AnchorPoint = Vector2.new(0, 0.5)
+					checkboxName.AutomaticSize = Enum.AutomaticSize.Y
+					checkboxName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					checkboxName.BackgroundTransparency = 1
+					checkboxName.BorderColor3 = Color3.fromRGB(0, 0, 0)
+					checkboxName.BorderSizePixel = 0
+					checkboxName.Position = UDim2.fromScale(0, 0.5)
+					checkboxName.Size = UDim2.new(1, -36, 0, 0)
+					checkboxName.Parent = checkbox
+
+					local checkboxButton = Instance.new("TextButton")
+					checkboxButton.Name = "CheckboxButton"
+					checkboxButton.Text = ""
+					checkboxButton.AutoButtonColor = false
+					checkboxButton.AnchorPoint = Vector2.new(1, 0.5)
+					checkboxButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					checkboxButton.BackgroundTransparency = 0.95
+					checkboxButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+					checkboxButton.BorderSizePixel = 0
+					checkboxButton.Position = UDim2.fromScale(1, 0.5)
+					checkboxButton.Size = UDim2.fromOffset(21, 21)
+					checkboxButton.Parent = checkbox
+
+					local checkboxCorner = Instance.new("UICorner")
+					checkboxCorner.Name = "CheckboxCorner"
+					checkboxCorner.CornerRadius = UDim.new(0, 4)
+					checkboxCorner.Parent = checkboxButton
+
+					local checkboxStroke = Instance.new("UIStroke")
+					checkboxStroke.Name = "CheckboxStroke"
+					checkboxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					checkboxStroke.Color = Color3.fromRGB(255, 255, 255)
+					checkboxStroke.Transparency = 0.9
+					checkboxStroke.Parent = checkboxButton
+
+					local checkmark = Instance.new("TextLabel")
+					checkmark.Name = "Checkmark"
+					checkmark.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+					checkmark.Text = "✓"
+					checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
+					checkmark.TextSize = 14
+					checkmark.TextTransparency = 1
+					checkmark.TextXAlignment = Enum.TextXAlignment.Center
+					checkmark.TextYAlignment = Enum.TextYAlignment.Center
+					checkmark.BackgroundTransparency = 1
+					checkmark.BorderSizePixel = 0
+					checkmark.Size = UDim2.fromScale(1, 1)
+					checkmark.Parent = checkboxButton
+
+					local checkboxHitbox = Instance.new("TextButton")
+					checkboxHitbox.Name = "CheckboxHitbox"
+					checkboxHitbox.Text = ""
+					checkboxHitbox.AutoButtonColor = false
+					checkboxHitbox.BackgroundTransparency = 1
+					checkboxHitbox.BorderSizePixel = 0
+					checkboxHitbox.Size = UDim2.fromScale(1, 1)
+					checkboxHitbox.ZIndex = 3
+					checkboxHitbox.Parent = checkbox
+
+					local TweenSettings = {
+						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+						EnabledBackgroundTransparency = 0.82,
+						DisabledBackgroundTransparency = 0.95,
+						EnabledStrokeTransparency = 0.45,
+						DisabledStrokeTransparency = 0.9,
+						EnabledCheckTransparency = 0,
+						DisabledCheckTransparency = 1
+					}
+
+					local checkboxBool = CheckboxFunctions.Settings.Default == true
+
+					local function NewState(State, callback)
+						local enabled = State == true
+
+						Tween(checkboxButton, TweenSettings.Info, {
+							BackgroundTransparency = enabled and TweenSettings.EnabledBackgroundTransparency
+								or TweenSettings.DisabledBackgroundTransparency
+						}):Play()
+
+						Tween(checkboxStroke, TweenSettings.Info, {
+							Transparency = enabled and TweenSettings.EnabledStrokeTransparency
+								or TweenSettings.DisabledStrokeTransparency
+						}):Play()
+
+						Tween(checkmark, TweenSettings.Info, {
+							TextTransparency = enabled and TweenSettings.EnabledCheckTransparency
+								or TweenSettings.DisabledCheckTransparency
+						}):Play()
+
+						CheckboxFunctions.State = enabled
+						CheckboxFunctions.Value = enabled
+						if callback then
+							callback(enabled)
+						end
+					end
+
+					NewState(checkboxBool)
+
+					local function Toggle()
+						checkboxBool = not checkboxBool
+						NewState(checkboxBool, CheckboxFunctions.Settings.Callback)
+					end
+
+					checkboxButton.MouseButton1Click:Connect(Toggle)
+					checkboxHitbox.MouseButton1Click:Connect(Toggle)
+
+					function CheckboxFunctions:Toggle()
+						Toggle()
+					end
+					function CheckboxFunctions:UpdateState(State)
+						checkboxBool = State == true
+						NewState(checkboxBool, CheckboxFunctions.Settings.Callback)
+					end
+					function CheckboxFunctions:SetValue(State)
+						self:UpdateState(State)
+					end
+					function CheckboxFunctions:GetState()
+						return checkboxBool
+					end
+					function CheckboxFunctions:UpdateName(Name)
+						checkboxName.Text = Name
+					end
+					function CheckboxFunctions:SetVisibility(State)
+						checkbox.Visible = State
+					end
+
+					if Flag then
+						MacLib.Options[Flag] = CheckboxFunctions
+					end
+					return CheckboxFunctions
 				end
 
 				function SectionFunctions:Slider(Settings, Flag)
@@ -4670,9 +5606,7 @@ function MacLib:Window(Settings)
 						}):Play()
 					end
 					if tabInfo.switcherImage then
-						Tween(tabInfo.switcherImage, TweenInfo.new(easetime, Enum.EasingStyle.Sine), {
-							ImageTransparency = (i == tabSwitcher and 0.1 or 0.5)
-						}):Play()
+						tweenIconTransparency(tabInfo.switcherImage, (i == tabSwitcher and 0.1 or 0.5), TweenInfo.new(easetime, Enum.EasingStyle.Sine))
 					end
 					if tabInfo.switcherName then
 						Tween(tabInfo.switcherName, TweenInfo.new(easetime, Enum.EasingStyle.Sine), {
@@ -5916,7 +6850,7 @@ local function createLoadingGui(settings)
 
 	local progress = Instance.new("Frame")
 	progress.Name = "Progress"
-	progress.BackgroundColor3 = Color3.fromRGB(245, 194, 231)
+	progress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	progress.BorderSizePixel = 0
 	progress.Size = UDim2.fromScale(0, 1)
 	progress.Parent = progressBack
@@ -6038,6 +6972,9 @@ local function createDraggableLabel(text)
 	end
 	function proxy:SetVisible(state)
 		label.Visible = state == true
+	end
+	function proxy:GetFrame()
+		return gui
 	end
 	function proxy:Destroy()
 		gui:Destroy()
@@ -6200,10 +7137,15 @@ local function makeGroupProxy(section)
 		return section:Button(settings)
 	end
 
-	function groupProxy:AddCheckbox(flag, settings)
+	local function addBooleanOption(flag, settings, rendererName)
 		settings = settings or {}
 		local toggleProxy
-		local rawToggle = section:Toggle({
+		local renderer = section and section[rendererName]
+		if type(renderer) ~= "function" then
+			renderer = section and section.Toggle
+		end
+
+		local rawToggle = renderer(section, {
 			Name = settings.Text or settings.Name or tostring(flag),
 			Default = settings.Default == true,
 			Callback = function(value)
@@ -6263,7 +7205,13 @@ local function makeGroupProxy(section)
 		return toggleProxy
 	end
 
-	groupProxy.AddToggle = groupProxy.AddCheckbox
+	function groupProxy:AddCheckbox(flag, settings)
+		return addBooleanOption(flag, settings, "Checkbox")
+	end
+
+	function groupProxy:AddToggle(flag, settings)
+		return addBooleanOption(flag, settings, "Toggle")
+	end
 
 	function groupProxy:AddSlider(flag, settings)
 		settings = settings or {}
@@ -6459,22 +7407,62 @@ local function makeTabProxy(rawTab)
 		_tab = rawTab
 	}
 
-	local function addGroup(side, title)
+	local function addGroup(side, title, icon)
 		local section = rawTab:Section({ Side = side })
 		if title and title ~= "" then
-			section:Header({ Name = title })
+			if icon then
+				local header = section:Custom({
+					Name = "GroupHeader",
+					Height = 24,
+					ClipsDescendants = false
+				})
+				local headerFrame = header:GetFrame()
+				local iconInstance = createIconInstance(icon, 16, Color3.fromRGB(255, 255, 255), 0.3)
+				iconInstance.Name = "GroupIcon"
+				iconInstance.AnchorPoint = Vector2.new(0, 0.5)
+				iconInstance.Position = UDim2.fromScale(0, 0.5)
+				iconInstance.Size = UDim2.fromOffset(16, 16)
+				iconInstance.Parent = headerFrame
+
+				local headerText = Instance.new("TextLabel")
+				headerText.Name = "HeaderText"
+				headerText.FontFace = Font.new(
+					assets.interFont,
+					Enum.FontWeight.Medium,
+					Enum.FontStyle.Normal
+				)
+				headerText.RichText = true
+				headerText.Text = tostring(title)
+				headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
+				headerText.TextSize = 16
+				headerText.TextTransparency = 0.3
+				headerText.TextWrapped = true
+				headerText.TextXAlignment = Enum.TextXAlignment.Left
+				headerText.TextYAlignment = Enum.TextYAlignment.Center
+				headerText.AnchorPoint = Vector2.new(0, 0.5)
+				headerText.AutomaticSize = Enum.AutomaticSize.Y
+				headerText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				headerText.BackgroundTransparency = 1
+				headerText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+				headerText.BorderSizePixel = 0
+				headerText.Position = UDim2.new(0, 24, 0.5, 0)
+				headerText.Size = UDim2.new(1, -24, 0, 0)
+				headerText.Parent = headerFrame
+			else
+				section:Header({ Name = title })
+			end
 		end
 		return makeGroupProxy(section)
 	end
 
-	function tabProxy:AddLeftGroupbox(title)
-		return addGroup("Left", title)
+	function tabProxy:AddLeftGroupbox(title, icon)
+		return addGroup("Left", title, icon)
 	end
-	function tabProxy:AddRightGroupbox(title)
-		return addGroup("Right", title)
+	function tabProxy:AddRightGroupbox(title, icon)
+		return addGroup("Right", title, icon)
 	end
-	function tabProxy:AddGroupbox(title)
-		return addGroup("Left", title)
+	function tabProxy:AddGroupbox(title, icon)
+		return addGroup("Left", title, icon)
 	end
 	function tabProxy:Select()
 		if rawTab and type(rawTab.Select) == "function" then
@@ -6525,9 +7513,9 @@ function MacLib:CreateWindow(settings)
 	}
 
 	function windowProxy:AddTab(name, icon)
-		local image = nil
-		if type(icon) == "string" and icon:find("^rbxasset") then
-			image = icon
+		local image = icon
+		if type(image) == "number" then
+			image = "rbxassetid://" .. tostring(image)
 		end
 
 		local rawTab = tabGroup:Tab({
@@ -6544,6 +7532,11 @@ function MacLib:CreateWindow(settings)
 	end
 	function windowProxy:Notify(payload)
 		return rawWindow:Notify(makeNotificationPayload(payload))
+	end
+	function windowProxy:AddProfile(profileSettings)
+		if type(rawWindow.AddProfile) == "function" then
+			return rawWindow:AddProfile(profileSettings)
+		end
 	end
 	function windowProxy:Unload()
 		return rawWindow:Unload()
@@ -6564,6 +7557,12 @@ function MacLib:Notify(settings, time)
 	end
 	warn("[TiRex] Notification before window is ready: " .. tostring(type(settings) == "table" and settings.Description or settings))
 	return nil
+end
+
+function MacLib:AddProfile(settings)
+	if self._activeWindow and type(self._activeWindow.AddProfile) == "function" then
+		return self._activeWindow:AddProfile(settings)
+	end
 end
 
 function MacLib:AddDraggableLabel(text)
@@ -6602,64 +7601,419 @@ function MacLib:Unload()
 	self._activeWindow = nil
 end
 
-MacLib.ThemeManager = MacLib.ThemeManager or {
-	BuiltInThemes = { Default = {} },
-	SetLibrary = function(self, lib)
-		self.Library = lib
-	end,
-	SetFolder = function(self, folder)
-		self.Folder = folder
-	end,
-	ApplyToTab = function() end,
-	LoadDefault = function() end
-}
+local function compatColorFromHex(value, fallback)
+	if typeof(value) == "Color3" then
+		return value
+	end
 
-MacLib.SaveManager = MacLib.SaveManager or {
-	SetLibrary = function(self, lib)
-		self.Library = lib
-	end,
-	IgnoreThemeSettings = function(self)
-		self.IgnoreThemes = true
-	end,
-	SetIgnoreIndexes = function(self, indexes)
-		self.IgnoreIndexes = indexes
-		if type(indexes) == "table" then
-			for _, flag in ipairs(indexes) do
-				if MacLib.Options[flag] then
-					MacLib.Options[flag].IgnoreConfig = true
-				end
+	if type(value) == "string" then
+		local hex = value:gsub("#", ""):gsub("0x", "")
+		if #hex == 6 then
+			local r = tonumber(hex:sub(1, 2), 16)
+			local g = tonumber(hex:sub(3, 4), 16)
+			local b = tonumber(hex:sub(5, 6), 16)
+			if r and g and b then
+				return Color3.fromRGB(r, g, b)
 			end
 		end
-	end,
-	SetFolder = function(self, folder)
-		self.Folder = folder
-		if self.Library then
-			self.Library.Folder = folder
-		else
-			MacLib.Folder = folder
-		end
-	end,
-	BuildConfigSection = function(self, tab)
-		if self.Folder and type(MacLib.SetFolder) == "function" then
-			pcall(function()
-				MacLib:SetFolder(self.Folder)
-			end)
-		end
-		if tab and type(tab.InsertConfigSection) == "function" then
-			return tab:InsertConfigSection("Left")
-		end
-	end,
-	LoadAutoloadConfig = function(self)
-		if self.Folder and type(MacLib.SetFolder) == "function" then
-			pcall(function()
-				MacLib:SetFolder(self.Folder)
-			end)
-		end
-		if type(MacLib.LoadAutoLoadConfig) == "function" then
-			return MacLib:LoadAutoLoadConfig()
+	end
+
+	return fallback
+end
+
+local function compatColorToHex(color)
+	if typeof(color) ~= "Color3" then
+		return nil
+	end
+	return string.format("%02x%02x%02x",
+		math.clamp(math.floor(color.R * 255 + 0.5), 0, 255),
+		math.clamp(math.floor(color.G * 255 + 0.5), 0, 255),
+		math.clamp(math.floor(color.B * 255 + 0.5), 0, 255)
+	)
+end
+
+local function compatEnsureFolder(path)
+	if isStudio or type(path) ~= "string" or path == "" then
+		return false, "Config system unavailable."
+	end
+	if not (isfolder and makefolder) then
+		return false, "Folder APIs unavailable."
+	end
+
+	local partial = ""
+	for part in path:gmatch("[^/\\]+") do
+		partial = partial == "" and part or (partial .. "/" .. part)
+		if not isfolder(partial) then
+			makefolder(partial)
 		end
 	end
+	return true
+end
+
+local function compatGetLibrary(manager)
+	return (manager and manager.Library) or MacLib
+end
+
+local function compatGetThemePayload(theme)
+	if type(theme) ~= "table" then
+		return nil
+	end
+	if type(theme[2]) == "table" then
+		return theme[2]
+	end
+	return theme
+end
+
+local function compatNormalizeTheme(theme)
+	local payload = compatGetThemePayload(theme) or {}
+	return {
+		Background = compatColorFromHex(payload.BackgroundColor or payload.Background or payload.WindowBackground, Color3.fromRGB(15, 15, 15)),
+		Main = compatColorFromHex(payload.MainColor or payload.Main or payload.ElementBackground, Color3.fromRGB(25, 25, 25)),
+		Accent = compatColorFromHex(payload.AccentColor or payload.Accent, Color3.fromRGB(255, 255, 255)),
+		Outline = compatColorFromHex(payload.OutlineColor or payload.Outline or payload.BorderColor, Color3.fromRGB(255, 255, 255)),
+		Font = compatColorFromHex(payload.FontColor or payload.TextColor or payload.Font, Color3.fromRGB(255, 255, 255)),
+		MutedFont = compatColorFromHex(payload.MutedFontColor or payload.MutedTextColor, Color3.fromRGB(190, 190, 190))
+	}
+end
+
+local function compatApplyThemeToRoot(root, theme)
+	if typeof(root) ~= "Instance" then
+		return
+	end
+
+	local normalized = compatNormalizeTheme(theme)
+	local backgroundNames = {
+		Base = true,
+		Holder = true,
+		Prompt = true,
+		Notification = true,
+		GlobalSettings = true,
+		Dialog = true,
+		ProfileModal = true
+	}
+	local mainNames = {
+		Section = true,
+		Dropdown = true,
+		Search = true,
+		InputBox = true,
+		BinderBox = true,
+		SliderValue = true,
+		Button = true,
+		Confirm = true,
+		Cancel = true,
+		ProfileButton = true,
+		ProfileCard = true,
+		DiscordButton = true,
+		WebsiteButton = true,
+		LogoutButton = true
+	}
+
+	for _, obj in ipairs(root:GetDescendants()) do
+		if obj:IsA("UIStroke") then
+			obj.Color = normalized.Outline
+		elseif obj:IsA("Frame") and obj.Name == "Line" and obj.Parent and obj.Parent:IsA("CanvasGroup") then
+			obj.BackgroundColor3 = normalized.Font
+		elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+			if obj.Name == "ProfileTier" then
+				obj.TextColor3 = normalized.Background
+			else
+				obj.TextColor3 = normalized.Font
+			end
+			if obj:IsA("TextBox") then
+				obj.PlaceholderColor3 = normalized.MutedFont
+			end
+			if obj.BackgroundTransparency < 0.99 then
+				if obj.Name == "ProfileTier" then
+					obj.BackgroundColor3 = normalized.Font
+				else
+					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
+				end
+			end
+		elseif obj:IsA("ScrollingFrame") then
+			obj.ScrollBarImageColor3 = normalized.Accent
+			if obj.BackgroundTransparency < 0.99 then
+				obj.BackgroundColor3 = normalized.Main
+			end
+		elseif obj:IsA("Frame") or obj:IsA("CanvasGroup") then
+			if obj.BackgroundTransparency < 0.99 then
+				if backgroundNames[obj.Name] then
+					obj.BackgroundColor3 = normalized.Background
+				elseif mainNames[obj.Name] then
+					obj.BackgroundColor3 = normalized.Main
+				end
+			end
+		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" then
+				obj.ImageColor3 = normalized.Font
+			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" or obj.Name == "Checkmark" then
+				obj.ImageColor3 = normalized.Accent
+			elseif obj.BackgroundTransparency < 0.99 then
+				obj.BackgroundColor3 = normalized.Main
+			end
+		end
+	end
+end
+
+MacLib.ThemeManager = MacLib.ThemeManager or {}
+MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
+	Default = {
+		"Default",
+		{
+			BackgroundColor = "0a0a0a",
+			MainColor = "181818",
+			AccentColor = "ffffff",
+			OutlineColor = "3a3a3a",
+			FontColor = "f5f5f5",
+			MutedFontColor = "a8a8a8"
+		}
+	},
+	TiRex = {
+		"TiRex",
+		{
+			BackgroundColor = "080808",
+			MainColor = "1c1c1c",
+			AccentColor = "ffffff",
+			OutlineColor = "424242",
+			FontColor = "f7f7f7",
+			MutedFontColor = "b0b0b0"
+		}
+	},
+	Professional = {
+		"Professional",
+		{
+			BackgroundColor = "050505",
+			MainColor = "141414",
+			AccentColor = "ffffff",
+			OutlineColor = "2f2f2f",
+			FontColor = "fafafa",
+			MutedFontColor = "9f9f9f"
+		}
+	}
 }
+MacLib.ThemeManager.Library = MacLib.ThemeManager.Library or MacLib
+MacLib.ThemeManager.Folder = MacLib.ThemeManager.Folder or "TiRex"
+MacLib.ThemeManager.CurrentTheme = MacLib.ThemeManager.CurrentTheme or "Default"
+
+function MacLib.ThemeManager:SetLibrary(lib)
+	self.Library = lib or MacLib
+end
+
+function MacLib.ThemeManager:SetFolder(folder)
+	self.Folder = folder or self.Folder or "TiRex"
+end
+
+function MacLib.ThemeManager:GetTheme(theme)
+	if type(theme) == "table" then
+		return theme
+	end
+	local name = tostring(theme or self.CurrentTheme or "Default")
+	return self.BuiltInThemes[name] or self.BuiltInThemes.Default
+end
+
+function MacLib.ThemeManager:GetThemeNames()
+	local names = {}
+	for name in pairs(self.BuiltInThemes or {}) do
+		table.insert(names, name)
+	end
+	table.sort(names)
+	return names
+end
+
+function MacLib.ThemeManager:ApplyTheme(theme)
+	local library = compatGetLibrary(self)
+	local selectedTheme = self:GetTheme(theme)
+	self.CurrentTheme = type(theme) == "string" and theme or self.CurrentTheme or "Default"
+
+	for _, rawWindow in ipairs(compatState.Windows) do
+		if rawWindow and rawWindow.Gui then
+			compatApplyThemeToRoot(rawWindow.Gui, selectedTheme)
+		end
+	end
+
+	for _, statusLabel in ipairs(compatState.StatusLabels) do
+		if statusLabel and statusLabel.GetFrame then
+			compatApplyThemeToRoot(statusLabel:GetFrame(), selectedTheme)
+		end
+	end
+
+	if library._activeWindow and library._activeWindow.Gui then
+		compatApplyThemeToRoot(library._activeWindow.Gui, selectedTheme)
+	end
+
+	return true
+end
+
+function MacLib.ThemeManager:SetTheme(theme)
+	self.CurrentTheme = type(theme) == "string" and theme or self.CurrentTheme
+	return self:ApplyTheme(theme)
+end
+
+function MacLib.ThemeManager:LoadDefault()
+	local themeName = self.CurrentTheme or "Default"
+	if not isStudio and isfile and readfile and self.Folder then
+		local path = self.Folder .. "/theme.txt"
+		if isfile(path) then
+			local savedTheme = tostring(readfile(path) or ""):gsub("^%s+", ""):gsub("%s+$", "")
+			if self.BuiltInThemes[savedTheme] then
+				themeName = savedTheme
+			end
+		end
+	end
+	return self:SetTheme(themeName)
+end
+
+function MacLib.ThemeManager:SaveDefault(theme)
+	local themeName = tostring(theme or self.CurrentTheme or "Default")
+	self.CurrentTheme = themeName
+	if isStudio or not (writefile and self.Folder) then
+		return false, "Theme save unavailable."
+	end
+	local okFolder, folderErr = compatEnsureFolder(self.Folder)
+	if not okFolder then
+		return false, folderErr
+	end
+	writefile(self.Folder .. "/theme.txt", themeName)
+	return true
+end
+
+function MacLib.ThemeManager:ApplyToTab(tab)
+	self:ApplyTheme(self.CurrentTheme or "Default")
+	if not (tab and type(tab.AddLeftGroupbox) == "function") then
+		return nil
+	end
+
+	local names = self:GetThemeNames()
+	local defaultIndex = table.find(names, self.CurrentTheme or "Default") or table.find(names, "Default") or 1
+	local group = tab:AddLeftGroupbox("Theme", "palette")
+	local dropdown = group:AddDropdown("ThemeManager_Theme", {
+		Text = "Theme",
+		Values = names,
+		Default = defaultIndex,
+		Multi = false,
+		AllowNull = false,
+		Callback = function(themeName)
+			self:SetTheme(themeName)
+		end
+	})
+	if MacLib.Options.ThemeManager_Theme then
+		MacLib.Options.ThemeManager_Theme.IgnoreConfig = true
+	end
+	group:AddButton("Apply Theme", function()
+		self:ApplyTheme(dropdown.Value or self.CurrentTheme or "Default")
+	end)
+	group:AddButton("Save Theme Default", function()
+		local ok, err = self:SaveDefault(dropdown.Value or self.CurrentTheme or "Default")
+		if not ok and MacLib.Notify then
+			MacLib:Notify({
+				Title = "TiRex",
+				Description = tostring(err),
+				Time = 2
+			})
+		end
+	end)
+	return group
+end
+
+MacLib.SaveManager = MacLib.SaveManager or {}
+MacLib.SaveManager.Library = MacLib.SaveManager.Library or MacLib
+MacLib.SaveManager.Folder = MacLib.SaveManager.Folder or "TiRex/Games"
+MacLib.SaveManager.IgnoreIndexes = MacLib.SaveManager.IgnoreIndexes or {}
+MacLib.SaveManager.IgnoreThemes = MacLib.SaveManager.IgnoreThemes or false
+
+function MacLib.SaveManager:SetLibrary(lib)
+	self.Library = lib or MacLib
+end
+
+function MacLib.SaveManager:IgnoreThemeSettings()
+	self.IgnoreThemes = true
+	self:SetIgnoreIndexes({ "ThemeManager_Theme" })
+end
+
+function MacLib.SaveManager:SetIgnoreIndexes(indexes)
+	self.IgnoreIndexes = indexes or {}
+	if type(indexes) == "table" then
+		for _, flag in ipairs(indexes) do
+			if MacLib.Options[flag] then
+				MacLib.Options[flag].IgnoreConfig = true
+			end
+		end
+	end
+end
+
+function MacLib.SaveManager:SetFolder(folder)
+	self.Folder = folder or self.Folder or "TiRex/Games"
+	local library = compatGetLibrary(self)
+	library.Folder = self.Folder
+	if type(library.SetFolder) == "function" then
+		pcall(function()
+			library:SetFolder(self.Folder)
+		end)
+	end
+end
+
+function MacLib.SaveManager:GetFolder()
+	return self.Folder or (compatGetLibrary(self).Folder) or "TiRex/Games"
+end
+
+function MacLib.SaveManager:Save(name)
+	local library = compatGetLibrary(self)
+	self:SetFolder(self:GetFolder())
+	if type(library.SaveConfig) == "function" then
+		return library:SaveConfig(name)
+	end
+	return false, "SaveConfig unavailable."
+end
+
+function MacLib.SaveManager:Load(name)
+	local library = compatGetLibrary(self)
+	self:SetFolder(self:GetFolder())
+	if type(library.LoadConfig) == "function" then
+		return library:LoadConfig(name)
+	end
+	return false, "LoadConfig unavailable."
+end
+
+function MacLib.SaveManager:RefreshConfigList()
+	local library = compatGetLibrary(self)
+	self:SetFolder(self:GetFolder())
+	if type(library.RefreshConfigList) == "function" then
+		return library:RefreshConfigList()
+	end
+	return {}
+end
+
+function MacLib.SaveManager:SetAutoload(name)
+	if type(name) ~= "string" or name == "" then
+		return false, "Please select a config file."
+	end
+	if isStudio or not writefile then
+		return false, "Autoload save unavailable."
+	end
+	local folder = self:GetFolder()
+	local okFolder, folderErr = compatEnsureFolder(folder .. "/settings")
+	if not okFolder then
+		return false, folderErr
+	end
+	writefile(folder .. "/settings/autoload.txt", name)
+	return true
+end
+
+function MacLib.SaveManager:LoadAutoloadConfig()
+	local library = compatGetLibrary(self)
+	self:SetFolder(self:GetFolder())
+	if type(library.LoadAutoLoadConfig) == "function" then
+		return library:LoadAutoLoadConfig()
+	end
+	return false, "LoadAutoLoadConfig unavailable."
+end
+
+function MacLib.SaveManager:BuildConfigSection(tab)
+	self:SetFolder(self:GetFolder())
+	if tab and type(tab.InsertConfigSection) == "function" then
+		return tab:InsertConfigSection("Left")
+	end
+	return nil
+end
 
 function MacLib:Demo()
 	local Window = MacLib:Window({
