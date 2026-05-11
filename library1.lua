@@ -3239,7 +3239,9 @@ function MacLib:Window(Settings)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
 					sliderValue.TextSize = 11
 					sliderValue.TextScaled = true
-					sliderValue.TextTransparency = 0.1
+					sliderValue.TextTransparency = 0
+					sliderValue.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+					sliderValue.TextStrokeTransparency = 0.18
 					sliderValue.TextXAlignment = Enum.TextXAlignment.Center
 					sliderValue.TextYAlignment = Enum.TextYAlignment.Center
 					sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
@@ -3248,10 +3250,10 @@ function MacLib:Window(Settings)
 					sliderValue.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderValue.BorderSizePixel = 0
 					sliderValue.LayoutOrder = 1
-					sliderValue.Position = UDim2.fromScale(0, 0)
-					sliderValue.Size = UDim2.fromScale(1, 1)
+					sliderValue.Position = UDim2.fromOffset(10, 0)
+					sliderValue.Size = UDim2.new(1, -20, 1, 0)
 					sliderValue.ClipsDescendants = true
-					sliderValue.ZIndex = 6
+					sliderValue.ZIndex = 20
 
 					local sliderValueUICorner = Instance.new("UICorner")
 					sliderValueUICorner.Name = "SliderValueUICorner"
@@ -3273,7 +3275,7 @@ function MacLib:Window(Settings)
 
 					local sliderValueTextSize = Instance.new("UITextSizeConstraint")
 					sliderValueTextSize.Name = "SliderValueTextSizeConstraint"
-					sliderValueTextSize.MaxTextSize = 12
+					sliderValueTextSize.MaxTextSize = 11
 					sliderValueTextSize.MinTextSize = 7
 					sliderValueTextSize.Parent = sliderValue
 
@@ -3309,8 +3311,8 @@ function MacLib:Window(Settings)
 
 					local sliderFill = Instance.new("Frame")
 					sliderFill.Name = "SliderFill"
-					sliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					sliderFill.BackgroundTransparency = 0.2
+					sliderFill.BackgroundColor3 = Color3.fromRGB(125, 85, 255)
+					sliderFill.BackgroundTransparency = 0
 					sliderFill.BorderSizePixel = 0
 					sliderFill.Size = UDim2.fromScale(0, 1)
 					sliderFill.ZIndex = sliderBar.ZIndex + 1
@@ -3875,7 +3877,7 @@ function MacLib:Window(Settings)
 					keybindName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybindName.BorderSizePixel = 0
 					keybindName.Position = UDim2.fromScale(0, 0.5)
-					keybindName.Size = UDim2.new(1, -36, 0, 0)
+					keybindName.Size = UDim2.new(1, -100, 0, 0)
 					keybindName.Parent = keybind
 
 					local binderBox = Instance.new("TextButton")
@@ -3883,11 +3885,12 @@ function MacLib:Window(Settings)
 					binderBox.FontFace = Font.new(assets.interFont)
 					binderBox.Text = ""
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.TextSize = 11
-					binderBox.TextScaled = true
+					binderBox.TextSize = 12
+					binderBox.TextScaled = false
 					binderBox.TextTransparency = 0
 					binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
+					binderBox.AutomaticSize = Enum.AutomaticSize.X
 					binderBox.AutoButtonColor = false
 					binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
 					binderBox.BackgroundTransparency = 0.76
@@ -3913,20 +3916,20 @@ function MacLib:Window(Settings)
 
 					local binderBoxTextSize = Instance.new("UITextSizeConstraint")
 					binderBoxTextSize.Name = "BinderBoxTextSizeConstraint"
-					binderBoxTextSize.MaxTextSize = 11
-					binderBoxTextSize.MinTextSize = 7
+					binderBoxTextSize.MaxTextSize = 12
+					binderBoxTextSize.MinTextSize = 9
 					binderBoxTextSize.Parent = binderBox
 
 					local binderBoxUIPadding = Instance.new("UIPadding")
 					binderBoxUIPadding.Name = "BinderBoxUIPadding"
-					binderBoxUIPadding.PaddingLeft = UDim.new(0, 1)
-					binderBoxUIPadding.PaddingRight = UDim.new(0, 1)
+					binderBoxUIPadding.PaddingLeft = UDim.new(0, 6)
+					binderBoxUIPadding.PaddingRight = UDim.new(0, 6)
 					binderBoxUIPadding.Parent = binderBox
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
 					binderBoxUISizeConstraint.Name = "BinderBoxUISizeConstraint"
 					binderBoxUISizeConstraint.MinSize = Vector2.new(21, 21)
-					binderBoxUISizeConstraint.MaxSize = Vector2.new(21, 21)
+					binderBoxUISizeConstraint.MaxSize = Vector2.new(96, 21)
 					binderBoxUISizeConstraint.Parent = binderBox
 
 					binderBox.Parent = keybind
@@ -3964,11 +3967,12 @@ function MacLib:Window(Settings)
 							RightControl = "RC",
 							LeftAlt = "LA",
 							RightAlt = "RA",
+							Space = "Space",
 							Return = "EN",
 							Backspace = "BK"
 						}
 
-						return shortNames[name] or string.sub(name, 1, 2)
+						return shortNames[name] or (#name <= 6 and name or string.sub(name, 1, 6))
 					end
 
 					local function updateBindVisual(binding)
@@ -8087,7 +8091,7 @@ local function wrapLabel(rawLabel, groupProxy)
 
 		labelFrame.ClipsDescendants = false
 		if typeof(labelText) == "Instance" then
-			labelText.Size = UDim2.new(1, -36, 1, 0)
+			labelText.Size = UDim2.new(1, -100, 1, 0)
 			labelText.TextTransparency = 0.35
 		end
 
@@ -8096,11 +8100,12 @@ local function wrapLabel(rawLabel, groupProxy)
 		binderBox.FontFace = Font.new(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		binderBox.Text = "-"
 		binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-		binderBox.TextSize = 11
-		binderBox.TextScaled = true
+		binderBox.TextSize = 12
+		binderBox.TextScaled = false
 		binderBox.TextTransparency = 0
 		binderBox.TextTruncate = Enum.TextTruncate.AtEnd
 		binderBox.AnchorPoint = Vector2.new(1, 0.5)
+		binderBox.AutomaticSize = Enum.AutomaticSize.X
 		binderBox.AutoButtonColor = false
 		binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
 		binderBox.BackgroundTransparency = 0.76
@@ -8121,14 +8126,19 @@ local function wrapLabel(rawLabel, groupProxy)
 		stroke.Parent = binderBox
 
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, 1)
-		padding.PaddingRight = UDim.new(0, 1)
+		padding.PaddingLeft = UDim.new(0, 6)
+		padding.PaddingRight = UDim.new(0, 6)
 		padding.Parent = binderBox
 
 		local textSize = Instance.new("UITextSizeConstraint")
-		textSize.MaxTextSize = 11
-		textSize.MinTextSize = 7
+		textSize.MaxTextSize = 12
+		textSize.MinTextSize = 9
 		textSize.Parent = binderBox
+
+		local sizeConstraint = Instance.new("UISizeConstraint")
+		sizeConstraint.MinSize = Vector2.new(21, 21)
+		sizeConstraint.MaxSize = Vector2.new(96, 21)
+		sizeConstraint.Parent = binderBox
 
 		local binding = false
 		local suppressUntil = 0
@@ -8147,10 +8157,11 @@ local function wrapLabel(rawLabel, groupProxy)
 				RightControl = "RC",
 				LeftAlt = "LA",
 				RightAlt = "RA",
+				Space = "Space",
 				Return = "EN",
 				Backspace = "BK"
 			}
-			return shortNames[name] or string.sub(name, 1, 2)
+			return shortNames[name] or (#name <= 6 and name or string.sub(name, 1, 6))
 		end
 
 		local function updateInlineVisual(isBinding)
@@ -8998,7 +9009,11 @@ local function compatApplyThemeToRoot(root, theme)
 				if backgroundNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Background
 				elseif obj.Name == "SliderFill" then
-					obj.BackgroundColor3 = normalized.Accent
+					local accent = normalized.Accent
+					if math.abs(accent.R - accent.G) < 0.04 and math.abs(accent.G - accent.B) < 0.04 and accent.R > 0.82 then
+						accent = Color3.fromRGB(125, 85, 255)
+					end
+					obj.BackgroundColor3 = accent
 				elseif mainNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Main
 				end
@@ -9006,6 +9021,8 @@ local function compatApplyThemeToRoot(root, theme)
 		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
 			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" or obj.Name == "LucideSprite" then
 				obj.ImageColor3 = normalized.Font
+			elseif obj.Name == "SliderBar" then
+				obj.BackgroundColor3 = normalized.Main:Lerp(normalized.Font, 0.12)
 			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" or obj.Name == "Checkmark" then
 				obj.ImageColor3 = normalized.Accent
 			elseif obj.Name == "Wheel" and obj:FindFirstChild("WheelHueGradient") then
