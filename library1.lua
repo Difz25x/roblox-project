@@ -2689,7 +2689,7 @@ function MacLib:Window(Settings)
 
 			local elementsScrollingUIListLayout = Instance.new("UIListLayout")
 			elementsScrollingUIListLayout.Name = "ElementsScrollingUIListLayout"
-			elementsScrollingUIListLayout.Padding = UDim.new(0, 15)
+			elementsScrollingUIListLayout.Padding = UDim.new(0, 12)
 			elementsScrollingUIListLayout.FillDirection = Enum.FillDirection.Horizontal
 			elementsScrollingUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			elementsScrollingUIListLayout.Parent = elementsScrolling
@@ -2706,7 +2706,7 @@ function MacLib:Window(Settings)
 
 			local leftUIListLayout = Instance.new("UIListLayout")
 			leftUIListLayout.Name = "LeftUIListLayout"
-			leftUIListLayout.Padding = UDim.new(0, 15)
+			leftUIListLayout.Padding = UDim.new(0, 10)
 			leftUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			leftUIListLayout.Parent = left
 
@@ -2725,7 +2725,7 @@ function MacLib:Window(Settings)
 
 			local rightUIListLayout = Instance.new("UIListLayout")
 			rightUIListLayout.Name = "RightUIListLayout"
-			rightUIListLayout.Padding = UDim.new(0, 15)
+			rightUIListLayout.Padding = UDim.new(0, 10)
 			rightUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			rightUIListLayout.Parent = right
 
@@ -2739,7 +2739,7 @@ function MacLib:Window(Settings)
 				section.Name = "Section"
 				section.AutomaticSize = Enum.AutomaticSize.Y
 				section.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				section.BackgroundTransparency = 0.94
+				section.BackgroundTransparency = 0.10
 				section.BorderColor3 = Color3.fromRGB(0, 0, 0)
 				section.BorderSizePixel = 0
 				section.Position = UDim2.fromScale(0, 6.78e-08)
@@ -2755,21 +2755,21 @@ function MacLib:Window(Settings)
 				sectionUIStroke.Name = "SectionUIStroke"
 				sectionUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 				sectionUIStroke.Color = Color3.fromRGB(255, 255, 255)
-				sectionUIStroke.Transparency = 0.95
+				sectionUIStroke.Transparency = 0.58
 				sectionUIStroke.Parent = section
 
 				local sectionUIListLayout = Instance.new("UIListLayout")
 				sectionUIListLayout.Name = "SectionUIListLayout"
-				sectionUIListLayout.Padding = UDim.new(0, 10)
+				sectionUIListLayout.Padding = UDim.new(0, 6)
 				sectionUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 				sectionUIListLayout.Parent = section
 
 				local sectionUIPadding = Instance.new("UIPadding")
 				sectionUIPadding.Name = "SectionUIPadding"
-				sectionUIPadding.PaddingBottom = UDim.new(0, 20)
-				sectionUIPadding.PaddingLeft = UDim.new(0, 20)
-				sectionUIPadding.PaddingRight = UDim.new(0, 18)
-				sectionUIPadding.PaddingTop = UDim.new(0, 22)
+				sectionUIPadding.PaddingBottom = UDim.new(0, 14)
+				sectionUIPadding.PaddingLeft = UDim.new(0, 16)
+				sectionUIPadding.PaddingRight = UDim.new(0, 16)
+				sectionUIPadding.PaddingTop = UDim.new(0, 15)
 				sectionUIPadding.Parent = section
 
 				function SectionFunctions:Button(Settings, Flag)
@@ -2783,7 +2783,7 @@ function MacLib:Window(Settings)
 					button.BackgroundTransparency = 1
 					button.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					button.BorderSizePixel = 0
-					button.Size = UDim2.new(1, 0, 0, 38)
+					button.Size = UDim2.new(1, 0, 0, 32)
 					button.Parent = section
 
 					local buttonInteract = Instance.new("TextButton")
@@ -2878,7 +2878,7 @@ function MacLib:Window(Settings)
 					toggle.BackgroundTransparency = 1
 					toggle.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					toggle.BorderSizePixel = 0
-					toggle.Size = UDim2.new(1, 0, 0, 38)
+					toggle.Size = UDim2.new(1, 0, 0, 32)
 					toggle.Parent = section
 
 					local toggleName = Instance.new("TextLabel")
@@ -2908,8 +2908,8 @@ function MacLib:Window(Settings)
 					toggle1.ImageColor3 = Color3.fromRGB(125, 125, 125)
 					toggle1.AutoButtonColor = false
 					toggle1.AnchorPoint = Vector2.new(1, 0.5)
-					toggle1.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-					toggle1.BackgroundTransparency = 0.76
+					toggle1.BackgroundColor3 = Color3.fromRGB(48, 49, 53)
+					toggle1.BackgroundTransparency = 0.08
 					toggle1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					toggle1.BorderSizePixel = 0
 					toggle1.Position = UDim2.fromScale(1, 0.5)
@@ -2929,7 +2929,7 @@ function MacLib:Window(Settings)
 					togglerHead.Image = assets.togglerHead
 					togglerHead.ImageColor3 = Color3.fromRGB(255, 255, 255)
 					togglerHead.AnchorPoint = Vector2.new(1, 0.5)
-					togglerHead.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					togglerHead.BackgroundColor3 = Color3.fromRGB(230, 231, 234)
 					togglerHead.BackgroundTransparency = 0
 					togglerHead.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					togglerHead.BorderSizePixel = 0
@@ -2941,8 +2941,8 @@ function MacLib:Window(Settings)
 
 					toggle1.Parent = toggle
 
-					local toggle1Transparency = {Enabled = 0.62, Disabled = 0.76}
-					local togglerHeadTransparency = {Enabled = 0, Disabled = 0.1}
+					local toggle1Transparency = {Enabled = 0.08, Disabled = 0.08}
+					local togglerHeadTransparency = {Enabled = 0, Disabled = 0}
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
@@ -2960,7 +2960,7 @@ function MacLib:Window(Settings)
 
 						Tween(toggle1, TweenSettings.Info, {
 							ImageTransparency = 1,
-							BackgroundColor3 = State and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 130),
+							BackgroundColor3 = State and Color3.fromRGB(126, 128, 135) or Color3.fromRGB(48, 49, 53),
 							BackgroundTransparency = transparencyValues[1]
 						}):Play()
 
@@ -3028,7 +3028,7 @@ function MacLib:Window(Settings)
 					checkbox.BackgroundTransparency = 1
 					checkbox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					checkbox.BorderSizePixel = 0
-					checkbox.Size = UDim2.new(1, 0, 0, 38)
+					checkbox.Size = UDim2.new(1, 0, 0, 32)
 					checkbox.Parent = section
 
 					local checkboxName = Instance.new("TextLabel")
@@ -3057,8 +3057,8 @@ function MacLib:Window(Settings)
 					checkboxButton.Text = ""
 					checkboxButton.AutoButtonColor = false
 					checkboxButton.AnchorPoint = Vector2.new(1, 0.5)
-					checkboxButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					checkboxButton.BackgroundTransparency = 0.88
+					checkboxButton.BackgroundColor3 = Color3.fromRGB(42, 43, 47)
+					checkboxButton.BackgroundTransparency = 0.08
 					checkboxButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					checkboxButton.BorderSizePixel = 0
 					checkboxButton.Position = UDim2.fromScale(1, 0.5)
@@ -3081,7 +3081,7 @@ function MacLib:Window(Settings)
 					checkmark.Name = "Checkmark"
 					checkmark.FontFace = Font.new(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 					checkmark.Text = "✓"
-					checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
+					checkmark.TextColor3 = Color3.fromRGB(14, 15, 17)
 					checkmark.TextSize = 14
 					checkmark.TextTransparency = 1
 					checkmark.TextXAlignment = Enum.TextXAlignment.Center
@@ -3103,14 +3103,14 @@ function MacLib:Window(Settings)
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-						EnabledBackgroundColor = Color3.fromRGB(255, 255, 255),
-						DisabledBackgroundColor = Color3.fromRGB(130, 130, 130),
-						EnabledStrokeColor = Color3.fromRGB(255, 255, 255),
-						DisabledStrokeColor = Color3.fromRGB(150, 150, 150),
-						EnabledBackgroundTransparency = 0.62,
-						DisabledBackgroundTransparency = 0.76,
-						EnabledStrokeTransparency = 0.25,
-						DisabledStrokeTransparency = 0.35,
+						EnabledBackgroundColor = Color3.fromRGB(218, 219, 224),
+						DisabledBackgroundColor = Color3.fromRGB(42, 43, 47),
+						EnabledStrokeColor = Color3.fromRGB(232, 233, 236),
+						DisabledStrokeColor = Color3.fromRGB(88, 90, 96),
+						EnabledBackgroundTransparency = 0.02,
+						DisabledBackgroundTransparency = 0.08,
+						EnabledStrokeTransparency = 0.08,
+						DisabledStrokeTransparency = 0.22,
 						EnabledCheckTransparency = 0,
 						DisabledCheckTransparency = 1
 					}
@@ -3201,7 +3201,7 @@ function MacLib:Window(Settings)
 					slider.BackgroundTransparency = 1
 					slider.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					slider.BorderSizePixel = 0
-					slider.Size = UDim2.new(1, 0, 0, 38)
+					slider.Size = UDim2.new(1, 0, 0, 32)
 					slider.Parent = section
 
 					local sliderName = Instance.new("TextLabel")
@@ -3234,11 +3234,9 @@ function MacLib:Window(Settings)
 					sliderElements.Position = UDim2.fromScale(1, 0)
 					sliderElements.Size = UDim2.fromScale(1, 1)
 
-					local sliderValue = Instance.new("TextBox")
+					local sliderValue = Instance.new("TextLabel")
 					sliderValue.Name = "SliderValue"
-					sliderValue.Active = true
-					sliderValue.ClearTextOnFocus = false
-					sliderValue.CursorPosition = -1
+					sliderValue.Active = false
 					sliderValue.FontFace = Font.new(assets.interFont)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
 					sliderValue.TextSize = 11
@@ -3307,13 +3305,13 @@ function MacLib:Window(Settings)
 					sliderBar.Image = assets.sliderbar
 					sliderBar.ImageTransparency = 1
 					sliderBar.ImageColor3 = Color3.fromRGB(87, 86, 86)
-					sliderBar.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
-					sliderBar.BackgroundTransparency = 0.12
+					sliderBar.BackgroundColor3 = Color3.fromRGB(38, 39, 42)
+					sliderBar.BackgroundTransparency = 0.06
 					sliderBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderBar.BorderSizePixel = 0
 					sliderBar.LayoutOrder = 1
 					sliderBar.Position = UDim2.fromScale(0.219, 0.457)
-					sliderBar.Size = UDim2.fromOffset(123, 16)
+					sliderBar.Size = UDim2.fromOffset(123, 14)
 					sliderBar.ZIndex = 2
 
 					local sliderBarCorner = Instance.new("UICorner")
@@ -3323,7 +3321,7 @@ function MacLib:Window(Settings)
 
 					local sliderFill = Instance.new("Frame")
 					sliderFill.Name = "SliderFill"
-					sliderFill.BackgroundColor3 = Color3.fromRGB(132, 132, 140)
+					sliderFill.BackgroundColor3 = Color3.fromRGB(168, 170, 176)
 					sliderFill.BackgroundTransparency = 0
 					sliderFill.BorderSizePixel = 0
 					sliderFill.Size = UDim2.fromScale(0, 1)
@@ -3345,7 +3343,7 @@ function MacLib:Window(Settings)
 					sliderHitbox.BorderSizePixel = 0
 					sliderHitbox.Position = UDim2.fromScale(0.5, 0.5)
 					sliderHitbox.Size = UDim2.new(1, 18, 0, 28)
-					sliderHitbox.ZIndex = sliderBar.ZIndex + 1
+					sliderHitbox.ZIndex = 30
 					sliderHitbox.Parent = sliderBar
 
 					local sliderHead = Instance.new("ImageButton")
@@ -3354,12 +3352,12 @@ function MacLib:Window(Settings)
 					sliderHead.ImageTransparency = 1
 					sliderHead.AutoButtonColor = false
 					sliderHead.AnchorPoint = Vector2.new(0.5, 0.5)
-					sliderHead.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					sliderHead.BackgroundColor3 = Color3.fromRGB(245, 245, 246)
 					sliderHead.BackgroundTransparency = 0
 					sliderHead.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderHead.BorderSizePixel = 0
 					sliderHead.Position = UDim2.fromScale(1, 0.5)
-					sliderHead.Size = UDim2.fromOffset(10, 14)
+					sliderHead.Size = UDim2.fromOffset(8, 14)
 					sliderHead.ZIndex = sliderBar.ZIndex + 2
 					sliderHead.Parent = sliderBar
 
@@ -3424,7 +3422,6 @@ function MacLib:Window(Settings)
 
 					local ValueDisplayMethod = DisplayMethods[SliderFunctions.Settings.DisplayMethod] or DisplayMethods.Value
 					local finalValue
-					local sliderEditing = false
 
 					local function formatSliderValue(value)
 						local _, maxValue, precision = getSliderBounds()
@@ -3437,15 +3434,19 @@ function MacLib:Window(Settings)
 							.. suffix
 					end
 
-					local function formatSliderInputValue(value)
-						local _, _, precision = getSliderBounds()
-						return ValueDisplayMethod(value, precision)
+					local function setSliderDisplayText(value)
+						sliderValue.Text = formatSliderValue(value)
 					end
 
-					local function setSliderDisplayText(value)
-						if not sliderEditing then
-							sliderValue.Text = formatSliderValue(value)
+					local function applySliderVisual(posXScale)
+						posXScale = math.clamp(tonumber(posXScale) or 0, 0, 1)
+						local headWidth = sliderHead.AbsoluteSize.X
+						if headWidth <= 0 then
+							headWidth = sliderHead.Size.X.Offset
 						end
+						local headHalf = math.max(0, headWidth / 2)
+						sliderHead.Position = UDim2.new(posXScale, headHalf - (posXScale * headHalf * 2), 0.5, 0)
+						sliderFill.Size = UDim2.fromScale(posXScale, 1)
 					end
 
 					local function getPointerX(input)
@@ -3472,35 +3473,6 @@ function MacLib:Window(Settings)
 						return sliderBar.AbsolutePosition.X
 					end
 
-					local function getPointerPosition(input)
-						if input and input.Position then
-							return Vector2.new(input.Position.X, input.Position.Y)
-						end
-
-						local ok, mouseLocation = pcall(function()
-							return UserInputService:GetMouseLocation()
-						end)
-						if ok and mouseLocation then
-							return mouseLocation
-						end
-
-						return nil
-					end
-
-					local function isPointerOverValueInput(input)
-						local pos = getPointerPosition(input)
-						if not pos then
-							return false
-						end
-
-						local valuePos = sliderValue.AbsolutePosition
-						local valueSize = sliderValue.AbsoluteSize
-						return pos.X >= valuePos.X
-							and pos.X <= valuePos.X + valueSize.X
-							and pos.Y >= valuePos.Y
-							and pos.Y <= valuePos.Y + valueSize.Y
-					end
-
 					local function setValueFromX(x, ignorecallback)
 						local minValue, maxValue, precision = getSliderBounds()
 						local range = maxValue - minValue
@@ -3508,8 +3480,7 @@ function MacLib:Window(Settings)
 						local posXScale = math.clamp((tonumber(x) or sliderBar.AbsolutePosition.X) - sliderBar.AbsolutePosition.X, 0, width) / width
 						local previousValue = finalValue
 
-						sliderHead.Position = UDim2.new(posXScale, 0, 0.5, 0)
-						sliderFill.Size = UDim2.fromScale(posXScale, 1)
+						applySliderVisual(posXScale)
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
 						SliderFunctions.State = finalValue
@@ -3540,10 +3511,8 @@ function MacLib:Window(Settings)
 							posXScale = range == 0 and 0 or math.clamp(((value - minValue) / range), 0, 1)
 						end
 
-						local pos = UDim2.new(posXScale, 0, 0.5, 0)
 						local previousValue = finalValue
-						sliderHead.Position = pos
-						sliderFill.Size = UDim2.fromScale(posXScale, 1)
+						applySliderVisual(posXScale)
 
 						finalValue = optionClampNumber(optionRound(posXScale * range + minValue, precision), minValue, maxValue)
 						SliderFunctions.Value = finalValue
@@ -3563,9 +3532,6 @@ function MacLib:Window(Settings)
 
 					local function beginSliderInput(input)
 						if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-							return
-						end
-						if isPointerOverValueInput(input) then
 							return
 						end
 
@@ -3608,37 +3574,6 @@ function MacLib:Window(Settings)
 						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 							finishSliderInput()
 						end
-					end)
-
-					sliderValue.Focused:Connect(function()
-						sliderEditing = true
-						sliderValue.Text = formatSliderInputValue(finalValue or SliderFunctions.Settings.Default)
-						sliderValue.TextStrokeTransparency = 1
-						sliderValue.BackgroundTransparency = 0.15
-						sliderValueUIStroke.Transparency = 0.55
-						sliderValue.CursorPosition = #sliderValue.Text + 1
-					end)
-
-					sliderValue.FocusLost:Connect(function(enterPressed)
-						local value, isPercent = optionExtractNumber(sliderValue.Text)
-						local minValue, maxValue = getSliderBounds()
-						sliderEditing = false
-						sliderValue.TextStrokeTransparency = 0.18
-						sliderValue.BackgroundTransparency = 1
-						sliderValueUIStroke.Transparency = 1
-
-						if value then
-							if isPercent then
-								value = minValue + (value / 100) * (maxValue - minValue)
-							end
-
-							local newValue = math.clamp(value, minValue, maxValue)
-							SetValue(newValue)
-						else
-							sliderValue.Text = formatSliderValue(finalValue or SliderFunctions.Settings.Default)
-						end
-
-						optionCall(SliderFunctions.Settings.onInputComplete, finalValue)
 					end)
 
 					UserInputService.InputChanged:Connect(function(input)
@@ -3706,7 +3641,7 @@ function MacLib:Window(Settings)
 					input.BackgroundTransparency = 1
 					input.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					input.BorderSizePixel = 0
-					input.Size = UDim2.new(1, 0, 0, 38)
+					input.Size = UDim2.new(1, 0, 0, 32)
 					input.Parent = section
 
 					local inputName = Instance.new("TextLabel")
@@ -3922,7 +3857,7 @@ function MacLib:Window(Settings)
 					keybind.BackgroundTransparency = 1
 					keybind.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					keybind.BorderSizePixel = 0
-					keybind.Size = UDim2.new(1, 0, 0, 38)
+					keybind.Size = UDim2.new(1, 0, 0, 32)
 					keybind.Parent = section
 
 					local keybindName = Instance.new("TextLabel")
@@ -4239,7 +4174,7 @@ function MacLib:Window(Settings)
 					dropdown.BackgroundTransparency = 0.985
 					dropdown.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					dropdown.BorderSizePixel = 0
-					dropdown.Size = UDim2.new(1, 0, 0, 38)
+					dropdown.Size = UDim2.new(1, 0, 0, 32)
 					dropdown.Parent = section
 					dropdown.ClipsDescendants = true
 
@@ -4259,7 +4194,7 @@ function MacLib:Window(Settings)
 					interact.BackgroundTransparency = 1
 					interact.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					interact.BorderSizePixel = 0
-					interact.Size = UDim2.new(1, 0, 0, 38)
+					interact.Size = UDim2.new(1, 0, 0, 32)
 					interact.Parent = dropdown
 
 					local dropdownName = Instance.new("TextLabel")
@@ -4855,7 +4790,7 @@ function MacLib:Window(Settings)
 					colorpicker.BackgroundTransparency = 1
 					colorpicker.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					colorpicker.BorderSizePixel = 0
-					colorpicker.Size = UDim2.new(1, 0, 0, 38)
+					colorpicker.Size = UDim2.new(1, 0, 0, 32)
 					colorpicker.Parent = section
 
 					local colorpickerName = Instance.new("TextLabel")
@@ -6287,7 +6222,7 @@ function MacLib:Window(Settings)
 					label.BackgroundTransparency = 1
 					label.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					label.BorderSizePixel = 0
-					label.Size = UDim2.new(1, 0, 0, 38)
+					label.Size = UDim2.new(1, 0, 0, 28)
 					label.Parent = section
 
 					local labelText = Instance.new("TextLabel")
@@ -6380,7 +6315,7 @@ function MacLib:Window(Settings)
 					paragraph.BackgroundTransparency = 1
 					paragraph.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					paragraph.BorderSizePixel = 0
-					paragraph.Size = UDim2.new(1, 0, 0, 38)
+					paragraph.Size = UDim2.new(1, 0, 0, 32)
 					paragraph.Parent = section
 
 					local paragraphHeader = Instance.new("TextLabel")
@@ -6525,7 +6460,7 @@ function MacLib:Window(Settings)
 					custom.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					custom.BorderSizePixel = 0
 					custom.ClipsDescendants = Settings.ClipsDescendants ~= false
-					custom.Size = UDim2.new(1, 0, 0, Settings.Height or 38)
+					custom.Size = UDim2.new(1, 0, 0, Settings.Height or 32)
 					custom.Visible = Settings.Visible ~= false
 					custom.Parent = section
 
@@ -9005,6 +8940,12 @@ local function compatApplyThemeToRoot(root, theme)
 	end
 
 	local normalized = compatNormalizeTheme(theme)
+	local panelColor = normalized.Main
+	local controlColor = normalized.Main:Lerp(normalized.Font, 0.045)
+	local trackColor = normalized.Main:Lerp(normalized.Font, 0.09)
+	local sliderFillColor = normalized.Accent:Lerp(normalized.Background, 0.28)
+	local headColor = normalized.Font:Lerp(normalized.Accent, 0.18)
+	local subtleStrokeColor = normalized.Outline:Lerp(normalized.Font, 0.12)
 	if not compatState.SquareCornerRoots[root] and root.DescendantAdded then
 		compatState.SquareCornerRoots[root] = root.DescendantAdded:Connect(function(obj)
 			if obj:IsA("UICorner") then
@@ -9043,10 +8984,16 @@ local function compatApplyThemeToRoot(root, theme)
 		if obj:IsA("UICorner") then
 			obj.CornerRadius = UDim.new(0, 0)
 		elseif obj:IsA("UIStroke") then
-			if obj.Parent and obj.Parent.Name == "BinderBox" then
+			if obj.Parent and (obj.Parent.Name == "BinderBox" or obj.Parent.Name == "CheckboxButton") then
 				-- Keep keybind boxes in the same state-driven style as checkboxes.
+			elseif obj.Parent and obj.Parent.Name == "Section" then
+				obj.Color = subtleStrokeColor
+				obj.Transparency = 0.58
+			elseif obj.Parent and (obj.Parent.Name == "SliderValue" or obj.Parent.Name == "InputBox" or obj.Parent.Name == "Dropdown") then
+				obj.Color = subtleStrokeColor
+				obj.Transparency = math.max(obj.Transparency, 0.62)
 			else
-				obj.Color = normalized.Outline
+				obj.Color = subtleStrokeColor
 			end
 		elseif obj:IsA("Frame") and obj.Name == "Line" and obj.Parent and obj.Parent:IsA("CanvasGroup") then
 			obj.BackgroundColor3 = normalized.Font
@@ -9054,6 +9001,8 @@ local function compatApplyThemeToRoot(root, theme)
 			if obj.Name == "BinderBox" then
 				obj.TextColor3 = normalized.Font
 				obj.TextTransparency = 0
+			elseif obj.Name == "Checkmark" then
+				obj.TextColor3 = normalized.Background
 			elseif obj.Name == "ProfileTier" then
 				obj.TextColor3 = normalized.Background
 			else
@@ -9070,47 +9019,47 @@ local function compatApplyThemeToRoot(root, theme)
 				elseif obj.Name == "BinderBox" then
 					-- Keybind boxes manage their own enabled/empty/binding colors.
 				elseif obj.Name == "CheckboxButton" then
-					obj.BackgroundColor3 = normalized.Outline
+					-- Checkbox state manages its own fill.
 				elseif obj.Name == "Toggle" and obj:IsA("ImageButton") then
-					obj.BackgroundColor3 = normalized.Outline
+					-- Toggle state manages its own fill.
 				else
-					obj.BackgroundColor3 = mainNames[obj.Name] and normalized.Main or normalized.Background
+					obj.BackgroundColor3 = mainNames[obj.Name] and controlColor or normalized.Background
 				end
 			end
 		elseif obj:IsA("ScrollingFrame") then
 			obj.ScrollBarImageColor3 = normalized.Accent
 			if obj.BackgroundTransparency < 0.99 then
-				obj.BackgroundColor3 = normalized.Main
+				obj.BackgroundColor3 = panelColor
 			end
 		elseif obj:IsA("Frame") or obj:IsA("CanvasGroup") then
 			if obj.BackgroundTransparency < 0.99 then
 				if backgroundNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Background
 				elseif obj.Name == "SliderFill" then
-					local accent = normalized.Accent
-					if math.abs(accent.R - accent.G) < 0.04 and math.abs(accent.G - accent.B) < 0.04 and accent.R > 0.82 then
-						accent = Color3.fromRGB(132, 132, 140)
-					end
-					obj.BackgroundColor3 = accent
+					obj.BackgroundColor3 = sliderFillColor
 				elseif mainNames[obj.Name] then
-					obj.BackgroundColor3 = normalized.Main
+					obj.BackgroundColor3 = obj.Name == "Section" and panelColor or controlColor
+					if obj.Name == "Section" then
+						obj.BackgroundTransparency = 0.10
+					end
 				end
 			end
 		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
 			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" or obj.Name == "LucideSprite" then
 				obj.ImageColor3 = normalized.Font
 			elseif obj.Name == "SliderBar" then
-				obj.BackgroundColor3 = normalized.Main:Lerp(normalized.Font, 0.12)
+				obj.BackgroundColor3 = trackColor
+				obj.BackgroundTransparency = 0.06
 			elseif obj.Name == "SliderHead" or obj.Name == "TogglerHead" then
 				obj.ImageTransparency = 1
-				obj.BackgroundColor3 = normalized.Font
+				obj.BackgroundColor3 = headColor
 				obj.BackgroundTransparency = obj.Name == "TogglerHead" and obj.BackgroundTransparency or 0
 			elseif obj.Name == "Checkmark" then
 				obj.ImageColor3 = normalized.Accent
 			elseif obj.Name == "Wheel" and obj:FindFirstChild("WheelHueGradient") then
 				-- Keep the generated colorpicker hue field from being themed to gray.
 			elseif obj.BackgroundTransparency < 0.99 then
-				obj.BackgroundColor3 = normalized.Main
+				obj.BackgroundColor3 = controlColor
 			end
 		end
 	end
@@ -9121,45 +9070,45 @@ MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
 	Default = {
 		"Default",
 		{
-			BackgroundColor = "151515",
-			MainColor = "252525",
+			BackgroundColor = "0f1012",
+			MainColor = "1a1b1f",
 			AccentColor = "e0e0e0",
-			OutlineColor = "ffffff",
-			FontColor = "ffffff",
-			MutedFontColor = "d6d6d6"
+			OutlineColor = "3a3c40",
+			FontColor = "f5f5f6",
+			MutedFontColor = "a9abb0"
 		}
 	},
 	["Minimalist White/Silver"] = {
 		"Minimalist White/Silver",
 		{
-			BackgroundColor = "151515",
-			MainColor = "252525",
+			BackgroundColor = "0f1012",
+			MainColor = "1a1b1f",
 			AccentColor = "e0e0e0",
-			OutlineColor = "ffffff",
-			FontColor = "ffffff",
-			MutedFontColor = "d6d6d6"
+			OutlineColor = "3a3c40",
+			FontColor = "f5f5f6",
+			MutedFontColor = "a9abb0"
 		}
 	},
 	TiRex = {
 		"TiRex",
 		{
-			BackgroundColor = "151515",
-			MainColor = "252525",
+			BackgroundColor = "0f1012",
+			MainColor = "1a1b1f",
 			AccentColor = "e0e0e0",
-			OutlineColor = "ffffff",
-			FontColor = "ffffff",
-			MutedFontColor = "d6d6d6"
+			OutlineColor = "3a3c40",
+			FontColor = "f5f5f6",
+			MutedFontColor = "a9abb0"
 		}
 	},
 	Professional = {
 		"Professional",
 		{
-			BackgroundColor = "101010",
-			MainColor = "1d1d1f",
+			BackgroundColor = "0f1012",
+			MainColor = "1a1b1f",
 			AccentColor = "e0e0e0",
-			OutlineColor = "ffffff",
-			FontColor = "ffffff",
-			MutedFontColor = "d8d8d8"
+			OutlineColor = "3a3c40",
+			FontColor = "f5f5f6",
+			MutedFontColor = "a9abb0"
 		}
 	}
 }
