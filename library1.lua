@@ -164,6 +164,57 @@ local assets = {
 	sliderhead = "rbxassetid://18772834246",
 }
 
+--// UI Theme Constants
+local UI_THEME = {
+	Corners = {
+		Window = UDim.new(0, 12),
+		Section = UDim.new(0, 8),
+		Tab = UDim.new(0, 8),
+		Notification = UDim.new(0, 10),
+		Dialog = UDim.new(0, 10),
+		Dropdown = UDim.new(0, 6),
+		Input = UDim.new(0, 6),
+		Slider = UDim.new(0, 4),
+		SliderFill = UDim.new(0, 4),
+		Toggle = UDim.new(1, 0),
+		ToggleHead = UDim.new(1, 0),
+		Checkbox = UDim.new(0, 5),
+		Button = UDim.new(0, 6),
+		Avatar = UDim.new(1, 0),
+		Profile = UDim.new(0, 10),
+		ProfileCard = UDim.new(0, 8),
+		ColorWheel = UDim.new(0, 8),
+		Loading = UDim.new(0, 12),
+		Small = UDim.new(0, 4),
+		WindowControl = UDim.new(1, 0),
+	},
+	Colors = {
+		WindowBg = Color3.fromRGB(18, 18, 22),
+		SectionBg = Color3.fromRGB(255, 255, 255),
+		SectionBgTransparency = 0.94,
+		Accent = Color3.fromRGB(140, 120, 255),
+		Stroke = Color3.fromRGB(255, 255, 255),
+		StrokeTransparency = 0.92,
+		SectionStrokeTransparency = 0.88,
+		ToggleEnabled = Color3.fromRGB(140, 120, 255),
+		ToggleDisabled = Color3.fromRGB(48, 49, 53),
+		CheckboxEnabled = Color3.fromRGB(140, 120, 255),
+		CheckboxDisabled = Color3.fromRGB(42, 43, 47),
+		NotificationBg = Color3.fromRGB(22, 22, 26),
+		DialogBg = Color3.fromRGB(22, 22, 26),
+		DialogOverlay = Color3.fromRGB(0, 0, 0),
+		InputBg = Color3.fromRGB(30, 30, 36),
+		SliderFill = Color3.fromRGB(140, 120, 255),
+		DropdownBg = Color3.fromRGB(22, 22, 26),
+	},
+	Animation = {
+		Fast = TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+		Medium = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+		Slow = TweenInfo.new(0.35, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+		Spring = TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	}
+}
+
 --// Functions
 local function GetGui()
 	local newGui = Instance.new("ScreenGui")
@@ -998,7 +1049,7 @@ function MacLib:Window(Settings)
 	local base = Instance.new("Frame")
 	base.Name = "Base"
 	base.AnchorPoint = Vector2.new(0.5, 0.5)
-	base.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	base.BackgroundColor3 = UI_THEME.Colors.WindowBg
 	base.BackgroundTransparency = acrylicBlur and 0.02 or 0
 	base.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	base.BorderSizePixel = 0
@@ -1016,14 +1067,14 @@ function MacLib:Window(Settings)
 	
 	local baseUICorner = Instance.new("UICorner")
 	baseUICorner.Name = "BaseUICorner"
-	baseUICorner.CornerRadius = UDim.new(0, 0)
+	baseUICorner.CornerRadius = UI_THEME.Corners.Window
 	baseUICorner.Parent = base
 
 	local baseUIStroke = Instance.new("UIStroke")
 	baseUIStroke.Name = "BaseUIStroke"
 	baseUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	baseUIStroke.Color = Color3.fromRGB(255, 255, 255)
-	baseUIStroke.Transparency = 0.9
+	baseUIStroke.Transparency = UI_THEME.Colors.StrokeTransparency
 	baseUIStroke.Parent = base
 
 	local sidebar = Instance.new("Frame")
@@ -1115,7 +1166,7 @@ function MacLib:Window(Settings)
 
 	local uICorner = Instance.new("UICorner")
 	uICorner.Name = "UICorner"
-	uICorner.CornerRadius = UDim.new(0, 0)
+	uICorner.CornerRadius = UI_THEME.Corners.WindowControl
 	uICorner.Parent = exit
 
 	exit.Parent = controls
@@ -1134,7 +1185,7 @@ function MacLib:Window(Settings)
 
 	local uICorner1 = Instance.new("UICorner")
 	uICorner1.Name = "UICorner"
-	uICorner1.CornerRadius = UDim.new(0, 0)
+	uICorner1.CornerRadius = UI_THEME.Corners.WindowControl
 	uICorner1.Parent = minimize
 
 	minimize.Parent = controls
@@ -1153,7 +1204,7 @@ function MacLib:Window(Settings)
 
 	local uICorner2 = Instance.new("UICorner")
 	uICorner2.Name = "UICorner"
-	uICorner2.CornerRadius = UDim.new(0, 0)
+	uICorner2.CornerRadius = UI_THEME.Corners.WindowControl
 	uICorner2.Parent = maximize
 
 	maximize.Parent = controls
@@ -1399,7 +1450,7 @@ function MacLib:Window(Settings)
 
 	local uICorner3 = Instance.new("UICorner")
 	uICorner3.Name = "UICorner"
-	uICorner3.CornerRadius = UDim.new(0, 0)
+	uICorner3.CornerRadius = UI_THEME.Corners.Avatar
 	uICorner3.Parent = headshot
 
 	local baseUIStroke2 = Instance.new("UIStroke")
@@ -1786,7 +1837,7 @@ function MacLib:Window(Settings)
 	local globalSettings = Instance.new("Frame")
 	globalSettings.Name = "GlobalSettings"
 	globalSettings.AutomaticSize = Enum.AutomaticSize.XY
-	globalSettings.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	globalSettings.BackgroundColor3 = UI_THEME.Colors.WindowBg
 	globalSettings.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	globalSettings.BorderSizePixel = 0
 	globalSettings.Position = UDim2.fromScale(0.298, 0.104)
@@ -1800,7 +1851,7 @@ function MacLib:Window(Settings)
 
 	local globalSettingsUICorner = Instance.new("UICorner")
 	globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-	globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
+	globalSettingsUICorner.CornerRadius = UI_THEME.Corners.Dialog
 	globalSettingsUICorner.Parent = globalSettings
 
 	local globalSettingsUIPadding = Instance.new("UIPadding")
@@ -1861,7 +1912,7 @@ function MacLib:Window(Settings)
 		profileButton.Parent = userInfo
 
 		local profileButtonCorner = Instance.new("UICorner")
-		profileButtonCorner.CornerRadius = UDim.new(0, 0)
+		profileButtonCorner.CornerRadius = UI_THEME.Corners.Avatar
 		profileButtonCorner.Parent = profileButton
 
 		local profileButtonStroke = Instance.new("UIStroke")
@@ -1883,7 +1934,7 @@ function MacLib:Window(Settings)
 		profileModal.Parent = base
 
 		local profileModalCorner = Instance.new("UICorner")
-		profileModalCorner.CornerRadius = UDim.new(0, 0)
+		profileModalCorner.CornerRadius = UI_THEME.Corners.Profile
 		profileModalCorner.Parent = profileModal
 
 		local profileModalStroke = Instance.new("UIStroke")
@@ -1930,7 +1981,7 @@ function MacLib:Window(Settings)
 
 		local card = Instance.new("Frame")
 		card.Name = "ProfileCard"
-		card.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		card.BackgroundColor3 = UI_THEME.Colors.WindowBg
 		card.BorderSizePixel = 0
 		card.Position = UDim2.fromOffset(16, 64)
 		card.Size = UDim2.new(1, -32, 0, 124)
@@ -1938,7 +1989,7 @@ function MacLib:Window(Settings)
 		card.Parent = profileModal
 
 		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, 0)
+		cardCorner.CornerRadius = UI_THEME.Corners.ProfileCard
 		cardCorner.Parent = card
 
 		local cardStroke = Instance.new("UIStroke")
@@ -1959,7 +2010,7 @@ function MacLib:Window(Settings)
 		avatar.Parent = card
 
 		local avatarCorner = Instance.new("UICorner")
-		avatarCorner.CornerRadius = UDim.new(0, 0)
+		avatarCorner.CornerRadius = UI_THEME.Corners.Avatar
 		avatarCorner.Parent = avatar
 
 		local tier = Instance.new("TextLabel")
@@ -1976,7 +2027,7 @@ function MacLib:Window(Settings)
 		tier.Parent = card
 
 		local tierCorner = Instance.new("UICorner")
-		tierCorner.CornerRadius = UDim.new(0, 0)
+		tierCorner.CornerRadius = UI_THEME.Corners.Small
 		tierCorner.Parent = tier
 
 		local rows = Instance.new("Frame")
@@ -2087,7 +2138,7 @@ function MacLib:Window(Settings)
 			button.Parent = actions
 
 			local buttonCorner = Instance.new("UICorner")
-			buttonCorner.CornerRadius = UDim.new(0, 0)
+			buttonCorner.CornerRadius = UI_THEME.Corners.Button
 			buttonCorner.Parent = button
 
 			local buttonStroke = Instance.new("UIStroke")
@@ -2668,6 +2719,7 @@ function MacLib:Window(Settings)
 
 			local tabSwitcherUICorner = Instance.new("UICorner")
 			tabSwitcherUICorner.Name = "TabSwitcherUICorner"
+			tabSwitcherUICorner.CornerRadius = UI_THEME.Corners.Tab
 			tabSwitcherUICorner.Parent = tabSwitcher
 
 			local tabSwitcherUIStroke = Instance.new("UIStroke")
@@ -2822,8 +2874,8 @@ function MacLib:Window(Settings)
 				local section = Instance.new("Frame")
 				section.Name = "Section"
 				section.AutomaticSize = Enum.AutomaticSize.Y
-				section.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				section.BackgroundTransparency = 0.10
+				section.BackgroundColor3 = UI_THEME.Colors.SectionBg
+				section.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 				section.BorderColor3 = Color3.fromRGB(0, 0, 0)
 				section.BorderSizePixel = 0
 				section.Position = UDim2.fromScale(0, 6.78e-08)
@@ -2833,13 +2885,14 @@ function MacLib:Window(Settings)
 
 				local sectionUICorner = Instance.new("UICorner")
 				sectionUICorner.Name = "SectionUICorner"
+				sectionUICorner.CornerRadius = UI_THEME.Corners.Section
 				sectionUICorner.Parent = section
 
 				local sectionUIStroke = Instance.new("UIStroke")
 				sectionUIStroke.Name = "SectionUIStroke"
 				sectionUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 				sectionUIStroke.Color = Color3.fromRGB(255, 255, 255)
-				sectionUIStroke.Transparency = 0.58
+				sectionUIStroke.Transparency = UI_THEME.Colors.SectionStrokeTransparency
 				sectionUIStroke.Parent = section
 
 				local sectionUIListLayout = Instance.new("UIListLayout")
@@ -2992,7 +3045,7 @@ function MacLib:Window(Settings)
 					toggle1.ImageColor3 = Color3.fromRGB(125, 125, 125)
 					toggle1.AutoButtonColor = false
 					toggle1.AnchorPoint = Vector2.new(1, 0.5)
-					toggle1.BackgroundColor3 = Color3.fromRGB(48, 49, 53)
+					toggle1.BackgroundColor3 = UI_THEME.Colors.ToggleDisabled
 					toggle1.BackgroundTransparency = 0.08
 					toggle1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					toggle1.BorderSizePixel = 0
@@ -3044,7 +3097,7 @@ function MacLib:Window(Settings)
 
 						Tween(toggle1, TweenSettings.Info, {
 							ImageTransparency = 1,
-							BackgroundColor3 = State and Color3.fromRGB(126, 128, 135) or Color3.fromRGB(48, 49, 53),
+							BackgroundColor3 = State and UI_THEME.Colors.ToggleEnabled or UI_THEME.Colors.ToggleDisabled,
 							BackgroundTransparency = transparencyValues[1]
 						}):Play()
 
@@ -3151,7 +3204,7 @@ function MacLib:Window(Settings)
 
 					local checkboxCorner = Instance.new("UICorner")
 					checkboxCorner.Name = "CheckboxCorner"
-					checkboxCorner.CornerRadius = UDim.new(0, 0)
+					checkboxCorner.CornerRadius = UI_THEME.Corners.Checkbox
 					checkboxCorner.Parent = checkboxButton
 
 					local checkboxStroke = Instance.new("UIStroke")
@@ -3165,7 +3218,7 @@ function MacLib:Window(Settings)
 					checkmark.Name = "Checkmark"
 					checkmark.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 					checkmark.Text = "✓"
-					checkmark.TextColor3 = Color3.fromRGB(14, 15, 17)
+					checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
 					checkmark.TextSize = 14
 					checkmark.TextTransparency = 1
 					checkmark.TextXAlignment = Enum.TextXAlignment.Center
@@ -3187,9 +3240,9 @@ function MacLib:Window(Settings)
 
 					local TweenSettings = {
 						Info = TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-						EnabledBackgroundColor = Color3.fromRGB(218, 219, 224),
-						DisabledBackgroundColor = Color3.fromRGB(42, 43, 47),
-						EnabledStrokeColor = Color3.fromRGB(232, 233, 236),
+						EnabledBackgroundColor = UI_THEME.Colors.CheckboxEnabled,
+						DisabledBackgroundColor = UI_THEME.Colors.CheckboxDisabled,
+						EnabledStrokeColor = UI_THEME.Colors.CheckboxEnabled,
 						DisabledStrokeColor = Color3.fromRGB(88, 90, 96),
 						EnabledBackgroundTransparency = 0.02,
 						DisabledBackgroundTransparency = 0.08,
@@ -3345,7 +3398,7 @@ function MacLib:Window(Settings)
 
 					local sliderValueUICorner = Instance.new("UICorner")
 					sliderValueUICorner.Name = "SliderValueUICorner"
-					sliderValueUICorner.CornerRadius = UDim.new(0, 0)
+					sliderValueUICorner.CornerRadius = UI_THEME.Corners.Slider
 					sliderValueUICorner.Parent = sliderValue
 
 					local sliderValueUIStroke = Instance.new("UIStroke")
@@ -3400,7 +3453,7 @@ function MacLib:Window(Settings)
 
 					local sliderBarCorner = Instance.new("UICorner")
 					sliderBarCorner.Name = "SliderBarCorner"
-					sliderBarCorner.CornerRadius = UDim.new(0, 0)
+					sliderBarCorner.CornerRadius = UI_THEME.Corners.SliderFill
 					sliderBarCorner.Parent = sliderBar
 
 					local sliderFill = Instance.new("Frame")
@@ -3414,7 +3467,7 @@ function MacLib:Window(Settings)
 
 					local sliderFillCorner = Instance.new("UICorner")
 					sliderFillCorner.Name = "SliderFillCorner"
-					sliderFillCorner.CornerRadius = UDim.new(0, 0)
+					sliderFillCorner.CornerRadius = UI_THEME.Corners.SliderFill
 					sliderFillCorner.Parent = sliderFill
 
 					local sliderHitbox = Instance.new("TextButton")
@@ -3761,7 +3814,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -3980,7 +4033,7 @@ function MacLib:Window(Settings)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
-					binderBoxUICorner.CornerRadius = UDim.new(0, 0)
+					binderBoxUICorner.CornerRadius = UI_THEME.Corners.Input
 					binderBoxUICorner.Parent = binderBox
 
 					local binderBoxUIStroke = Instance.new("UIStroke")
@@ -4300,7 +4353,7 @@ function MacLib:Window(Settings)
 
 					local dropdownUICorner = Instance.new("UICorner")
 					dropdownUICorner.Name = "DropdownUICorner"
-					dropdownUICorner.CornerRadius = UDim.new(0, 0)
+					dropdownUICorner.CornerRadius = UI_THEME.Corners.Dropdown
 					dropdownUICorner.Parent = dropdown
 
 					local dropdownImage = Instance.new("ImageLabel")
@@ -4988,7 +5041,7 @@ function MacLib:Window(Settings)
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
-					uICorner.CornerRadius = UDim.new(0, 0)
+					uICorner.CornerRadius = UI_THEME.Corners.ColorWheel
 					uICorner.Parent = colorC
 
 					local interact = Instance.new("TextButton")
@@ -5008,7 +5061,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 0)
+					uICorner1.CornerRadius = UI_THEME.Corners.ColorWheel
 					uICorner1.Parent = colorCbg
 
 					colorCbg.Parent = colorpicker
@@ -5024,14 +5077,14 @@ function MacLib:Window(Settings)
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 0)
+					baseUICorner.CornerRadius = UI_THEME.Corners.ColorWheel
 					baseUICorner.Parent = colorPicker
 
 					local prompt = Instance.new("Frame")
 					prompt.Name = "Prompt"
 					prompt.AnchorPoint = Vector2.new(0.5, 0.5)
 					prompt.AutomaticSize = Enum.AutomaticSize.Y
-					prompt.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+					prompt.BackgroundColor3 = UI_THEME.Colors.WindowBg
 					prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					prompt.BorderSizePixel = 0
 					prompt.Position = UDim2.fromScale(0.5, 0.5)
@@ -5051,7 +5104,7 @@ function MacLib:Window(Settings)
 
 					local globalSettingsUICorner = Instance.new("UICorner")
 					globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-					globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
+					globalSettingsUICorner.CornerRadius = UI_THEME.Corners.Dialog
 					globalSettingsUICorner.Parent = prompt
 
 					local uIListLayout = Instance.new("UIListLayout")
@@ -5109,7 +5162,7 @@ function MacLib:Window(Settings)
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
-					uICorner.CornerRadius = UDim.new(0, 0)
+					uICorner.CornerRadius = UI_THEME.Corners.Small
 					uICorner.Parent = slide
 
 					local uIStroke = Instance.new("UIStroke")
@@ -5122,7 +5175,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 0)
+					uICorner1.CornerRadius = UI_THEME.Corners.Small
 					uICorner1.Parent = value
 
 					local uIStroke1 = Instance.new("UIStroke")
@@ -5174,7 +5227,7 @@ function MacLib:Window(Settings)
 
 					local wheelCorner = Instance.new("UICorner")
 					wheelCorner.Name = "WheelCorner"
-					wheelCorner.CornerRadius = UDim.new(0, 0)
+					wheelCorner.CornerRadius = UI_THEME.Corners.ColorWheel
 					wheelCorner.Parent = wheel1
 
 					local wheelStroke = Instance.new("UIStroke")
@@ -5315,7 +5368,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -5398,7 +5451,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner1 = Instance.new("UICorner")
 					inputBoxUICorner1.Name = "InputBoxUICorner"
-					inputBoxUICorner1.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner1.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner1.Parent = inputBox1
 
 					local inputBoxUIStroke1 = Instance.new("UIStroke")
@@ -5481,7 +5534,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner2 = Instance.new("UICorner")
 					inputBoxUICorner2.Name = "InputBoxUICorner"
-					inputBoxUICorner2.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner2.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner2.Parent = inputBox2
 
 					local inputBoxUIStroke2 = Instance.new("UIStroke")
@@ -5565,7 +5618,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner3 = Instance.new("UICorner")
 					inputBoxUICorner3.Name = "InputBoxUICorner"
-					inputBoxUICorner3.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner3.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner3.Parent = inputBox3
 
 					local inputBoxUIStroke3 = Instance.new("UIStroke")
@@ -5648,7 +5701,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner4 = Instance.new("UICorner")
 					inputBoxUICorner4.Name = "InputBoxUICorner"
-					inputBoxUICorner4.CornerRadius = UDim.new(0, 0)
+					inputBoxUICorner4.CornerRadius = UI_THEME.Corners.Input
 					inputBoxUICorner4.Parent = inputBox4
 
 					local inputBoxUIStroke4 = Instance.new("UIStroke")
@@ -5810,7 +5863,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 0)
+					baseUICorner.CornerRadius = UI_THEME.Corners.ColorWheel
 					baseUICorner.Parent = confirm
 
 					confirm.Parent = interactions
@@ -5836,7 +5889,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner1 = Instance.new("UICorner")
 					baseUICorner1.Name = "BaseUICorner"
-					baseUICorner1.CornerRadius = UDim.new(0, 0)
+					baseUICorner1.CornerRadius = UI_THEME.Corners.ColorWheel
 					baseUICorner1.Parent = cancel
 
 					local uIPadding2 = Instance.new("UIPadding")
@@ -6864,7 +6917,7 @@ function MacLib:Window(Settings)
 		notification.Name = "Notification"
 		notification.AnchorPoint = Vector2.new(0.5, 0.5)
 		notification.AutomaticSize = Enum.AutomaticSize.Y
-		notification.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		notification.BackgroundColor3 = UI_THEME.Colors.NotificationBg
 		notification.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		notification.BorderSizePixel = 0
 		notification.Position = UDim2.fromScale(0.5, 0.5)
@@ -6881,7 +6934,7 @@ function MacLib:Window(Settings)
 
 		local notificationUICorner = Instance.new("UICorner")
 		notificationUICorner.Name = "NotificationUICorner"
-		notificationUICorner.CornerRadius = UDim.new(0, 0)
+		notificationUICorner.CornerRadius = UI_THEME.Corners.Notification
 		notificationUICorner.Parent = notification
 
 		local notificationUIScale = Instance.new("UIScale")
@@ -7092,14 +7145,14 @@ function MacLib:Window(Settings)
 
 		local dialogUICorner = Instance.new("UICorner")
 		dialogUICorner.Name = "BaseUICorner"
-		dialogUICorner.CornerRadius = UDim.new(0, 0)
+		dialogUICorner.CornerRadius = UI_THEME.Corners.Window
 		dialogUICorner.Parent = dialog
 
 		local prompt = Instance.new("Frame")
 		prompt.Name = "Prompt"
 		prompt.AnchorPoint = Vector2.new(0.5, 0.5)
 		prompt.AutomaticSize = Enum.AutomaticSize.Y
-		prompt.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		prompt.BackgroundColor3 = UI_THEME.Colors.DialogBg
 		prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		prompt.BorderSizePixel = 0
 		prompt.Position = UDim2.fromScale(0.5, 0.5)
@@ -7119,7 +7172,7 @@ function MacLib:Window(Settings)
 
 		local globalSettingsUICorner = Instance.new("UICorner")
 		globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-		globalSettingsUICorner.CornerRadius = UDim.new(0, 0)
+		globalSettingsUICorner.CornerRadius = UI_THEME.Corners.Dialog
 		globalSettingsUICorner.Parent = prompt
 
 		local globalSettingsUIPadding = Instance.new("UIPadding")
@@ -7266,7 +7319,7 @@ function MacLib:Window(Settings)
 
 			local baseUICorner1 = Instance.new("UICorner")
 			baseUICorner1.Name = "BaseUICorner"
-			baseUICorner1.CornerRadius = UDim.new(0, 0)
+			baseUICorner1.CornerRadius = UI_THEME.Corners.Button
 			baseUICorner1.Parent = button
 
 			button.Parent = interactions
@@ -8006,14 +8059,14 @@ local function createLoadingGui(settings)
 	local holder = Instance.new("Frame")
 	holder.Name = "Holder"
 	holder.AnchorPoint = Vector2.new(0.5, 0.5)
-	holder.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	holder.BackgroundColor3 = UI_THEME.Colors.WindowBg
 	holder.BorderSizePixel = 0
 	holder.Position = UDim2.fromScale(0.5, 0.5)
 	holder.Size = UDim2.fromOffset(320, 128)
 	holder.Parent = gui
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 0)
+	corner.CornerRadius = UI_THEME.Corners.Loading
 	corner.Parent = holder
 
 	local stroke = Instance.new("UIStroke")
@@ -8075,7 +8128,7 @@ local function createLoadingGui(settings)
 	progressBack.Parent = holder
 
 	local progressCorner = Instance.new("UICorner")
-	progressCorner.CornerRadius = UDim.new(0, 0)
+	progressCorner.CornerRadius = UI_THEME.Corners.SliderFill
 	progressCorner.Parent = progressBack
 
 	local progress = Instance.new("Frame")
@@ -8086,7 +8139,7 @@ local function createLoadingGui(settings)
 	progress.Parent = progressBack
 
 	local progressFillCorner = Instance.new("UICorner")
-	progressFillCorner.CornerRadius = UDim.new(0, 0)
+	progressFillCorner.CornerRadius = UI_THEME.Corners.SliderFill
 	progressFillCorner.Parent = progress
 
 	local loading = {
@@ -8153,7 +8206,7 @@ local function createDraggableLabel(text)
 	local label = Instance.new("TextButton")
 	label.Name = "StatusLabel"
 	label.AutoButtonColor = false
-	label.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	label.BackgroundColor3 = UI_THEME.Colors.WindowBg
 	label.BackgroundTransparency = 0.1
 	label.BorderSizePixel = 0
 	label.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
@@ -8166,7 +8219,7 @@ local function createDraggableLabel(text)
 	label.Parent = gui
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 0)
+	corner.CornerRadius = UI_THEME.Corners.Small
 	corner.Parent = label
 
 	local stroke = Instance.new("UIStroke")
@@ -8364,7 +8417,7 @@ local function wrapLabel(rawLabel, groupProxy)
 		binderBox.Parent = labelFrame
 
 		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 0)
+		corner.CornerRadius = UI_THEME.Corners.Small
 		corner.Parent = binderBox
 
 		local stroke = Instance.new("UIStroke")
@@ -9216,7 +9269,7 @@ local function compatApplyThemeToRoot(root, theme)
 	if not compatState.SquareCornerRoots[root] and root.DescendantAdded then
 		compatState.SquareCornerRoots[root] = root.DescendantAdded:Connect(function(obj)
 			if obj:IsA("UICorner") then
-				obj.CornerRadius = UDim.new(0, 0)
+				-- Theme corners are managed by UI_THEME, skip override
 			end
 			if not compatState.ThemeRefreshQueued[root] then
 				compatState.ThemeRefreshQueued[root] = true
@@ -9263,13 +9316,13 @@ local function compatApplyThemeToRoot(root, theme)
 
 	for _, obj in ipairs(root:GetDescendants()) do
 		if obj:IsA("UICorner") then
-			obj.CornerRadius = UDim.new(0, 0)
+			-- Theme corners are managed by UI_THEME, skip override
 		elseif obj:IsA("UIStroke") then
 			if obj.Parent and (obj.Parent.Name == "BinderBox" or obj.Parent.Name == "CheckboxButton") then
 				-- Keep keybind boxes in the same state-driven style as checkboxes.
 			elseif obj.Parent and obj.Parent.Name == "Section" then
 				obj.Color = subtleStrokeColor
-				obj.Transparency = 0.58
+				obj.Transparency = UI_THEME.Colors.SectionStrokeTransparency
 			elseif obj.Parent and (obj.Parent.Name == "SliderValue" or obj.Parent.Name == "InputBox" or obj.Parent.Name == "Dropdown") then
 				obj.Color = subtleStrokeColor
 				obj.Transparency = math.max(obj.Transparency, 0.62)
