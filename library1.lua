@@ -3561,13 +3561,8 @@ function MacLib:Window(Settings)
 					end
 
 					local function getPointerX(input)
-						if input and input.UserInputType == Enum.UserInputType.Touch and input.Position then
+						if input and input.Position then
 							return input.Position.X
-						end
-
-						local mouse = LocalPlayer and LocalPlayer:GetMouse()
-						if mouse then
-							return mouse.X
 						end
 
 						local ok, mouseLocation = pcall(function()
@@ -3575,10 +3570,6 @@ function MacLib:Window(Settings)
 						end)
 						if ok and mouseLocation then
 							return mouseLocation.X
-						end
-
-						if input and input.Position then
-							return input.Position.X
 						end
 
 						return sliderBar.AbsolutePosition.X
@@ -5974,8 +5965,6 @@ function MacLib:Window(Settings)
 						Alpha = alpha.InputBox
 					}
 
-					local Mouse = LocalPlayer and LocalPlayer:GetMouse()
-
 					local function getColorPointerPosition(input)
 						if input and input.Position then
 							return input.Position.X, input.Position.Y
@@ -5985,9 +5974,6 @@ function MacLib:Window(Settings)
 						end)
 						if okMouse and mouseLocation then
 							return mouseLocation.X, mouseLocation.Y
-						end
-						if Mouse then
-							return Mouse.X, Mouse.Y
 						end
 						return 0, 0
 					end
