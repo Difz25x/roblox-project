@@ -7363,26 +7363,42 @@ function MacLib:Window(Settings)
 	local windowMouseCaptured = false
 	local previousMouseBehavior
 	local previousMouseIconEnabled
+	local previousCameraSubject
+	local previousCameraType
+	local previousCameraMode
+	local mouseRestoreToken = 0
 
-	local function setWindowMouseState(isOpen)
-		if isOpen then
-			if not windowMouseCaptured then
-				pcall(function()
-					previousMouseBehavior = UserInputService.MouseBehavior
-				end)
-				pcall(function()
-					previousMouseIconEnabled = UserInputService.MouseIconEnabled
-				end)
-				windowMouseCaptured = true
-			end
+	local function getLocalCameraSubjectFallback()
+		local char = LocalPlayer and LocalPlayer.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Parent then
+			return humanoid
+		end
+		return nil
+	end
 
-			pcall(function()
-				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-				UserInputService.MouseIconEnabled = true
-			end)
+	local function captureWindowInputState()
+		if windowMouseCaptured then
 			return
 		end
+		pcall(function()
+			previousMouseBehavior = UserInputService.MouseBehavior
+		end)
+		pcall(function()
+			previousMouseIconEnabled = UserInputService.MouseIconEnabled
+		end)
+		pcall(function()
+			local activeCamera = workspace.CurrentCamera
+			previousCameraSubject = activeCamera and activeCamera.CameraSubject or nil
+			previousCameraType = activeCamera and activeCamera.CameraType or nil
+		end)
+		pcall(function()
+			previousCameraMode = LocalPlayer and LocalPlayer.CameraMode or nil
+		end)
+		windowMouseCaptured = true
+	end
 
+	local function restoreWindowInputState()
 		if not windowMouseCaptured then
 			return
 		end
@@ -7396,9 +7412,71 @@ function MacLib:Window(Settings)
 			end
 		end)
 
+		pcall(function()
+			if LocalPlayer and previousCameraMode ~= nil then
+				LocalPlayer.CameraMode = previousCameraMode
+			end
+		end)
+		pcall(function()
+			local activeCamera = workspace.CurrentCamera
+			if not activeCamera then
+				return
+			end
+			if previousCameraType ~= nil then
+				activeCamera.CameraType = previousCameraType
+			end
+			local subject = previousCameraSubject
+			if not (subject and subject.Parent) then
+				subject = getLocalCameraSubjectFallback()
+				if subject and previousCameraType == nil then
+					activeCamera.CameraType = Enum.CameraType.Custom
+				end
+			end
+			if subject then
+				activeCamera.CameraSubject = subject
+			end
+		end)
+	end
+
+	local function clearWindowInputSnapshot()
 		windowMouseCaptured = false
 		previousMouseBehavior = nil
 		previousMouseIconEnabled = nil
+		previousCameraSubject = nil
+		previousCameraType = nil
+		previousCameraMode = nil
+	end
+
+	local function setWindowMouseState(isOpen)
+		if isOpen then
+			mouseRestoreToken += 1
+			captureWindowInputState()
+			pcall(function()
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+				UserInputService.MouseIconEnabled = true
+			end)
+			return
+		end
+
+		if not windowMouseCaptured then
+			return
+		end
+
+		mouseRestoreToken += 1
+		local restoreToken = mouseRestoreToken
+		restoreWindowInputState()
+		for _, delaySeconds in ipairs({ 0.03, 0.12, 0.35 }) do
+			task.delay(delaySeconds, function()
+				if restoreToken == mouseRestoreToken then
+					restoreWindowInputState()
+				end
+			end)
+		end
+		task.delay(0.4, function()
+			if restoreToken == mouseRestoreToken then
+				clearWindowInputSnapshot()
+			end
+		end)
 	end
 
 	function WindowFunctions:SetState(State)
@@ -7415,8 +7493,8 @@ function MacLib:Window(Settings)
 	local onUnloadCallback
 
 	function WindowFunctions:Unload()
-		optionCall(onUnloadCallback)
 		setWindowMouseState(false)
+		optionCall(onUnloadCallback)
 		macLib:Destroy()
 		unloaded = true
 	end
