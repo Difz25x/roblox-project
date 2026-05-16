@@ -3146,6 +3146,9 @@ function MacLib:Window(Settings)
 					function ToggleFunctions:SetVisibility(State)
 						toggle.Visible = State
 					end
+					function ToggleFunctions:GetFrame()
+						return toggle, toggleName
+					end
 
 					if Flag then
 						MacLib.Options[Flag] = ToggleFunctions
@@ -3312,6 +3315,9 @@ function MacLib:Window(Settings)
 					end
 					function CheckboxFunctions:SetVisibility(State)
 						checkbox.Visible = State
+					end
+					function CheckboxFunctions:GetFrame()
+						return checkbox, checkboxName
 					end
 
 					if Flag then
@@ -8675,7 +8681,169 @@ local function makeGroupProxy(section)
 			end
 		end
 		function toggleProxy:AddKeyPicker(keyFlag, keySettings)
-			return groupProxy:_AddKeyPicker(keyFlag, keySettings, self, self)
+			keySettings = keySettings or {}
+			-- Create an inline keybind that lives inside the toggle/checkbox row
+			local inlineSettings = {}
+			for key, value in pairs(keySettings) do
+				inlineSettings[key] = value
+			end
+			inlineSettings.NoUI = true
+
+			local keyProxy = groupProxy:_AddKeyPicker(keyFlag, inlineSettings, self, self)
+
+			-- Get the raw toggle/checkbox frame to parent inline binder into it
+			if not rawToggle or type(rawToggle.GetFrame) ~= "function" then
+				return keyProxy
+			end
+
+			local toggleFrame, toggleLabel = rawToggle:GetFrame()
+			if typeof(toggleFrame) ~= "Instance" then
+				return keyProxy
+			end
+
+			toggleFrame.ClipsDescendants = false
+			-- Shrink label to make room for inline binder box
+			if typeof(toggleLabel) == "Instance" then
+				toggleLabel.Size = UDim2.new(1, -100, 1, 0)
+			end
+
+			local binderBox = Instance.new("TextButton")
+			binderBox.Name = "InlineKeybindBox"
+			binderBox.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+			binderBox.Text = "-"
+			binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+			binderBox.TextSize = 11
+			binderBox.TextScaled = false
+			binderBox.TextTransparency = 0.1
+			binderBox.TextTruncate = Enum.TextTruncate.AtEnd
+			binderBox.AnchorPoint = Vector2.new(1, 0.5)
+			binderBox.AutomaticSize = Enum.AutomaticSize.X
+			binderBox.AutoButtonColor = false
+			binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+			binderBox.BackgroundTransparency = 0.76
+			binderBox.BorderSizePixel = 0
+			-- Position before the toggle/checkbox control (which is at right edge)
+			binderBox.Position = UDim2.new(1, -28, 0.5, 0)
+			binderBox.Size = UDim2.fromOffset(21, 21)
+			binderBox.ZIndex = 10
+			binderBox.LayoutOrder = 2
+			binderBox.Parent = toggleFrame
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UI_THEME.Corners.Small
+			corner.Parent = binderBox
+
+			local stroke = Instance.new("UIStroke")
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			stroke.Color = Color3.fromRGB(150, 150, 150)
+			stroke.Transparency = 0.35
+			stroke.Parent = binderBox
+
+			local padding = Instance.new("UIPadding")
+			padding.PaddingLeft = UDim.new(0, 5)
+			padding.PaddingRight = UDim.new(0, 5)
+			padding.Parent = binderBox
+
+			local textSize = Instance.new("UITextSizeConstraint")
+			textSize.MaxTextSize = 11
+			textSize.MinTextSize = 8
+			textSize.Parent = binderBox
+
+			local sizeConstraint = Instance.new("UISizeConstraint")
+			sizeConstraint.MinSize = Vector2.new(21, 21)
+			sizeConstraint.MaxSize = Vector2.new(80, 21)
+			sizeConstraint.Parent = binderBox
+
+			local binding = false
+			local suppressUntil = 0
+			local function formatKeyName(value)
+				local name = normalizeKeyName(value)
+				if name == "None" or name == "" or name == "nil" then
+					return "-"
+				end
+				local shortNames = {
+					MouseButton1 = "M1",
+					MouseButton2 = "M2",
+					MouseButton3 = "M3",
+					LeftShift = "LS",
+					RightShift = "RS",
+					LeftControl = "LC",
+					RightControl = "RC",
+					LeftAlt = "LA",
+					RightAlt = "RA",
+					Space = "Space",
+					Return = "EN",
+					Backspace = "BK"
+				}
+				return shortNames[name] or (#name <= 5 and name or string.sub(name, 1, 5))
+			end
+
+			local function updateInlineVisual(isBinding)
+				if isBinding then
+					binderBox.Text = "..."
+					binderBox.BackgroundColor3 = UI_THEME.Colors.WindowBg
+					binderBox.BackgroundTransparency = 0.08
+					stroke.Color = Color3.fromRGB(255, 255, 255)
+					stroke.Transparency = 0.12
+				else
+					binderBox.Text = formatKeyName(keyProxy.Value)
+					local hasValue = keyProxy.Value and keyProxy.Value ~= "None"
+					binderBox.BackgroundColor3 = hasValue and UI_THEME.Colors.WindowBg or Color3.fromRGB(130, 130, 130)
+					binderBox.BackgroundTransparency = hasValue and 0.08 or 0.76
+					stroke.Color = hasValue and Color3.fromRGB(224, 224, 224) or Color3.fromRGB(150, 150, 150)
+					stroke.Transparency = hasValue and 0.12 or 0.35
+				end
+			end
+
+			binderBox.MouseButton1Click:Connect(function()
+				if tick() < suppressUntil then
+					return
+				end
+				binding = not binding
+				updateInlineVisual(binding)
+			end)
+
+			UserInputService.InputBegan:Connect(function(input)
+				if not binding then
+					return
+				end
+				local isKeyboard = input.UserInputType == Enum.UserInputType.Keyboard
+				local isMouse = input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.MouseButton2
+					or input.UserInputType == Enum.UserInputType.MouseButton3
+				if not isKeyboard and not isMouse then
+					return
+				end
+				if isKeyboard and (input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete) then
+					keyProxy:SetValue("None")
+				elseif isKeyboard then
+					keyProxy:SetValue(input.KeyCode.Name)
+				else
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then
+						suppressUntil = tick() + 0.2
+					end
+					keyProxy:SetValue(input.UserInputType.Name)
+				end
+				binding = false
+				updateInlineVisual(false)
+			end)
+
+			local oldSetValue = keyProxy.SetValue
+			function keyProxy:SetValue(value)
+				oldSetValue(self, value)
+				updateInlineVisual(false)
+			end
+
+			local oldSetVisibility = keyProxy.SetVisibility
+			function keyProxy:SetVisibility(state)
+				if oldSetVisibility then
+					oldSetVisibility(self, state)
+				end
+				binderBox.Visible = state == true
+			end
+
+			updateInlineVisual(false)
+			return keyProxy
 		end
 		function toggleProxy:AddKeybind(keyFlag, keySettings)
 			return self:AddKeyPicker(keyFlag, keySettings)
