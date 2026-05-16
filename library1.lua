@@ -180,20 +180,6 @@ local function GetGui()
 		newGui.DisplayOrder = 2147483647
 	end)
 
-	local parentCandidates = {}
-	local seenParents = {}
-	local function addParentCandidate(candidate)
-		if typeof(candidate) == "Instance" and not seenParents[candidate] then
-			seenParents[candidate] = true
-			parentCandidates[#parentCandidates + 1] = candidate
-		end
-	end
-	local okCoreGui, coreGui = pcall(function()
-		return cloneref and cloneref(MacLib.GetService("CoreGui")) or MacLib.GetService("CoreGui")
-	end)
-	if okCoreGui then
-		addParentCandidate(coreGui)
-	end
 	if type(gethui) == "function" and task and type(task.spawn) == "function" then
 		local okHui, hui
 		local finished = false
@@ -210,21 +196,12 @@ local function GetGui()
 		while not finished and os.clock() - started < 0.05 do
 			task.wait()
 		end
-		if finished and okHui then
-			addParentCandidate(hui)
-		end
+	end
+	
+	if not newGui.Parent then
+		newGui.Parent = cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui")
 	end
 
-	for _, parent in ipairs(parentCandidates) do
-		local okParent = pcall(function()
-			newGui.Parent = parent
-		end)
-		if okParent and newGui.Parent == parent then
-			return newGui
-		end
-	end
-
-	warn("[MacLib] Failed to parent ScreenGui; UI may not be visible.")
 	return newGui
 end
 
