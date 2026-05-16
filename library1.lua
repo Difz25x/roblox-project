@@ -188,10 +188,6 @@ local function GetGui()
 			parentCandidates[#parentCandidates + 1] = candidate
 		end
 	end
-
-	if LocalPlayer then
-		addParentCandidate(LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:FindFirstChild("PlayerGui"))
-	end
 	local okCoreGui, coreGui = pcall(function()
 		return cloneref and cloneref(MacLib.GetService("CoreGui")) or MacLib.GetService("CoreGui")
 	end)
