@@ -1187,7 +1187,7 @@ function TiRexLib:Window(Settings)
 	sidebar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	sidebar.BorderSizePixel = 0
 	sidebar.Position = UDim2.fromScale(-3.52e-08, 4.69e-08)
-	sidebar.Size = UDim2.fromScale(0.325, 1)
+	sidebar.Size = UDim2.new(0, 224, 1, 0)
 
 	local sidebarAccent = Instance.new("Frame")
 	sidebarAccent.Name = "SidebarAccent"
@@ -1371,12 +1371,24 @@ function TiRexLib:Window(Settings)
 
 	local information = Instance.new("Frame")
 	information.Name = "Information"
-	information.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	information.BackgroundTransparency = 1
+	information.BackgroundColor3 = UI_THEME.Colors.PanelBg
+	information.BackgroundTransparency = 0.12
 	information.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	information.BorderSizePixel = 0
-	information.Position = UDim2.fromOffset(0, 31)
-	information.Size = UDim2.new(1, 0, 0, 60)
+	information.Position = UDim2.fromOffset(10, 40)
+	information.Size = UDim2.new(1, -20, 0, 66)
+
+	local informationCorner = Instance.new("UICorner")
+	informationCorner.Name = "InformationCorner"
+	informationCorner.CornerRadius = UI_THEME.Corners.Section
+	informationCorner.Parent = information
+
+	local informationStroke = Instance.new("UIStroke")
+	informationStroke.Name = "InformationStroke"
+	informationStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	informationStroke.Color = UI_THEME.Colors.Stroke
+	informationStroke.Transparency = 0.72
+	informationStroke.Parent = information
 
 	local divider2 = Instance.new("Frame")
 	divider2.Name = "Divider"
@@ -1454,7 +1466,7 @@ function TiRexLib:Window(Settings)
 		Enum.FontStyle.Normal
 	)
 	title.Text = Settings.Title
-	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextColor3 = UI_THEME.Colors.Accent
 	title.RichText = true
 	title.TextSize = 18
 	title.TextTransparency = 0.1
@@ -1513,8 +1525,8 @@ function TiRexLib:Window(Settings)
 	sidebarGroup.BackgroundTransparency = 1
 	sidebarGroup.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	sidebarGroup.BorderSizePixel = 0
-	sidebarGroup.Position = UDim2.fromOffset(0, 91)
-	sidebarGroup.Size = UDim2.new(1, 0, 1, -91)
+	sidebarGroup.Position = UDim2.fromOffset(0, 116)
+	sidebarGroup.Size = UDim2.new(1, 0, 1, -116)
 
 	local userInfo = Instance.new("Frame")
 	userInfo.Name = "UserInfo"
@@ -1657,7 +1669,7 @@ function TiRexLib:Window(Settings)
 	sidebarGroupUIPadding.Name = "SidebarGroupUIPadding"
 	sidebarGroupUIPadding.PaddingLeft = UDim.new(0, 10)
 	sidebarGroupUIPadding.PaddingRight = UDim.new(0, 10)
-	sidebarGroupUIPadding.PaddingTop = UDim.new(0, 31)
+	sidebarGroupUIPadding.PaddingTop = UDim.new(0, 16)
 	sidebarGroupUIPadding.Parent = sidebarGroup
 
 	local tabSwitchers = Instance.new("Frame")
@@ -1684,13 +1696,13 @@ function TiRexLib:Window(Settings)
 
 	local tabSwitchersScrollingFrameUIListLayout = Instance.new("UIListLayout")
 	tabSwitchersScrollingFrameUIListLayout.Name = "TabSwitchersScrollingFrameUIListLayout"
-	tabSwitchersScrollingFrameUIListLayout.Padding = UDim.new(0, 17)
+	tabSwitchersScrollingFrameUIListLayout.Padding = UDim.new(0, 6)
 	tabSwitchersScrollingFrameUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	tabSwitchersScrollingFrameUIListLayout.Parent = tabSwitchersScrollingFrame
 
 	local tabSwitchersScrollingFrameUIPadding = Instance.new("UIPadding")
 	tabSwitchersScrollingFrameUIPadding.Name = "TabSwitchersScrollingFrameUIPadding"
-	tabSwitchersScrollingFrameUIPadding.PaddingTop = UDim.new(0, 2)
+	tabSwitchersScrollingFrameUIPadding.PaddingTop = UDim.new(0, 6)
 	tabSwitchersScrollingFrameUIPadding.Parent = tabSwitchersScrollingFrame
 
 	tabSwitchersScrollingFrame.Parent = tabSwitchers
@@ -1701,26 +1713,59 @@ function TiRexLib:Window(Settings)
 
 	sidebar.Parent = base
 
+	local contentInset = 12
+	local function getBasePixelWidth()
+		local width = base.AbsoluteSize.X
+		if width <= 0 then
+			width = base.Size.X.Offset
+		end
+		return math.max(width, 0)
+	end
+	local function getSidebarPixelWidth()
+		local width = sidebar.AbsoluteSize.X
+		if width <= 0 then
+			width = sidebar.Size.X.Offset
+			if width <= 0 then
+				width = getBasePixelWidth() * sidebar.Size.X.Scale
+			end
+		end
+		return math.max(width, 0)
+	end
+
 	local content = Instance.new("Frame")
 	content.Name = "Content"
 	content.AnchorPoint = Vector2.new(1, 0)
-	content.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	content.BackgroundTransparency = 1
+	content.BackgroundColor3 = UI_THEME.Colors.PanelBg
+	content.BackgroundTransparency = 0.08
 	content.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	content.BorderSizePixel = 0
-	content.Position = UDim2.fromScale(1, 4.69e-08)
-	content.Size = UDim2.new(0, (base.AbsoluteSize.X - sidebar.AbsoluteSize.X), 1, 0)
+	content.ClipsDescendants = true
+	content.Position = UDim2.new(1, -contentInset, 0, contentInset)
+	content.Size = UDim2.new(0, math.max(0, getBasePixelWidth() - getSidebarPixelWidth() - (contentInset * 2)), 1, -(contentInset * 2))
+
+	local contentCorner = Instance.new("UICorner")
+	contentCorner.Name = "ContentCorner"
+	contentCorner.CornerRadius = UI_THEME.Corners.Section
+	contentCorner.Parent = content
+
+	local contentStroke = Instance.new("UIStroke")
+	contentStroke.Name = "ContentStroke"
+	contentStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	contentStroke.Color = UI_THEME.Colors.Stroke
+	contentStroke.Transparency = 0.76
+	contentStroke.Parent = content
 
 	local resizingContent = false
-	local defaultSidebarWidth = sidebar.AbsoluteSize.X
+	local defaultSidebarWidth = getSidebarPixelWidth()
 	local initialMouseX, initialSidebarWidth
 	local snapRange = 20
 	local minSidebarWidth = 107
-	local maxSidebarWidth = base.AbsoluteSize.X - minSidebarWidth
+	local minContentWidth = 260
+	local maxSidebarWidth = math.max(minSidebarWidth, getBasePixelWidth() - minContentWidth - (contentInset * 2))
 
 	local TweenSettings = {
-		DefaultTransparency = 0.9,
-		HoverTransparency = 0.85,
+		DefaultTransparency = 0.55,
+		HoverTransparency = 0.18,
 
 		EasingStyle = Enum.EasingStyle.Sine
 	}
@@ -1762,14 +1807,14 @@ function TiRexLib:Window(Settings)
 			end
 
 			sidebar.Size = UDim2.new(0, newSidebarWidth, 1, 0)
-			content.Size = UDim2.new(0, base.AbsoluteSize.X - newSidebarWidth, 1, 0)
+			content.Size = UDim2.new(0, math.max(0, getBasePixelWidth() - newSidebarWidth - (contentInset * 2)), 1, -(contentInset * 2))
 		end
 	end)
 
 	local topbar = Instance.new("Frame")
 	topbar.Name = "Topbar"
-	topbar.BackgroundColor3 = UI_THEME.Colors.PanelBg
-	topbar.BackgroundTransparency = 0.35
+	topbar.BackgroundColor3 = UI_THEME.Colors.WindowBg
+	topbar.BackgroundTransparency = 0.42
 	topbar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	topbar.BorderSizePixel = 0
 	topbar.Size = UDim2.new(1, 0, 0, 63)
@@ -1785,6 +1830,21 @@ function TiRexLib:Window(Settings)
 	divider4.Size = UDim2.new(1, 0, 0, 1)
 	divider4.Parent = topbar
 
+	local topbarAccent = Instance.new("Frame")
+	topbarAccent.Name = "TopbarAccent"
+	topbarAccent.AnchorPoint = Vector2.new(0, 0.5)
+	topbarAccent.BackgroundColor3 = UI_THEME.Colors.Accent
+	topbarAccent.BackgroundTransparency = 0.05
+	topbarAccent.BorderSizePixel = 0
+	topbarAccent.Position = UDim2.new(0, 12, 0.5, 0)
+	topbarAccent.Size = UDim2.fromOffset(3, 24)
+	topbarAccent.Parent = topbar
+
+	local topbarAccentCorner = Instance.new("UICorner")
+	topbarAccentCorner.Name = "TopbarAccentCorner"
+	topbarAccentCorner.CornerRadius = UI_THEME.Corners.Small
+	topbarAccentCorner.Parent = topbarAccent
+
 	local elements = Instance.new("Frame")
 	elements.Name = "Elements"
 	elements.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1795,7 +1855,7 @@ function TiRexLib:Window(Settings)
 
 	local uIPadding2 = Instance.new("UIPadding")
 	uIPadding2.Name = "UIPadding"
-	uIPadding2.PaddingLeft = UDim.new(0, 20)
+	uIPadding2.PaddingLeft = UDim.new(0, 26)
 	uIPadding2.PaddingRight = UDim.new(0, 20)
 	uIPadding2.Parent = elements
 
@@ -3057,7 +3117,7 @@ function TiRexLib:Window(Settings)
 			tabSwitcher.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			tabSwitcher.BorderSizePixel = 0
 			tabSwitcher.Position = UDim2.fromScale(0.5, 0)
-			tabSwitcher.Size = UDim2.new(1, -21, 0, 40)
+			tabSwitcher.Size = UDim2.new(1, -8, 0, 38)
 
 			tabIndex += 1
 			tabSwitcher.LayoutOrder = tabIndex
@@ -3085,7 +3145,7 @@ function TiRexLib:Window(Settings)
 
 			local tabSwitcherUIListLayout = Instance.new("UIListLayout")
 			tabSwitcherUIListLayout.Name = "TabSwitcherUIListLayout"
-			tabSwitcherUIListLayout.Padding = UDim.new(0, 9)
+			tabSwitcherUIListLayout.Padding = UDim.new(0, 8)
 			tabSwitcherUIListLayout.FillDirection = Enum.FillDirection.Horizontal
 			tabSwitcherUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			tabSwitcherUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -3131,8 +3191,8 @@ function TiRexLib:Window(Settings)
 
 			local tabSwitcherUIPadding = Instance.new("UIPadding")
 			tabSwitcherUIPadding.Name = "TabSwitcherUIPadding"
-			tabSwitcherUIPadding.PaddingLeft = UDim.new(0, 24)
-			tabSwitcherUIPadding.PaddingRight = UDim.new(0, 35)
+			tabSwitcherUIPadding.PaddingLeft = UDim.new(0, 10)
+			tabSwitcherUIPadding.PaddingRight = UDim.new(0, 12)
 			tabSwitcherUIPadding.PaddingTop = UDim.new(0, 1)
 			tabSwitcherUIPadding.Parent = tabSwitcher
 
@@ -9962,6 +10022,7 @@ local function compatApplyThemeToRoot(root, theme)
 	local accentNames = {
 		AccentRail = true,
 		SidebarAccent = true,
+		TopbarAccent = true,
 		TabAccent = true,
 		ProfileBanner = true,
 		ProfileDockAccent = true,
@@ -10048,6 +10109,9 @@ local function compatApplyThemeToRoot(root, theme)
 			elseif obj.BackgroundTransparency < 0.99 then
 				if obj.Name == "Sidebar" then
 					obj.BackgroundColor3 = sidebarColor
+				elseif obj.Name == "Content" or obj.Name == "Information" then
+					obj.BackgroundColor3 = panelColor
+					obj.BackgroundTransparency = obj.Name == "Content" and 0.08 or 0.12
 				elseif obj.Name == "Topbar" then
 					obj.BackgroundColor3 = panelColor
 					obj.BackgroundTransparency = 0.22
