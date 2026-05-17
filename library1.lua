@@ -3029,7 +3029,7 @@ function MacLib:Window(Settings)
 					toggleName.TextTransparency = 0.5
 					toggleName.TextTruncate = Enum.TextTruncate.AtEnd
 					toggleName.TextXAlignment = Enum.TextXAlignment.Left
-					toggleName.TextYAlignment = Enum.TextYAlignment.Top
+					toggleName.TextYAlignment = Enum.TextYAlignment.Center
 					toggleName.AnchorPoint = Vector2.new(0, 0.5)
 					toggleName.AutomaticSize = Enum.AutomaticSize.Y
 					toggleName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -3148,7 +3148,7 @@ function MacLib:Window(Settings)
 						toggle.Visible = State
 					end
 					function ToggleFunctions:GetFrame()
-						return toggle, toggleName
+						return toggle, toggleName, toggle1
 					end
 
 					if Flag then
@@ -3182,7 +3182,7 @@ function MacLib:Window(Settings)
 					checkboxName.TextTransparency = 0.5
 					checkboxName.TextTruncate = Enum.TextTruncate.AtEnd
 					checkboxName.TextXAlignment = Enum.TextXAlignment.Left
-					checkboxName.TextYAlignment = Enum.TextYAlignment.Top
+					checkboxName.TextYAlignment = Enum.TextYAlignment.Center
 					checkboxName.AnchorPoint = Vector2.new(0, 0.5)
 					checkboxName.AutomaticSize = Enum.AutomaticSize.Y
 					checkboxName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -3318,7 +3318,7 @@ function MacLib:Window(Settings)
 						checkbox.Visible = State
 					end
 					function CheckboxFunctions:GetFrame()
-						return checkbox, checkboxName
+						return checkbox, checkboxName, checkboxButton
 					end
 
 					if Flag then
@@ -8408,8 +8408,9 @@ local function wrapLabel(rawLabel, groupProxy)
 
 		labelFrame.ClipsDescendants = false
 		if typeof(labelText) == "Instance" then
-			labelText.Size = UDim2.new(1, -100, 1, 0)
+			labelText.Size = UDim2.new(1, -100, 0, 0)
 			labelText.TextTransparency = 0.35
+			labelText.TextYAlignment = Enum.TextYAlignment.Center
 		end
 
 		local binderBox = Instance.new("TextButton")
@@ -8709,15 +8710,24 @@ local function makeGroupProxy(section)
 				return keyProxy
 			end
 
-			local toggleFrame, toggleLabel = rawToggle:GetFrame()
+			local toggleFrame, toggleLabel, toggleControl = rawToggle:GetFrame()
 			if typeof(toggleFrame) ~= "Instance" then
 				return keyProxy
 			end
 
 			toggleFrame.ClipsDescendants = false
-			-- Shrink label to make room for inline binder box
+			local controlWidth = 21
+			if typeof(toggleControl) == "Instance" then
+				controlWidth = math.max(controlWidth, tonumber(toggleControl.Size.X.Offset) or 0, toggleControl.AbsoluteSize.X)
+			end
+			local keyRightOffset = -(controlWidth + 7)
+			local labelReserve = controlWidth + 95
+
 			if typeof(toggleLabel) == "Instance" then
-				toggleLabel.Size = UDim2.new(1, -100, 1, 0)
+				toggleLabel.Size = UDim2.new(1, -labelReserve, 0, 0)
+				toggleLabel.TextYAlignment = Enum.TextYAlignment.Center
+				toggleLabel.AnchorPoint = Vector2.new(0, 0.5)
+				toggleLabel.Position = UDim2.fromScale(0, 0.5)
 			end
 
 			local binderBox = Instance.new("TextButton")
@@ -8735,8 +8745,7 @@ local function makeGroupProxy(section)
 			binderBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
 			binderBox.BackgroundTransparency = 0.76
 			binderBox.BorderSizePixel = 0
-			-- Position before the toggle/checkbox control (which is at right edge)
-			binderBox.Position = UDim2.new(1, -28, 0.5, 0)
+			binderBox.Position = UDim2.new(1, keyRightOffset, 0.5, 0)
 			binderBox.Size = UDim2.fromOffset(21, 21)
 			binderBox.ZIndex = 10
 			binderBox.LayoutOrder = 2
