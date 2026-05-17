@@ -1955,18 +1955,39 @@ function MacLib:Window(Settings)
 		local profileAccess = tostring(Settings.Access or Settings.Status or Settings.Tier or "Keyless")
 		local profile = {}
 
+		local profileDock = Instance.new("Frame")
+		profileDock.Name = "ProfileDock"
+		profileDock.BackgroundColor3 = UI_THEME.Colors.WindowBg
+		profileDock.BackgroundTransparency = 0.02
+		profileDock.BorderSizePixel = 0
+		profileDock.AnchorPoint = Vector2.new(0, 1)
+		profileDock.Position = UDim2.new(0, -10, 1, -4)
+		profileDock.Size = UDim2.new(1, 20, 0, 58)
+		profileDock.Parent = userInfo
+
+		local profileDockCorner = Instance.new("UICorner")
+		profileDockCorner.CornerRadius = UI_THEME.Corners.Profile
+		profileDockCorner.Parent = profileDock
+
+		local profileDockStroke = Instance.new("UIStroke")
+		profileDockStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		profileDockStroke.Color = Color3.fromRGB(255, 255, 255)
+		profileDockStroke.Transparency = 0.94
+		profileDockStroke.Parent = profileDock
+
 		local profileButton = Instance.new("ImageButton")
 		profileButton.Name = "ProfileButton"
 		profileButton.AutoButtonColor = false
-		profileButton.BackgroundColor3 = Color3.fromRGB(16, 16, 18)
+		profileButton.BackgroundColor3 = UI_THEME.Colors.InputBg
 		profileButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		profileButton.BorderSizePixel = 0
-		profileButton.AnchorPoint = Vector2.new(0, 1)
-		profileButton.Position = UDim2.new(0, -2, 1, -8)
+		profileButton.AnchorPoint = Vector2.new(0, 0.5)
+		profileButton.Position = UDim2.new(0, 12, 0.5, 0)
 		profileButton.Size = UDim2.fromOffset(42, 42)
 		profileButton.Image = profileIcon
 		profileButton.ScaleType = Enum.ScaleType.Crop
-		profileButton.Parent = userInfo
+		profileButton.ZIndex = 2
+		profileButton.Parent = profileDock
 
 		local profileButtonCorner = Instance.new("UICorner")
 		profileButtonCorner.CornerRadius = UI_THEME.Corners.Avatar
@@ -1981,7 +2002,7 @@ function MacLib:Window(Settings)
 		local profileNamePill = Instance.new("TextButton")
 		profileNamePill.Name = "ProfileUsernamePill"
 		profileNamePill.AutoButtonColor = false
-		profileNamePill.BackgroundColor3 = Color3.fromRGB(20, 20, 23)
+		profileNamePill.BackgroundColor3 = UI_THEME.Colors.InputBg
 		profileNamePill.BackgroundTransparency = 0.04
 		profileNamePill.BorderSizePixel = 0
 		profileNamePill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
@@ -1990,11 +2011,11 @@ function MacLib:Window(Settings)
 		profileNamePill.TextSize = 11
 		profileNamePill.TextTruncate = Enum.TextTruncate.AtEnd
 		profileNamePill.TextXAlignment = Enum.TextXAlignment.Left
-		profileNamePill.AnchorPoint = Vector2.new(0, 1)
-		profileNamePill.Position = UDim2.new(0, 56, 1, -14)
-		profileNamePill.Size = UDim2.new(1, -68, 0, 28)
+		profileNamePill.AnchorPoint = Vector2.new(0, 0.5)
+		profileNamePill.Position = UDim2.new(0, 64, 0.5, 0)
+		profileNamePill.Size = UDim2.new(1, -76, 0, 34)
 		profileNamePill.ZIndex = 2
-		profileNamePill.Parent = userInfo
+		profileNamePill.Parent = profileDock
 
 		local profileNamePillCorner = Instance.new("UICorner")
 		profileNamePillCorner.CornerRadius = UI_THEME.Corners.Input
@@ -2011,16 +2032,21 @@ function MacLib:Window(Settings)
 		profileOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		profileOverlay.BackgroundTransparency = 0.42
 		profileOverlay.BorderSizePixel = 0
+		profileOverlay.ClipsDescendants = true
 		profileOverlay.Text = ""
 		profileOverlay.Size = UDim2.fromScale(1, 1)
 		profileOverlay.Visible = false
 		profileOverlay.ZIndex = 9
 		profileOverlay.Parent = base
 
+		local profileOverlayCorner = Instance.new("UICorner")
+		profileOverlayCorner.CornerRadius = UI_THEME.Corners.Window
+		profileOverlayCorner.Parent = profileOverlay
+
 		local profileModal = Instance.new("Frame")
 		profileModal.Name = "ProfileModal"
 		profileModal.AnchorPoint = Vector2.new(0.5, 0.5)
-		profileModal.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+		profileModal.BackgroundColor3 = UI_THEME.Colors.WindowBg
 		profileModal.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		profileModal.BorderSizePixel = 0
 		profileModal.Active = true
@@ -2078,7 +2104,7 @@ function MacLib:Window(Settings)
 
 		local card = Instance.new("Frame")
 		card.Name = "ProfileCard"
-		card.BackgroundColor3 = UI_THEME.Colors.WindowBg
+		card.BackgroundColor3 = UI_THEME.Colors.InputBg
 		card.BorderSizePixel = 0
 		card.Position = UDim2.fromOffset(16, 64)
 		card.Size = UDim2.new(1, -32, 0, 126)
@@ -2225,7 +2251,7 @@ function MacLib:Window(Settings)
 			local button = Instance.new("TextButton")
 			button.Name = "ProfileActionButton"
 			button.AutoButtonColor = false
-			button.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+			button.BackgroundColor3 = UI_THEME.Colors.InputBg
 			button.BorderSizePixel = 0
 			button.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			button.Text = text
@@ -2247,12 +2273,12 @@ function MacLib:Window(Settings)
 
 			button.MouseEnter:Connect(function()
 				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
-					BackgroundColor3 = Color3.fromRGB(42, 42, 42)
+					BackgroundColor3 = UI_THEME.Colors.ToggleDisabled
 				}):Play()
 			end)
 			button.MouseLeave:Connect(function()
 				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
-					BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+					BackgroundColor3 = UI_THEME.Colors.InputBg
 				}):Play()
 			end)
 			button.MouseButton1Click:Connect(function()
@@ -2351,8 +2377,7 @@ function MacLib:Window(Settings)
 			end
 		end
 		function profile:Destroy()
-			profileButton:Destroy()
-			profileNamePill:Destroy()
+			profileDock:Destroy()
 			profileOverlay:Destroy()
 			if self == WindowFunctions._Profile then
 				WindowFunctions._Profile = nil
@@ -9713,7 +9738,8 @@ local function compatApplyThemeToRoot(root, theme)
 		Notification = true,
 		GlobalSettings = true,
 		Dialog = true,
-		ProfileModal = true
+		ProfileModal = true,
+		ProfileDock = true
 	}
 	local mainNames = {
 		Section = true,
@@ -9729,10 +9755,7 @@ local function compatApplyThemeToRoot(root, theme)
 		ProfileUsernamePill = true,
 		ProfileActionButton = true,
 		ProfileCard = true,
-		CheckboxButton = true,
-		DiscordButton = true,
-		WebsiteButton = true,
-		LogoutButton = true
+		CheckboxButton = true
 	}
 
 	for _, obj in ipairs(root:GetDescendants()) do
