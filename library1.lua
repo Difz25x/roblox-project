@@ -17,6 +17,7 @@ local UserInputService = TiRexLib.GetService("UserInputService")
 local ContextActionService = TiRexLib.GetService("ContextActionService")
 local Lighting = TiRexLib.GetService("Lighting")
 local Players = TiRexLib.GetService("Players")
+local StarterGui = TiRexLib.GetService("StarterGui")
 
 --// Variables
 local isStudio = RunService:IsStudio()
@@ -34,6 +35,7 @@ local tabs = {}
 local currentTabInstance = nil
 local tabIndex = 0
 local unloaded = false
+local activeRootGuis = {}
 
 local function optionFirstNonNil(...)
 	local values = { ... }
@@ -262,6 +264,47 @@ local UI_THEME = {
 }
 
 --// Functions
+local function TrackRootGui(gui)
+	if typeof(gui) == "Instance" then
+		activeRootGuis[gui] = true
+		if gui.Destroying then
+			gui.Destroying:Connect(function()
+				activeRootGuis[gui] = nil
+			end)
+		end
+	end
+	return gui
+end
+
+local function CleanupLibraryGuis()
+	for gui in pairs(activeRootGuis) do
+		if typeof(gui) == "Instance" and gui.Parent then
+			pcall(function()
+				gui:Destroy()
+			end)
+		end
+		activeRootGuis[gui] = nil
+	end
+end
+
+local function NotifyLibraryError(message)
+	local text = tostring(message or "Unknown library error")
+	warn("[TiRex] " .. text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "TiRex Library",
+			Text = text,
+			Duration = 5
+		})
+	end)
+end
+
+TiRexLib.CleanupLibraryGuis = CleanupLibraryGuis
+function TiRexLib:ReportLibraryError(message)
+	CleanupLibraryGuis()
+	NotifyLibraryError(message)
+end
+
 local function GetGui()
 	local newGui = Instance.new("ScreenGui")
 	pcall(function()
@@ -296,10 +339,10 @@ local function GetGui()
 	end
 
 	if not newGui.Parent then
-		newGui.Parent = cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui")
+		newGui.Parent = TiRexLib.GetService("CoreGui")
 	end
 
-	return newGui
+	return TrackRootGui(newGui)
 end
 
 local function SafeFont(font, weight, style)
@@ -1065,7 +1108,7 @@ function TiRexLib:Window(Settings)
 		acrylicBlur = false
 	end
 
-	local TiRexLib = GetGui()
+	local TiRexGui = GetGui()
 
 	local notifications = Instance.new("Frame")
 	notifications.Name = "Notifications"
@@ -1074,7 +1117,7 @@ function TiRexLib:Window(Settings)
 	notifications.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	notifications.BorderSizePixel = 0
 	notifications.Size = UDim2.fromScale(1, 1)
-	notifications.Parent = TiRexLib
+	notifications.Parent = TiRexGui
 	notifications.ZIndex = 2
 
 	local notificationsUIListLayout = Instance.new("UIListLayout")
@@ -1918,8 +1961,8 @@ function TiRexLib:Window(Settings)
 	globalSettingsUIScale.Scale = 1e-07
 	globalSettingsUIScale.Parent = globalSettings
 	globalSettings.Parent = base
-	base.Parent = TiRexLib
-	WindowFunctions.Gui = TiRexLib
+	base.Parent = TiRexGui
+	WindowFunctions.Gui = TiRexGui
 	WindowFunctions.Base = base
 	WindowFunctions.Notifications = notifications
 	WindowFunctions.GlobalSettings = globalSettings
@@ -7723,7 +7766,7 @@ function TiRexLib:Window(Settings)
 			end
 		end
 		table.clear(windowConnections)
-		TiRexLib:Destroy()
+		TiRexGui:Destroy()
 		unloaded = true
 	end
 
@@ -8083,7 +8126,7 @@ function TiRexLib:Window(Settings)
 		return out
 	end
 
-	TiRexLib.Enabled = false
+	TiRexGui.Enabled = false
 
 	local assetList = {}
 	for _, assetId in pairs(assets) do
@@ -8101,7 +8144,7 @@ function TiRexLib:Window(Settings)
 			end)
 		end)
 	end
-	TiRexLib.Enabled = true
+	TiRexGui.Enabled = true
 	windowState = true
 	setWindowMouseState(true)
 
@@ -9475,7 +9518,8 @@ function TiRexLib:CreateLoading(settings)
 		return loading
 	end
 
-	warn("[TiRex] CreateLoading failed: " .. tostring(loading))
+	CleanupLibraryGuis()
+	NotifyLibraryError("CreateLoading failed: " .. tostring(loading))
 	return {
 		Destroyed = false,
 		TotalSteps = tonumber(settings and settings.TotalSteps) or 1,
@@ -9497,17 +9541,25 @@ end
 function TiRexLib:CreateWindow(settings)
 	settings = settings or {}
 	self.Name = settings.Title or "TiRex"
-	local rawWindow = self:Window({
-		Title = self.Name,
-		Subtitle = settings.Footer or settings.Subtitle or "",
-		Size = settings.Size or DEFAULT_WINDOW_SIZE,
-		MinSize = settings.MinimumSize or settings.MinSize or MIN_WINDOW_SIZE,
-		DragStyle = settings.DragStyle or 1,
-		DisabledWindowControls = settings.DisabledWindowControls or {},
-		ShowUserInfo = settings.ShowUserInfo ~= false,
-		Keybind = settings.ToggleKeybind or settings.Keybind or Enum.KeyCode.G,
-		AcrylicBlur = settings.AcrylicBlur == true
-	})
+	local okWindow, rawWindow = pcall(function()
+		return self:Window({
+			Title = self.Name,
+			Subtitle = settings.Footer or settings.Subtitle or "",
+			Size = settings.Size or DEFAULT_WINDOW_SIZE,
+			MinSize = settings.MinimumSize or settings.MinSize or MIN_WINDOW_SIZE,
+			DragStyle = settings.DragStyle or 1,
+			DisabledWindowControls = settings.DisabledWindowControls or {},
+			ShowUserInfo = settings.ShowUserInfo ~= false,
+			Keybind = settings.ToggleKeybind or settings.Keybind or Enum.KeyCode.G,
+			AcrylicBlur = settings.AcrylicBlur == true
+		})
+	end)
+	if not okWindow or type(rawWindow) ~= "table" then
+		local message = "CreateWindow failed: " .. tostring(rawWindow)
+		CleanupLibraryGuis()
+		NotifyLibraryError(message)
+		error("[TiRex] " .. message, 0)
+	end
 
 	self._activeWindow = rawWindow
 	table.insert(compatState.Windows, rawWindow)
@@ -9518,7 +9570,16 @@ function TiRexLib:CreateWindow(settings)
 		end)
 	end
 
-	local tabGroup = rawWindow:TabGroup()
+	local okTabGroup, tabGroup = pcall(function()
+		return rawWindow:TabGroup()
+	end)
+	if not okTabGroup or not tabGroup then
+		local message = "CreateWindow tab group failed: " .. tostring(tabGroup)
+		CleanupLibraryGuis()
+		NotifyLibraryError(message)
+		error("[TiRex] " .. message, 0)
+	end
+
 	local windowProxy = {
 		Raw = rawWindow,
 		Settings = settings,
@@ -9531,10 +9592,18 @@ function TiRexLib:CreateWindow(settings)
 			image = "rbxassetid://" .. tostring(image)
 		end
 
-		local rawTab = tabGroup:Tab({
-			Name = tostring(name or "Tab"),
-			Image = image
-		})
+		local okTab, rawTab = pcall(function()
+			return tabGroup:Tab({
+				Name = tostring(name or "Tab"),
+				Image = image
+			})
+		end)
+		if not okTab or not rawTab then
+			local message = "AddTab failed: " .. tostring(rawTab)
+			CleanupLibraryGuis()
+			NotifyLibraryError(message)
+			error("[TiRex] " .. message, 0)
+		end
 
 		self.TabCount += 1
 		local tabProxy = makeTabProxy(rawTab)
