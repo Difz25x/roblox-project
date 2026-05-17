@@ -1985,13 +1985,25 @@ function TiRexLib:Window(Settings)
 
 		informationGroup.Visible = false
 
-		local userId = LocalPlayer and LocalPlayer.UserId or 0
-		local profileIcon = ResolveImageAsset(Settings.Icon or Settings.Avatar or Settings.Image, nil)
-		if not profileIcon then
-			local okThumb, thumb = pcall(function()
-				return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-			end)
-			profileIcon = (okThumb and thumb) or assets.tirexIcon
+		local userId = tonumber(Settings.UserId or Settings.Id or (LocalPlayer and LocalPlayer.UserId)) or 0
+		local customProfileIcon = Settings.Icon or Settings.Avatar or Settings.Image
+		local profileIcon = customProfileIcon ~= nil and ResolveImageAsset(customProfileIcon, nil) or nil
+		if not profileIcon or Settings.UseRobloxAvatar == true then
+			local thumbnailSizes = {
+				Enum.ThumbnailSize.Size420x420,
+				Enum.ThumbnailSize.Size150x150,
+				Enum.ThumbnailSize.Size100x100
+			}
+			for _, thumbnailSize in ipairs(thumbnailSizes) do
+				local okThumb, thumb = pcall(function()
+					return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, thumbnailSize)
+				end)
+				if okThumb and type(thumb) == "string" and thumb ~= "" then
+					profileIcon = thumb
+					break
+				end
+			end
+			profileIcon = profileIcon or assets.tirexIcon
 		end
 		local profileUsername = tostring(Settings.Username or Settings.User or (LocalPlayer and LocalPlayer.Name) or "Player")
 		local profileDisplayName = tostring(Settings.DisplayName or (LocalPlayer and LocalPlayer.DisplayName) or profileUsername)
@@ -2005,7 +2017,7 @@ function TiRexLib:Window(Settings)
 		profileDock.BorderSizePixel = 0
 		profileDock.AnchorPoint = Vector2.new(0, 1)
 		profileDock.Position = UDim2.new(0, -10, 1, -4)
-		profileDock.Size = UDim2.new(1, 20, 0, 62)
+		profileDock.Size = UDim2.new(1, 20, 0, 70)
 		profileDock.Parent = userInfo
 
 		local profileDockCorner = Instance.new("UICorner")
@@ -2026,7 +2038,7 @@ function TiRexLib:Window(Settings)
 		profileButton.BorderSizePixel = 0
 		profileButton.AnchorPoint = Vector2.new(0, 0.5)
 		profileButton.Position = UDim2.new(0, 12, 0.5, 0)
-		profileButton.Size = UDim2.fromOffset(46, 46)
+		profileButton.Size = UDim2.fromOffset(50, 50)
 		profileButton.Image = profileIcon
 		profileButton.ScaleType = Enum.ScaleType.Crop
 		profileButton.ZIndex = 2
@@ -2049,14 +2061,14 @@ function TiRexLib:Window(Settings)
 		profileNamePill.BackgroundTransparency = 1
 		profileNamePill.BorderSizePixel = 0
 		profileNamePill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-		profileNamePill.Text = profileUsername
+		profileNamePill.Text = profileDisplayName
 		profileNamePill.TextColor3 = Color3.fromRGB(235, 235, 235)
-		profileNamePill.TextSize = 13
+		profileNamePill.TextSize = 14
 		profileNamePill.TextTruncate = Enum.TextTruncate.AtEnd
 		profileNamePill.TextXAlignment = Enum.TextXAlignment.Left
 		profileNamePill.AnchorPoint = Vector2.new(0, 0.5)
-		profileNamePill.Position = UDim2.new(0, 68, 0.5, 0)
-		profileNamePill.Size = UDim2.new(1, -82, 0, 40)
+		profileNamePill.Position = UDim2.new(0, 72, 0.38, 0)
+		profileNamePill.Size = UDim2.new(1, -86, 0, 26)
 		profileNamePill.ZIndex = 2
 		profileNamePill.Parent = profileDock
 
@@ -2068,6 +2080,23 @@ function TiRexLib:Window(Settings)
 		profileNamePillPadding.PaddingLeft = UDim.new(0, 10)
 		profileNamePillPadding.PaddingRight = UDim.new(0, 10)
 		profileNamePillPadding.Parent = profileNamePill
+
+		local profileSubPill = Instance.new("TextButton")
+		profileSubPill.Name = "ProfileSubPill"
+		profileSubPill.AutoButtonColor = false
+		profileSubPill.BackgroundTransparency = 1
+		profileSubPill.BorderSizePixel = 0
+		profileSubPill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		profileSubPill.Text = "@" .. profileUsername
+		profileSubPill.TextColor3 = Color3.fromRGB(170, 170, 170)
+		profileSubPill.TextSize = 12
+		profileSubPill.TextTruncate = Enum.TextTruncate.AtEnd
+		profileSubPill.TextXAlignment = Enum.TextXAlignment.Left
+		profileSubPill.AnchorPoint = Vector2.new(0, 0.5)
+		profileSubPill.Position = UDim2.new(0, 82, 0.68, 0)
+		profileSubPill.Size = UDim2.new(1, -96, 0, 20)
+		profileSubPill.ZIndex = 2
+		profileSubPill.Parent = profileDock
 
 		local profileOverlay = Instance.new("TextButton")
 		profileOverlay.Name = "ProfileOverlay"
@@ -2094,7 +2123,7 @@ function TiRexLib:Window(Settings)
 		profileModal.BorderSizePixel = 0
 		profileModal.Active = true
 		profileModal.Position = UDim2.fromScale(0.5, 0.5)
-		profileModal.Size = UDim2.fromOffset(390, 286)
+		profileModal.Size = UDim2.fromOffset(470, 330)
 		profileModal.Visible = true
 		profileModal.ZIndex = 10
 		profileModal.Parent = profileOverlay
@@ -2151,7 +2180,7 @@ function TiRexLib:Window(Settings)
 		card.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 		card.BorderSizePixel = 0
 		card.Position = UDim2.fromOffset(16, 64)
-		card.Size = UDim2.new(1, -32, 0, 146)
+		card.Size = UDim2.new(1, -32, 0, 178)
 		card.ZIndex = 11
 		card.Parent = profileModal
 
@@ -2165,12 +2194,25 @@ function TiRexLib:Window(Settings)
 		cardStroke.Transparency = 0.94
 		cardStroke.Parent = card
 
+		local cardBanner = Instance.new("Frame")
+		cardBanner.Name = "ProfileBanner"
+		cardBanner.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		cardBanner.BackgroundTransparency = 0.92
+		cardBanner.BorderSizePixel = 0
+		cardBanner.Size = UDim2.new(1, 0, 0, 58)
+		cardBanner.ZIndex = 11
+		cardBanner.Parent = card
+
+		local cardBannerCorner = Instance.new("UICorner")
+		cardBannerCorner.CornerRadius = UI_THEME.Corners.ProfileCard
+		cardBannerCorner.Parent = cardBanner
+
 		local avatar = Instance.new("ImageLabel")
 		avatar.Name = "ProfileAvatar"
 		avatar.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 		avatar.BorderSizePixel = 0
-		avatar.Position = UDim2.fromOffset(14, 16)
-		avatar.Size = UDim2.fromOffset(64, 64)
+		avatar.Position = UDim2.fromOffset(18, 26)
+		avatar.Size = UDim2.fromOffset(86, 86)
 		avatar.Image = profileIcon
 		avatar.ScaleType = Enum.ScaleType.Crop
 		avatar.ZIndex = 12
@@ -2180,6 +2222,12 @@ function TiRexLib:Window(Settings)
 		avatarCorner.CornerRadius = UI_THEME.Corners.Avatar
 		avatarCorner.Parent = avatar
 
+		local avatarStroke = Instance.new("UIStroke")
+		avatarStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		avatarStroke.Color = Color3.fromRGB(255, 255, 255)
+		avatarStroke.Transparency = 0.72
+		avatarStroke.Parent = avatar
+
 		local tier = Instance.new("TextLabel")
 		tier.Name = "ProfileTier"
 		tier.BackgroundColor3 = Color3.fromRGB(218, 218, 218)
@@ -2188,8 +2236,8 @@ function TiRexLib:Window(Settings)
 		tier.Text = profileAccess
 		tier.TextColor3 = Color3.fromRGB(0, 0, 0)
 		tier.TextSize = 12
-		tier.Position = UDim2.fromOffset(14, 90)
-		tier.Size = UDim2.fromOffset(64, 22)
+		tier.Position = UDim2.fromOffset(18, 124)
+		tier.Size = UDim2.fromOffset(86, 24)
 		tier.ZIndex = 12
 		tier.Parent = card
 
@@ -2201,15 +2249,50 @@ function TiRexLib:Window(Settings)
 		rows.Name = "ProfileRows"
 		rows.BackgroundTransparency = 1
 		rows.BorderSizePixel = 0
-		rows.Position = UDim2.fromOffset(96, 17)
-		rows.Size = UDim2.new(1, -112, 1, -28)
+		rows.Position = UDim2.fromOffset(124, 24)
+		rows.Size = UDim2.new(1, -144, 1, -40)
 		rows.ZIndex = 12
 		rows.Parent = card
 
 		local rowsLayout = Instance.new("UIListLayout")
-		rowsLayout.Padding = UDim.new(0, 8)
+		rowsLayout.Padding = UDim.new(0, 6)
 		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		rowsLayout.Parent = rows
+
+		local identity = Instance.new("Frame")
+		identity.Name = "ProfileIdentity"
+		identity.BackgroundTransparency = 1
+		identity.BorderSizePixel = 0
+		identity.Size = UDim2.new(1, 0, 0, 40)
+		identity.ZIndex = 12
+		identity.Parent = rows
+
+		local displayTitle = Instance.new("TextLabel")
+		displayTitle.Name = "DisplayTitle"
+		displayTitle.BackgroundTransparency = 1
+		displayTitle.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+		displayTitle.Text = profileDisplayName
+		displayTitle.TextColor3 = Color3.fromRGB(248, 248, 248)
+		displayTitle.TextSize = 18
+		displayTitle.TextTruncate = Enum.TextTruncate.AtEnd
+		displayTitle.TextXAlignment = Enum.TextXAlignment.Left
+		displayTitle.Size = UDim2.new(1, 0, 0, 22)
+		displayTitle.ZIndex = 13
+		displayTitle.Parent = identity
+
+		local usernameTitle = Instance.new("TextLabel")
+		usernameTitle.Name = "UsernameTitle"
+		usernameTitle.BackgroundTransparency = 1
+		usernameTitle.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		usernameTitle.Text = "@" .. profileUsername
+		usernameTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+		usernameTitle.TextSize = 12
+		usernameTitle.TextTruncate = Enum.TextTruncate.AtEnd
+		usernameTitle.TextXAlignment = Enum.TextXAlignment.Left
+		usernameTitle.Position = UDim2.fromOffset(0, 22)
+		usernameTitle.Size = UDim2.new(1, 0, 0, 18)
+		usernameTitle.ZIndex = 13
+		usernameTitle.Parent = identity
 
 		local valueLabels = {}
 		local function addProfileRow(rowName, rowValue)
@@ -2217,7 +2300,7 @@ function TiRexLib:Window(Settings)
 			row.Name = rowName:gsub("%s+", "") .. "Row"
 			row.BackgroundTransparency = 1
 			row.BorderSizePixel = 0
-			row.Size = UDim2.new(1, 0, 0, 20)
+			row.Size = UDim2.new(1, 0, 0, 19)
 			row.ZIndex = 12
 			row.Parent = rows
 
@@ -2229,7 +2312,7 @@ function TiRexLib:Window(Settings)
 			label.TextColor3 = Color3.fromRGB(170, 170, 170)
 			label.TextSize = 13
 			label.TextXAlignment = Enum.TextXAlignment.Left
-			label.Size = UDim2.fromOffset(110, 20)
+			label.Size = UDim2.fromOffset(110, 19)
 			label.ZIndex = 13
 			label.Parent = row
 
@@ -2243,7 +2326,7 @@ function TiRexLib:Window(Settings)
 			value.TextXAlignment = Enum.TextXAlignment.Right
 			value.TextTruncate = Enum.TextTruncate.AtEnd
 			value.Position = UDim2.fromOffset(112, 0)
-			value.Size = UDim2.new(1, -112, 0, 20)
+			value.Size = UDim2.new(1, -112, 0, 19)
 			value.ZIndex = 13
 			value.Parent = row
 
@@ -2252,7 +2335,6 @@ function TiRexLib:Window(Settings)
 		end
 
 		addProfileRow("Username", profileUsername)
-		addProfileRow("Display Name", profileDisplayName)
 		addProfileRow("Access", profileAccess)
 		addProfileRow("Game", Settings.Game or "Violence District")
 
@@ -2260,8 +2342,8 @@ function TiRexLib:Window(Settings)
 		actions.Name = "ProfileActions"
 		actions.BackgroundTransparency = 1
 		actions.BorderSizePixel = 0
-		actions.Position = UDim2.new(0, 16, 1, -48)
-		actions.Size = UDim2.new(1, -32, 0, 34)
+		actions.Position = UDim2.new(0, 16, 1, -54)
+		actions.Size = UDim2.new(1, -32, 0, 38)
 		actions.ZIndex = 11
 		actions.Parent = profileModal
 
@@ -2302,7 +2384,7 @@ function TiRexLib:Window(Settings)
 			button.Text = text
 			button.TextColor3 = Color3.fromRGB(255, 255, 255)
 			button.TextSize = 13
-			button.Size = UDim2.fromOffset(102, 34)
+			button.Size = UDim2.fromOffset(132, 38)
 			button.ZIndex = 12
 			button.Parent = actions
 
@@ -2381,6 +2463,9 @@ function TiRexLib:Window(Settings)
 		profileNamePill.MouseButton1Click:Connect(function()
 			profileOverlay.Visible = not profileOverlay.Visible
 		end)
+		profileSubPill.MouseButton1Click:Connect(function()
+			profileOverlay.Visible = not profileOverlay.Visible
+		end)
 		profileOverlay.MouseButton1Click:Connect(function()
 			profile:Hide()
 		end)
@@ -2401,9 +2486,18 @@ function TiRexLib:Window(Settings)
 		end
 		function profile:SetUsername(value)
 			profileUsername = tostring(value or "-")
-			profileNamePill.Text = profileUsername
+			profileSubPill.Text = "@" .. profileUsername
+			usernameTitle.Text = "@" .. profileUsername
 			if valueLabels.Username then
 				valueLabels.Username.Text = profileUsername
+			end
+		end
+		function profile:SetDisplayName(value)
+			profileDisplayName = tostring(value or profileUsername)
+			profileNamePill.Text = profileDisplayName
+			displayTitle.Text = profileDisplayName
+			if valueLabels["Display Name"] then
+				valueLabels["Display Name"].Text = profileDisplayName
 			end
 		end
 		function profile:SetExpires(value)
