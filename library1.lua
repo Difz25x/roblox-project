@@ -237,23 +237,27 @@ local UI_THEME = {
 		WindowControl = UDim.new(1, 0),
 	},
 	Colors = {
-		WindowBg = Color3.fromRGB(18, 18, 22),
-		SectionBg = Color3.fromRGB(255, 255, 255),
-		SectionBgTransparency = 0.94,
-		Accent = Color3.fromRGB(140, 120, 255),
-		Stroke = Color3.fromRGB(255, 255, 255),
-		StrokeTransparency = 0.92,
-		SectionStrokeTransparency = 0.88,
-		ToggleEnabled = Color3.fromRGB(140, 120, 255),
-		ToggleDisabled = Color3.fromRGB(48, 49, 53),
-		CheckboxEnabled = Color3.fromRGB(140, 120, 255),
-		CheckboxDisabled = Color3.fromRGB(42, 43, 47),
-		NotificationBg = Color3.fromRGB(22, 22, 26),
-		DialogBg = Color3.fromRGB(22, 22, 26),
+		WindowBg = Color3.fromRGB(13, 14, 17),
+		SidebarBg = Color3.fromRGB(18, 18, 21),
+		PanelBg = Color3.fromRGB(23, 24, 28),
+		SectionBg = Color3.fromRGB(29, 30, 35),
+		SectionBgTransparency = 0.08,
+		Accent = Color3.fromRGB(255, 139, 43),
+		AccentDim = Color3.fromRGB(119, 72, 36),
+		Stroke = Color3.fromRGB(79, 70, 61),
+		Divider = Color3.fromRGB(70, 64, 57),
+		StrokeTransparency = 0.72,
+		SectionStrokeTransparency = 0.68,
+		ToggleEnabled = Color3.fromRGB(255, 139, 43),
+		ToggleDisabled = Color3.fromRGB(45, 47, 53),
+		CheckboxEnabled = Color3.fromRGB(255, 139, 43),
+		CheckboxDisabled = Color3.fromRGB(40, 42, 48),
+		NotificationBg = Color3.fromRGB(18, 19, 22),
+		DialogBg = Color3.fromRGB(18, 19, 22),
 		DialogOverlay = Color3.fromRGB(0, 0, 0),
-		InputBg = Color3.fromRGB(30, 30, 36),
-		SliderFill = Color3.fromRGB(140, 120, 255),
-		DropdownBg = Color3.fromRGB(22, 22, 26),
+		InputBg = Color3.fromRGB(24, 25, 30),
+		SliderFill = Color3.fromRGB(255, 139, 43),
+		DropdownBg = Color3.fromRGB(20, 21, 25),
 	},
 	Animation = {
 		Fast = TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
@@ -1163,24 +1167,42 @@ function TiRexLib:Window(Settings)
 	local baseUIStroke = Instance.new("UIStroke")
 	baseUIStroke.Name = "BaseUIStroke"
 	baseUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	baseUIStroke.Color = Color3.fromRGB(255, 255, 255)
+	baseUIStroke.Color = UI_THEME.Colors.Stroke
 	baseUIStroke.Transparency = UI_THEME.Colors.StrokeTransparency
 	baseUIStroke.Parent = base
 
+	local accentRail = Instance.new("Frame")
+	accentRail.Name = "AccentRail"
+	accentRail.BackgroundColor3 = UI_THEME.Colors.Accent
+	accentRail.BorderSizePixel = 0
+	accentRail.Position = UDim2.new(0, 14, 0, 0)
+	accentRail.Size = UDim2.new(1, -28, 0, 3)
+	accentRail.ZIndex = 2
+	accentRail.Parent = base
+
 	local sidebar = Instance.new("Frame")
 	sidebar.Name = "Sidebar"
-	sidebar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	sidebar.BackgroundTransparency = 1
+	sidebar.BackgroundColor3 = UI_THEME.Colors.SidebarBg
+	sidebar.BackgroundTransparency = 0
 	sidebar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	sidebar.BorderSizePixel = 0
 	sidebar.Position = UDim2.fromScale(-3.52e-08, 4.69e-08)
 	sidebar.Size = UDim2.fromScale(0.325, 1)
 
+	local sidebarAccent = Instance.new("Frame")
+	sidebarAccent.Name = "SidebarAccent"
+	sidebarAccent.BackgroundColor3 = UI_THEME.Colors.Accent
+	sidebarAccent.BackgroundTransparency = 0.1
+	sidebarAccent.BorderSizePixel = 0
+	sidebarAccent.Position = UDim2.fromOffset(0, 12)
+	sidebarAccent.Size = UDim2.new(0, 3, 1, -24)
+	sidebarAccent.Parent = sidebar
+
 	local divider = Instance.new("Frame")
 	divider.Name = "Divider"
 	divider.AnchorPoint = Vector2.new(1, 0)
-	divider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	divider.BackgroundTransparency = 0.9
+	divider.BackgroundColor3 = UI_THEME.Colors.Divider
+	divider.BackgroundTransparency = 0.35
 	divider.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.fromScale(1, 0)
@@ -1337,8 +1359,8 @@ function TiRexLib:Window(Settings)
 	local divider1 = Instance.new("Frame")
 	divider1.Name = "Divider"
 	divider1.AnchorPoint = Vector2.new(0, 1)
-	divider1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	divider1.BackgroundTransparency = 0.9
+	divider1.BackgroundColor3 = UI_THEME.Colors.Divider
+	divider1.BackgroundTransparency = 0.35
 	divider1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider1.BorderSizePixel = 0
 	divider1.Position = UDim2.fromScale(0, 1)
@@ -1359,8 +1381,8 @@ function TiRexLib:Window(Settings)
 	local divider2 = Instance.new("Frame")
 	divider2.Name = "Divider"
 	divider2.AnchorPoint = Vector2.new(0, 1)
-	divider2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	divider2.BackgroundTransparency = 0.9
+	divider2.BackgroundColor3 = UI_THEME.Colors.Divider
+	divider2.BackgroundTransparency = 0.35
 	divider2.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider2.BorderSizePixel = 0
 	divider2.Position = UDim2.fromScale(0, 1)
@@ -1386,7 +1408,8 @@ function TiRexLib:Window(Settings)
 	local globalSettingsButton = Instance.new("ImageButton")
 	globalSettingsButton.Name = "GlobalSettingsButton"
 	globalSettingsButton.Image = assets.globe
-	globalSettingsButton.ImageTransparency = 0.5
+	globalSettingsButton.ImageColor3 = UI_THEME.Colors.Accent
+	globalSettingsButton.ImageTransparency = 0.45
 	globalSettingsButton.AnchorPoint = Vector2.new(1, 0.5)
 	globalSettingsButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	globalSettingsButton.BackgroundTransparency = 1
@@ -1399,11 +1422,11 @@ function TiRexLib:Window(Settings)
 	local function ChangeGlobalSettingsButtonState(State)
 		if State == "Default" then
 			Tween(globalSettingsButton, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {
-				ImageTransparency = 0.5
+				ImageTransparency = 0.45
 			}):Play()
 		elseif State == "Hover" then
 			Tween(globalSettingsButton, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {
-				ImageTransparency = 0.3
+				ImageTransparency = 0.18
 			}):Play()
 		end
 	end
@@ -1745,8 +1768,8 @@ function TiRexLib:Window(Settings)
 
 	local topbar = Instance.new("Frame")
 	topbar.Name = "Topbar"
-	topbar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	topbar.BackgroundTransparency = 1
+	topbar.BackgroundColor3 = UI_THEME.Colors.PanelBg
+	topbar.BackgroundTransparency = 0.35
 	topbar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	topbar.BorderSizePixel = 0
 	topbar.Size = UDim2.new(1, 0, 0, 63)
@@ -1754,8 +1777,8 @@ function TiRexLib:Window(Settings)
 	local divider4 = Instance.new("Frame")
 	divider4.Name = "Divider"
 	divider4.AnchorPoint = Vector2.new(0, 1)
-	divider4.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	divider4.BackgroundTransparency = 0.9
+	divider4.BackgroundColor3 = UI_THEME.Colors.Divider
+	divider4.BackgroundTransparency = 0.35
 	divider4.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider4.BorderSizePixel = 0
 	divider4.Position = UDim2.fromScale(0, 1)
@@ -1779,7 +1802,8 @@ function TiRexLib:Window(Settings)
 	local moveIcon = Instance.new("ImageButton")
 	moveIcon.Name = "MoveIcon"
 	moveIcon.Image = assets.transform
-	moveIcon.ImageTransparency = 0.7
+	moveIcon.ImageColor3 = UI_THEME.Colors.Accent
+	moveIcon.ImageTransparency = 0.55
 	moveIcon.AnchorPoint = Vector2.new(1, 0.5)
 	moveIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	moveIcon.BackgroundTransparency = 1
@@ -1808,11 +1832,11 @@ function TiRexLib:Window(Settings)
 	local function ChangemoveIconState(State)
 		if State == "Default" then
 			Tween(moveIcon, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {
-				ImageTransparency = 0.7
+				ImageTransparency = 0.55
 			}):Play()
 		elseif State == "Hover" then
 			Tween(moveIcon, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {
-				ImageTransparency = 0.4
+				ImageTransparency = 0.24
 			}):Play()
 		end
 	end
@@ -1902,9 +1926,9 @@ function TiRexLib:Window(Settings)
 	currentTab.RichText = true
 	currentTab.Text = ""
 	currentTab.RichText = true
-	currentTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+	currentTab.TextColor3 = UI_THEME.Colors.Accent
 	currentTab.TextSize = 15
-	currentTab.TextTransparency = 0.5
+	currentTab.TextTransparency = 0.08
 	currentTab.TextTruncate = Enum.TextTruncate.SplitWord
 	currentTab.TextXAlignment = Enum.TextXAlignment.Left
 	currentTab.TextYAlignment = Enum.TextYAlignment.Top
@@ -2015,6 +2039,7 @@ function TiRexLib:Window(Settings)
 		profileDock.BackgroundColor3 = UI_THEME.Colors.SectionBg
 		profileDock.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 		profileDock.BorderSizePixel = 0
+		profileDock.ClipsDescendants = true
 		profileDock.AnchorPoint = Vector2.new(0, 1)
 		profileDock.Position = UDim2.new(0, -10, 1, -4)
 		profileDock.Size = UDim2.new(1, 20, 0, 70)
@@ -2026,9 +2051,18 @@ function TiRexLib:Window(Settings)
 
 		local profileDockStroke = Instance.new("UIStroke")
 		profileDockStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		profileDockStroke.Color = Color3.fromRGB(255, 255, 255)
-		profileDockStroke.Transparency = 0.94
+		profileDockStroke.Color = UI_THEME.Colors.Accent
+		profileDockStroke.Transparency = 0.82
 		profileDockStroke.Parent = profileDock
+
+		local profileDockAccent = Instance.new("Frame")
+		profileDockAccent.Name = "ProfileDockAccent"
+		profileDockAccent.BackgroundColor3 = UI_THEME.Colors.Accent
+		profileDockAccent.BackgroundTransparency = 0.05
+		profileDockAccent.BorderSizePixel = 0
+		profileDockAccent.Size = UDim2.new(0, 3, 1, 0)
+		profileDockAccent.ZIndex = 2
+		profileDockAccent.Parent = profileDock
 
 		local profileButton = Instance.new("ImageButton")
 		profileButton.Name = "ProfileButton"
@@ -2050,7 +2084,7 @@ function TiRexLib:Window(Settings)
 
 		local profileButtonStroke = Instance.new("UIStroke")
 		profileButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		profileButtonStroke.Color = Color3.fromRGB(255, 255, 255)
+		profileButtonStroke.Color = UI_THEME.Colors.Accent
 		profileButtonStroke.Transparency = 0.88
 		profileButtonStroke.Parent = profileButton
 
@@ -2134,8 +2168,8 @@ function TiRexLib:Window(Settings)
 
 		local profileModalStroke = Instance.new("UIStroke")
 		profileModalStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		profileModalStroke.Color = Color3.fromRGB(255, 255, 255)
-		profileModalStroke.Transparency = 0.86
+		profileModalStroke.Color = UI_THEME.Colors.Stroke
+		profileModalStroke.Transparency = 0.62
 		profileModalStroke.Parent = profileModal
 
 		local header = Instance.new("Frame")
@@ -2190,14 +2224,14 @@ function TiRexLib:Window(Settings)
 
 		local cardStroke = Instance.new("UIStroke")
 		cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		cardStroke.Color = Color3.fromRGB(255, 255, 255)
-		cardStroke.Transparency = 0.94
+		cardStroke.Color = UI_THEME.Colors.Stroke
+		cardStroke.Transparency = 0.74
 		cardStroke.Parent = card
 
 		local cardBanner = Instance.new("Frame")
 		cardBanner.Name = "ProfileBanner"
-		cardBanner.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		cardBanner.BackgroundTransparency = 0.92
+		cardBanner.BackgroundColor3 = UI_THEME.Colors.Accent
+		cardBanner.BackgroundTransparency = 0.72
 		cardBanner.BorderSizePixel = 0
 		cardBanner.Size = UDim2.new(1, 0, 0, 58)
 		cardBanner.ZIndex = 11
@@ -2224,17 +2258,17 @@ function TiRexLib:Window(Settings)
 
 		local avatarStroke = Instance.new("UIStroke")
 		avatarStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		avatarStroke.Color = Color3.fromRGB(255, 255, 255)
-		avatarStroke.Transparency = 0.72
+		avatarStroke.Color = UI_THEME.Colors.Accent
+		avatarStroke.Transparency = 0.24
 		avatarStroke.Parent = avatar
 
 		local tier = Instance.new("TextLabel")
 		tier.Name = "ProfileTier"
-		tier.BackgroundColor3 = Color3.fromRGB(218, 218, 218)
+		tier.BackgroundColor3 = UI_THEME.Colors.Accent
 		tier.BorderSizePixel = 0
 		tier.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 		tier.Text = profileAccess
-		tier.TextColor3 = Color3.fromRGB(0, 0, 0)
+		tier.TextColor3 = UI_THEME.Colors.WindowBg
 		tier.TextSize = 12
 		tier.Position = UDim2.fromOffset(18, 124)
 		tier.Size = UDim2.fromOffset(86, 24)
@@ -2394,14 +2428,14 @@ function TiRexLib:Window(Settings)
 
 			local buttonStroke = Instance.new("UIStroke")
 			buttonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-			buttonStroke.Color = Color3.fromRGB(255, 255, 255)
-			buttonStroke.Transparency = 0.92
+			buttonStroke.Color = UI_THEME.Colors.Accent
+			buttonStroke.Transparency = 0.82
 			buttonStroke.Parent = button
 
 			button.MouseEnter:Connect(function()
 				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
-					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-					BackgroundTransparency = 0.88
+					BackgroundColor3 = UI_THEME.Colors.Accent,
+					BackgroundTransparency = 0.18
 				}):Play()
 			end)
 			button.MouseLeave:Connect(function()
@@ -3018,7 +3052,7 @@ function TiRexLib:Window(Settings)
 			tabSwitcher.TextSize = 14
 			tabSwitcher.AutoButtonColor = false
 			tabSwitcher.AnchorPoint = Vector2.new(0.5, 0)
-			tabSwitcher.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			tabSwitcher.BackgroundColor3 = UI_THEME.Colors.SectionBg
 			tabSwitcher.BackgroundTransparency = 1
 			tabSwitcher.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			tabSwitcher.BorderSizePixel = 0
@@ -3036,9 +3070,18 @@ function TiRexLib:Window(Settings)
 			local tabSwitcherUIStroke = Instance.new("UIStroke")
 			tabSwitcherUIStroke.Name = "TabSwitcherUIStroke"
 			tabSwitcherUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-			tabSwitcherUIStroke.Color = Color3.fromRGB(255, 255, 255)
+			tabSwitcherUIStroke.Color = UI_THEME.Colors.Accent
 			tabSwitcherUIStroke.Transparency = 1
 			tabSwitcherUIStroke.Parent = tabSwitcher
+
+			local tabAccent = Instance.new("Frame")
+			tabAccent.Name = "TabAccent"
+			tabAccent.BackgroundColor3 = UI_THEME.Colors.Accent
+			tabAccent.BackgroundTransparency = 1
+			tabAccent.BorderSizePixel = 0
+			tabAccent.LayoutOrder = 0
+			tabAccent.Size = UDim2.fromOffset(3, 20)
+			tabAccent.Parent = tabSwitcher
 
 			local tabSwitcherUIListLayout = Instance.new("UIListLayout")
 			tabSwitcherUIListLayout.Name = "TabSwitcherUIListLayout"
@@ -3057,6 +3100,7 @@ function TiRexLib:Window(Settings)
 				tabImage.BackgroundTransparency = 1
 				tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
 				tabImage.BorderSizePixel = 0
+				tabImage.LayoutOrder = 1
 				tabImage.Size = UDim2.fromOffset(18, 18)
 				tabImage.Parent = tabSwitcher
 			end
@@ -3081,9 +3125,9 @@ function TiRexLib:Window(Settings)
 			tabSwitcherName.BackgroundTransparency = 1
 			tabSwitcherName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			tabSwitcherName.BorderSizePixel = 0
-			tabSwitcherName.Size = UDim2.fromScale(1, 0)
+			tabSwitcherName.Size = UDim2.new(1, Settings.Image and -84 or -57, 0, 0)
 			tabSwitcherName.Parent = tabSwitcher
-			tabSwitcherName.LayoutOrder = 1
+			tabSwitcherName.LayoutOrder = 2
 
 			local tabSwitcherUIPadding = Instance.new("UIPadding")
 			tabSwitcherUIPadding.Name = "TabSwitcherUIPadding"
@@ -3759,7 +3803,7 @@ function TiRexLib:Window(Settings)
 					sliderBar.Image = assets.sliderbar
 					sliderBar.ImageTransparency = 1
 					sliderBar.ImageColor3 = Color3.fromRGB(87, 86, 86)
-					sliderBar.BackgroundColor3 = Color3.fromRGB(38, 39, 42)
+					sliderBar.BackgroundColor3 = UI_THEME.Colors.InputBg
 					sliderBar.BackgroundTransparency = 0.06
 					sliderBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderBar.BorderSizePixel = 0
@@ -3775,7 +3819,7 @@ function TiRexLib:Window(Settings)
 
 					local sliderFill = Instance.new("Frame")
 					sliderFill.Name = "SliderFill"
-					sliderFill.BackgroundColor3 = Color3.fromRGB(168, 170, 176)
+					sliderFill.BackgroundColor3 = UI_THEME.Colors.SliderFill
 					sliderFill.BackgroundTransparency = 0
 					sliderFill.BorderSizePixel = 0
 					sliderFill.Size = UDim2.fromScale(0, 1)
@@ -7069,12 +7113,17 @@ function TiRexLib:Window(Settings)
 
 				for i, tabInfo in pairs(tabs) do
 					Tween(i, TweenInfo.new(easetime, Enum.EasingStyle.Sine), {
-						BackgroundTransparency = (i == tabSwitcher and 0.98 or 1)
+						BackgroundTransparency = (i == tabSwitcher and 0.88 or 1)
 					}):Play()
 
 					if tabInfo.tabStroke then
 						Tween(tabInfo.tabStroke, TweenInfo.new(easetime, Enum.EasingStyle.Sine), {
-							Transparency = (i == tabSwitcher and 0.95 or 1)
+							Transparency = (i == tabSwitcher and 0.76 or 1)
+						}):Play()
+					end
+					if tabInfo.tabAccent then
+						Tween(tabInfo.tabAccent, TweenInfo.new(easetime, Enum.EasingStyle.Sine), {
+							BackgroundTransparency = (i == tabSwitcher and 0.05 or 1)
 						}):Play()
 					end
 					if tabInfo.switcherImage then
@@ -7231,6 +7280,7 @@ function TiRexLib:Window(Settings)
 			tabs[tabSwitcher] = {
 				tabContent = elements1,
 				tabStroke = tabSwitcherUIStroke,
+				tabAccent = tabAccent,
 				switcherImage = tabImage,
 				switcherName = tabSwitcherName,
 			}
@@ -8410,8 +8460,8 @@ local function createLoadingGui(settings)
 	corner.Parent = holder
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 255, 255)
-	stroke.Transparency = 0.88
+	stroke.Color = UI_THEME.Colors.Stroke
+	stroke.Transparency = UI_THEME.Colors.StrokeTransparency
 	stroke.Parent = holder
 
 	local padding = Instance.new("UIPadding")
@@ -8462,7 +8512,7 @@ local function createLoadingGui(settings)
 
 	local progressBack = Instance.new("Frame")
 	progressBack.Name = "ProgressBack"
-	progressBack.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	progressBack.BackgroundColor3 = UI_THEME.Colors.InputBg
 	progressBack.BorderSizePixel = 0
 	progressBack.Size = UDim2.new(1, 0, 0, 5)
 	progressBack.Parent = holder
@@ -8473,7 +8523,7 @@ local function createLoadingGui(settings)
 
 	local progress = Instance.new("Frame")
 	progress.Name = "Progress"
-	progress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	progress.BackgroundColor3 = UI_THEME.Colors.Accent
 	progress.BorderSizePixel = 0
 	progress.Size = UDim2.fromScale(0, 1)
 	progress.Parent = progressBack
@@ -9857,7 +9907,7 @@ local function compatNormalizeTheme(theme)
 	return {
 		Background = compatColorFromHex(payload.BackgroundColor or payload.Background or payload.WindowBackground, Color3.fromRGB(24, 24, 24)),
 		Main = compatColorFromHex(payload.MainColor or payload.Main or payload.ElementBackground, Color3.fromRGB(36, 36, 36)),
-		Accent = compatColorFromHex(payload.AccentColor or payload.Accent, Color3.fromRGB(255, 255, 255)),
+		Accent = compatColorFromHex(payload.AccentColor or payload.Accent, Color3.fromRGB(255, 139, 43)),
 		Outline = compatColorFromHex(payload.OutlineColor or payload.Outline or payload.BorderColor, Color3.fromRGB(82, 82, 82)),
 		Font = compatColorFromHex(payload.FontColor or payload.TextColor or payload.Font, Color3.fromRGB(255, 255, 255)),
 		MutedFont = compatColorFromHex(payload.MutedFontColor or payload.MutedTextColor, Color3.fromRGB(205, 205, 205))
@@ -9872,6 +9922,7 @@ local function compatApplyThemeToRoot(root, theme)
 	local normalized = compatNormalizeTheme(theme)
 	compatState.ActiveThemes[root] = theme
 	local panelColor = normalized.Main
+	local sidebarColor = normalized.Background:Lerp(normalized.Main, 0.35)
 	local controlColor = normalized.Main:Lerp(normalized.Font, 0.045)
 	local trackColor = normalized.Main:Lerp(normalized.Font, 0.09)
 	local sliderFillColor = normalized.Accent:Lerp(normalized.Background, 0.28)
@@ -9908,8 +9959,17 @@ local function compatApplyThemeToRoot(root, theme)
 		ProfileModal = true,
 		ProfileDock = true
 	}
+	local accentNames = {
+		AccentRail = true,
+		SidebarAccent = true,
+		TabAccent = true,
+		ProfileBanner = true,
+		ProfileDockAccent = true,
+		SliderFill = true
+	}
 	local mainNames = {
 		Section = true,
+		TabSwitcher = true,
 		Dropdown = true,
 		Search = true,
 		InputBox = true,
@@ -9949,6 +10009,8 @@ local function compatApplyThemeToRoot(root, theme)
 				obj.TextColor3 = parentName == "CheckboxButton" and normalized.Background or normalized.Font
 			elseif obj.Name == "ProfileTier" then
 				obj.TextColor3 = normalized.Background
+			elseif obj.Name == "CurrentTab" then
+				obj.TextColor3 = normalized.Accent
 			else
 				obj.TextColor3 = normalized.Font
 			end
@@ -9961,7 +10023,7 @@ local function compatApplyThemeToRoot(root, theme)
 				elseif obj.Name == "ProfileOverlay" then
 					obj.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				elseif obj.Name == "ProfileTier" then
-					obj.BackgroundColor3 = normalized.Font
+					obj.BackgroundColor3 = normalized.Accent
 				elseif obj.Name == "ProfileActionButton" then
 					obj.BackgroundColor3 = panelColor
 					obj.BackgroundTransparency = 0.10
@@ -9981,8 +10043,15 @@ local function compatApplyThemeToRoot(root, theme)
 				obj.BackgroundColor3 = panelColor
 			end
 		elseif obj:IsA("Frame") or obj:IsA("CanvasGroup") then
-			if obj.BackgroundTransparency < 0.99 then
-				if obj.Name == "ProfileDock" or obj.Name == "ProfileCard" then
+			if accentNames[obj.Name] then
+				obj.BackgroundColor3 = normalized.Accent
+			elseif obj.BackgroundTransparency < 0.99 then
+				if obj.Name == "Sidebar" then
+					obj.BackgroundColor3 = sidebarColor
+				elseif obj.Name == "Topbar" then
+					obj.BackgroundColor3 = panelColor
+					obj.BackgroundTransparency = 0.22
+				elseif obj.Name == "ProfileDock" or obj.Name == "ProfileCard" then
 					obj.BackgroundColor3 = panelColor
 					obj.BackgroundTransparency = 0.10
 				elseif backgroundNames[obj.Name] then
@@ -9997,7 +10066,9 @@ local function compatApplyThemeToRoot(root, theme)
 				end
 			end
 		elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-			if obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" or obj.Name == "LucideSprite" then
+			if obj.Name == "GlobalSettingsButton" or obj.Name == "MoveIcon" then
+				obj.ImageColor3 = normalized.Accent
+			elseif obj.Name == "TabImage" or obj.Name == "GroupIcon" or obj.Name == "IconImage" or obj.Name == "LucideSprite" then
 				obj.ImageColor3 = normalized.Font
 			elseif obj.Name == "SliderBar" then
 				obj.BackgroundColor3 = trackColor
@@ -10022,45 +10093,45 @@ TiRexLib.ThemeManager.BuiltInThemes = TiRexLib.ThemeManager.BuiltInThemes or {
 	Default = {
 		"Default",
 		{
-			BackgroundColor = "0f1012",
-			MainColor = "1a1b1f",
-			AccentColor = "e0e0e0",
-			OutlineColor = "3a3c40",
-			FontColor = "f5f5f6",
-			MutedFontColor = "a9abb0"
+			BackgroundColor = "0d0e11",
+			MainColor = "1d1e23",
+			AccentColor = "ff8b2b",
+			OutlineColor = "4f463d",
+			FontColor = "f7f4ef",
+			MutedFontColor = "b9b1a8"
 		}
 	},
 	["Minimalist White/Silver"] = {
 		"Minimalist White/Silver",
 		{
-			BackgroundColor = "0f1012",
-			MainColor = "1a1b1f",
-			AccentColor = "e0e0e0",
-			OutlineColor = "3a3c40",
-			FontColor = "f5f5f6",
-			MutedFontColor = "a9abb0"
+			BackgroundColor = "0d0e11",
+			MainColor = "1d1e23",
+			AccentColor = "ff8b2b",
+			OutlineColor = "4f463d",
+			FontColor = "f7f4ef",
+			MutedFontColor = "b9b1a8"
 		}
 	},
 	TiRex = {
 		"TiRex",
 		{
-			BackgroundColor = "0f1012",
-			MainColor = "1a1b1f",
-			AccentColor = "e0e0e0",
-			OutlineColor = "3a3c40",
-			FontColor = "f5f5f6",
-			MutedFontColor = "a9abb0"
+			BackgroundColor = "0d0e11",
+			MainColor = "1d1e23",
+			AccentColor = "ff8b2b",
+			OutlineColor = "4f463d",
+			FontColor = "f7f4ef",
+			MutedFontColor = "b9b1a8"
 		}
 	},
 	Professional = {
 		"Professional",
 		{
-			BackgroundColor = "0f1012",
-			MainColor = "1a1b1f",
-			AccentColor = "e0e0e0",
-			OutlineColor = "3a3c40",
-			FontColor = "f5f5f6",
-			MutedFontColor = "a9abb0"
+			BackgroundColor = "0d0e11",
+			MainColor = "1d1e23",
+			AccentColor = "ff8b2b",
+			OutlineColor = "4f463d",
+			FontColor = "f7f4ef",
+			MutedFontColor = "b9b1a8"
 		}
 	}
 }
