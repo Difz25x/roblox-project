@@ -1,4 +1,4 @@
-local MacLib = { 
+local TiRexLib = { 
 	Options = {}, 
 	Toggles = {},
 	Folder = "TiRex",
@@ -9,14 +9,14 @@ local MacLib = {
 }
 
 --// Services
-local TweenService = MacLib.GetService("TweenService")
-local RunService = MacLib.GetService("RunService")
-local HttpService = MacLib.GetService("HttpService")
-local ContentProvider = MacLib.GetService("ContentProvider")
-local UserInputService = MacLib.GetService("UserInputService")
-local ContextActionService = MacLib.GetService("ContextActionService")
-local Lighting = MacLib.GetService("Lighting")
-local Players = MacLib.GetService("Players")
+local TweenService = TiRexLib.GetService("TweenService")
+local RunService = TiRexLib.GetService("RunService")
+local HttpService = TiRexLib.GetService("HttpService")
+local ContentProvider = TiRexLib.GetService("ContentProvider")
+local UserInputService = TiRexLib.GetService("UserInputService")
+local ContextActionService = TiRexLib.GetService("ContextActionService")
+local Lighting = TiRexLib.GetService("Lighting")
+local Players = TiRexLib.GetService("Players")
 
 --// Variables
 local isStudio = RunService:IsStudio()
@@ -66,7 +66,7 @@ end
 local optionUnpack = table.unpack or unpack
 
 local keybindCaptureDepth = 0
-local keybindCaptureActionName = "MacLib_BlockGameInputWhileBinding"
+local keybindCaptureActionName = "TiRexLib_BlockGameInputWhileBinding"
 local keybindCaptureInputs = {
 	Enum.UserInputType.Keyboard,
 	Enum.UserInputType.MouseButton1,
@@ -119,7 +119,7 @@ local function optionCall(callback, ...)
 	local function invoke()
 		local ok, err = pcall(callback, optionUnpack(args))
 		if not ok then
-			warn("[MacLib] callback error: " .. tostring(err))
+			warn("[TiRexLib] callback error: " .. tostring(err))
 		end
 	end
 	if task and type(task.spawn) == "function" then
@@ -1040,7 +1040,7 @@ local function tweenIconTransparency(icon, transparency, tweenInfo)
 end
 
 --// Library Functions
-function MacLib:Window(Settings)
+function TiRexLib:Window(Settings)
 	Settings = Settings or {}
 	Settings.Title = tostring(Settings.Title or self.Name or "TiRex")
 	Settings.Subtitle = tostring(Settings.Subtitle or Settings.Footer or "")
@@ -1065,7 +1065,7 @@ function MacLib:Window(Settings)
 		acrylicBlur = false
 	end
 
-	local macLib = GetGui()
+	local TiRexLib = GetGui()
 
 	local notifications = Instance.new("Frame")
 	notifications.Name = "Notifications"
@@ -1074,7 +1074,7 @@ function MacLib:Window(Settings)
 	notifications.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	notifications.BorderSizePixel = 0
 	notifications.Size = UDim2.fromScale(1, 1)
-	notifications.Parent = macLib
+	notifications.Parent = TiRexLib
 	notifications.ZIndex = 2
 
 	local notificationsUIListLayout = Instance.new("UIListLayout")
@@ -1918,8 +1918,8 @@ function MacLib:Window(Settings)
 	globalSettingsUIScale.Scale = 1e-07
 	globalSettingsUIScale.Parent = globalSettings
 	globalSettings.Parent = base
-	base.Parent = macLib
-	WindowFunctions.Gui = macLib
+	base.Parent = TiRexLib
+	WindowFunctions.Gui = TiRexLib
 	WindowFunctions.Base = base
 	WindowFunctions.Notifications = notifications
 	WindowFunctions.GlobalSettings = globalSettings
@@ -2680,7 +2680,7 @@ function MacLib:Window(Settings)
 		end)
 		if not blurOk then
 			acrylicBlur = false
-			warn("[MacLib] Acrylic blur disabled: " .. tostring(blurErr))
+			warn("[TiRexLib] Acrylic blur disabled: " .. tostring(blurErr))
 		end
 	end
 
@@ -3172,7 +3172,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = ButtonFunctions
+						TiRexLib.Options[Flag] = ButtonFunctions
 					end
 					return ButtonFunctions
 				end
@@ -3325,7 +3325,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = ToggleFunctions
+						TiRexLib.Options[Flag] = ToggleFunctions
 					end
 					return ToggleFunctions
 				end
@@ -3495,7 +3495,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = CheckboxFunctions
+						TiRexLib.Options[Flag] = CheckboxFunctions
 					end
 					return CheckboxFunctions
 				end
@@ -3929,7 +3929,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = SliderFunctions
+						TiRexLib.Options[Flag] = SliderFunctions
 					end
 					return SliderFunctions
 				end
@@ -4149,7 +4149,7 @@ function MacLib:Window(Settings)
 					setInputText(InputFunctions.Settings.Default, false)
 
 					if Flag then
-						MacLib.Options[Flag] = InputFunctions
+						TiRexLib.Options[Flag] = InputFunctions
 					end
 					return InputFunctions
 				end
@@ -4445,7 +4445,7 @@ function MacLib:Window(Settings)
 					updateBindVisual(false)
 
 					if Flag then
-						MacLib.Options[Flag] = KeybindFunctions
+						TiRexLib.Options[Flag] = KeybindFunctions
 					end
 
 					return KeybindFunctions
@@ -5160,7 +5160,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = DropdownFunctions
+						TiRexLib.Options[Flag] = DropdownFunctions
 					end
 
 					return DropdownFunctions
@@ -6530,7 +6530,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = ColorpickerFunctions
+						TiRexLib.Options[Flag] = ColorpickerFunctions
 					end
 					return ColorpickerFunctions
 				end
@@ -6619,7 +6619,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = HeaderFunctions
+						TiRexLib.Options[Flag] = HeaderFunctions
 					end
 					return HeaderFunctions
 				end
@@ -6667,7 +6667,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = LabelFunctions
+						TiRexLib.Options[Flag] = LabelFunctions
 					end
 					return LabelFunctions
 				end
@@ -6712,7 +6712,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = SubLabelFunctions
+						TiRexLib.Options[Flag] = SubLabelFunctions
 					end
 					return SubLabelFunctions
 				end
@@ -6789,7 +6789,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = ParagraphFunctions
+						TiRexLib.Options[Flag] = ParagraphFunctions
 					end
 					return ParagraphFunctions
 				end
@@ -6915,7 +6915,7 @@ function MacLib:Window(Settings)
 					end
 
 					if Flag then
-						MacLib.Options[Flag] = CustomFunctions
+						TiRexLib.Options[Flag] = CustomFunctions
 					end
 					return CustomFunctions
 				end
@@ -6987,7 +6987,7 @@ function MacLib:Window(Settings)
 					Name = "Select Config",
 					Multi = false,
 					Required = false,
-					Options = MacLib:RefreshConfigList(),
+					Options = TiRexLib:RefreshConfigList(),
 					Callback = function(Value)
 						selectedConfig = Value
 					end,
@@ -7004,7 +7004,7 @@ function MacLib:Window(Settings)
 							return
 						end
 
-						local success, returned = MacLib:SaveConfig(inputPath)
+						local success, returned = TiRexLib:SaveConfig(inputPath)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
@@ -7018,14 +7018,14 @@ function MacLib:Window(Settings)
 						})
 
 						configSelection:ClearOptions()
-						configSelection:InsertOptions(MacLib:RefreshConfigList())
+						configSelection:InsertOptions(TiRexLib:RefreshConfigList())
 					end,
 				})
 
 				configSection:Button({
 					Name = "Load Config",
 					Callback = function()
-						local success, returned = MacLib:LoadConfig(configSelection.Value)
+						local success, returned = TiRexLib:LoadConfig(configSelection.Value)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
@@ -7044,7 +7044,7 @@ function MacLib:Window(Settings)
 				configSection:Button({
 					Name = "Overwrite Config",
 					Callback = function()
-						local success, returned = MacLib:SaveConfig(configSelection.Value)
+						local success, returned = TiRexLib:SaveConfig(configSelection.Value)
 						if not success then
 							WindowFunctions:Notify({
 								Title = "Interface",
@@ -7064,7 +7064,7 @@ function MacLib:Window(Settings)
 					Name = "Refresh Config List",
 					Callback = function()
 						configSelection:ClearOptions()
-						configSelection:InsertOptions(MacLib:RefreshConfigList())
+						configSelection:InsertOptions(TiRexLib:RefreshConfigList())
 					end,
 				})
 
@@ -7074,7 +7074,7 @@ function MacLib:Window(Settings)
 					Name = "Set as autoload",
 					Callback = function()
 						local name = configSelection.Value
-						writefile(MacLib.Folder .. "/settings/autoload.txt", name)
+						writefile(TiRexLib.Folder .. "/settings/autoload.txt", name)
 						autoloadLabel:UpdateName("Autoload config: " .. name)
 						WindowFunctions:Notify({
 							Title = "Interface",
@@ -7085,8 +7085,8 @@ function MacLib:Window(Settings)
 
 				autoloadLabel = configSection:Label({Text = "Autoload config: None"})
 
-				if isfile(MacLib.Folder .. "/settings/autoload.txt") then
-					local name = readfile(MacLib.Folder .. "/settings/autoload.txt")
+				if isfile(TiRexLib.Folder .. "/settings/autoload.txt") then
+					local name = readfile(TiRexLib.Folder .. "/settings/autoload.txt")
 					autoloadLabel:UpdateName("Autoload config: " .. name)
 				end
 			end
@@ -7723,7 +7723,7 @@ function MacLib:Window(Settings)
 			end
 		end
 		table.clear(windowConnections)
-		macLib:Destroy()
+		TiRexLib:Destroy()
 		unloaded = true
 	end
 
@@ -7841,8 +7841,8 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.state ~= nil then
-					MacLib.Options[Flag]:UpdateState(data.state)
+				if TiRexLib.Options[Flag] and data.state ~= nil then
+					TiRexLib.Options[Flag]:UpdateState(data.state)
 				end
 			end
 		},
@@ -7855,8 +7855,8 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.value then
-					MacLib.Options[Flag]:UpdateValue(data.value)
+				if TiRexLib.Options[Flag] and data.value then
+					TiRexLib.Options[Flag]:UpdateValue(data.value)
 				end
 			end
 		},
@@ -7869,8 +7869,8 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.text and type(data.text) == "string" then
-					MacLib.Options[Flag]:UpdateText(data.text)
+				if TiRexLib.Options[Flag] and data.text and type(data.text) == "string" then
+					TiRexLib.Options[Flag]:UpdateText(data.text)
 				end
 			end
 		},
@@ -7899,11 +7899,11 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.bind then
-					if type(MacLib.Options[Flag].Bind) == "function" then
-						MacLib.Options[Flag]:Bind(Enum.KeyCode[data.bind])
-					elseif type(MacLib.Options[Flag].SetValue) == "function" then
-						MacLib.Options[Flag]:SetValue(data.bind)
+				if TiRexLib.Options[Flag] and data.bind then
+					if type(TiRexLib.Options[Flag].Bind) == "function" then
+						TiRexLib.Options[Flag]:Bind(Enum.KeyCode[data.bind])
+					elseif type(TiRexLib.Options[Flag].SetValue) == "function" then
+						TiRexLib.Options[Flag]:SetValue(data.bind)
 					end
 				end
 			end
@@ -7917,8 +7917,8 @@ function MacLib:Window(Settings)
 				}
 			end,
 			Load = function(Flag, data)
-				if MacLib.Options[Flag] and data.value then
-					MacLib.Options[Flag]:UpdateSelection(data.value)
+				if TiRexLib.Options[Flag] and data.value then
+					TiRexLib.Options[Flag]:UpdateSelection(data.value)
 				end
 			end
 		},
@@ -7946,10 +7946,10 @@ function MacLib:Window(Settings)
 					return Color3.new(r, g, b)
 				end
 
-				if MacLib.Options[Flag] and data.color then
-					MacLib.Options[Flag]:SetColor(HexToColor3(data.color)) 
+				if TiRexLib.Options[Flag] and data.color then
+					TiRexLib.Options[Flag]:SetColor(HexToColor3(data.color)) 
 					if data.alpha then
-						MacLib.Options[Flag]:SetAlpha(data.alpha)
+						TiRexLib.Options[Flag]:SetAlpha(data.alpha)
 					end
 				end
 			end
@@ -7960,8 +7960,8 @@ function MacLib:Window(Settings)
 		if isStudio or not (isfolder and makefolder) then return "Config system unavailable." end
 
 		local paths = {
-			MacLib.Folder,
-			MacLib.Folder .. "/settings"
+			TiRexLib.Folder,
+			TiRexLib.Folder .. "/settings"
 		}
 
 		for i = 1, #paths do
@@ -7972,13 +7972,13 @@ function MacLib:Window(Settings)
 		end
 	end
 
-	function MacLib:LoadAutoLoadConfig()
+	function TiRexLib:LoadAutoLoadConfig()
 		if isStudio or not (isfile and readfile) then return "Config system unavailable." end
 
-		if isfile(MacLib.Folder .. "/settings/autoload.txt") then
-			local name = readfile(MacLib.Folder .. "/settings/autoload.txt")
+		if isfile(TiRexLib.Folder .. "/settings/autoload.txt") then
+			local name = readfile(TiRexLib.Folder .. "/settings/autoload.txt")
 
-			local suc, err = MacLib:LoadConfig(name)
+			local suc, err = TiRexLib:LoadConfig(name)
 			if not suc then
 				WindowFunctions:Notify({
 					Title = "Interface",
@@ -7993,27 +7993,27 @@ function MacLib:Window(Settings)
 		end
 	end
 
-	function MacLib:SetFolder(Folder)
+	function TiRexLib:SetFolder(Folder)
 		if isStudio then return "Config system unavailable." end
 
-		MacLib.Folder = Folder;
+		TiRexLib.Folder = Folder;
 		BuildFolderTree()
 	end
 
-	function MacLib:SaveConfig(Path)
+	function TiRexLib:SaveConfig(Path)
 		if isStudio or not writefile then return "Config system unavailable." end
 
 		if (not Path) then
 			return false, "Please select a config file."
 		end
 
-		local fullPath = MacLib.Folder .. "/settings/" .. Path .. ".json"
+		local fullPath = TiRexLib.Folder .. "/settings/" .. Path .. ".json"
 
 		local data = {
 			objects = {}
 		}
 
-		for flag, option in next, MacLib.Options do
+		for flag, option in next, TiRexLib.Options do
 			if not ClassParser[option.Class] then continue end
 			if option.IgnoreConfig then continue end
 
@@ -8029,14 +8029,14 @@ function MacLib:Window(Settings)
 		return true
 	end
 
-	function MacLib:LoadConfig(Path)
+	function TiRexLib:LoadConfig(Path)
 		if isStudio or not (isfile and readfile) then return "Config system unavailable." end
 
 		if (not Path) then
 			return false, "Please select a config file."
 		end
 
-		local file = MacLib.Folder .. "/settings/" .. Path .. ".json"
+		local file = TiRexLib.Folder .. "/settings/" .. Path .. ".json"
 		if not isfile(file) then return false, "Invalid file" end
 
 		local success, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(file))
@@ -8053,10 +8053,10 @@ function MacLib:Window(Settings)
 		return true
 	end
 
-	function MacLib:RefreshConfigList()
+	function TiRexLib:RefreshConfigList()
 		if isStudio or not (isfolder and listfiles) then return "Config system unavailable." end
 
-		local list = (isfolder(MacLib.Folder) and isfolder(MacLib.Folder .. "/settings")) and listfiles(MacLib.Folder .. "/settings") or {}
+		local list = (isfolder(TiRexLib.Folder) and isfolder(TiRexLib.Folder .. "/settings")) and listfiles(TiRexLib.Folder .. "/settings") or {}
 
 		local out = {}
 		for i = 1, #list do
@@ -8083,7 +8083,7 @@ function MacLib:Window(Settings)
 		return out
 	end
 
-	macLib.Enabled = false
+	TiRexLib.Enabled = false
 
 	local assetList = {}
 	for _, assetId in pairs(assets) do
@@ -8101,7 +8101,7 @@ function MacLib:Window(Settings)
 			end)
 		end)
 	end
-	macLib.Enabled = true
+	TiRexLib.Enabled = true
 	windowState = true
 	setWindowMouseState(true)
 
@@ -8132,7 +8132,7 @@ local function runCallback(callback, ...)
 	local function invoke()
 		local ok, err = pcall(callback, unpackArgs(args))
 		if not ok then
-			warn("[MacLib] callback error: " .. tostring(err))
+			warn("[TiRexLib] callback error: " .. tostring(err))
 		end
 	end
 
@@ -8380,7 +8380,7 @@ end
 local function makeNotificationPayload(settings, time)
 	if type(settings) == "table" then
 		return {
-			Title = settings.Title or MacLib.Name or "TiRex",
+			Title = settings.Title or TiRexLib.Name or "TiRex",
 			Description = settings.Description or settings.Text or "",
 			Lifetime = settings.Lifetime or settings.Time or time or 3,
 			Style = settings.Style,
@@ -8391,14 +8391,14 @@ local function makeNotificationPayload(settings, time)
 	end
 
 	return {
-		Title = MacLib.Name or "TiRex",
+		Title = TiRexLib.Name or "TiRex",
 		Description = tostring(settings or ""),
 		Lifetime = time or 3
 	}
 end
 
 local function isIgnoredOption(flag)
-	local ignoreIndexes = MacLib.SaveManager and MacLib.SaveManager.IgnoreIndexes
+	local ignoreIndexes = TiRexLib.SaveManager and TiRexLib.SaveManager.IgnoreIndexes
 	return type(ignoreIndexes) == "table" and table.find(ignoreIndexes, flag) ~= nil
 end
 
@@ -8498,10 +8498,10 @@ local function installKeyPicker(flag, settings, ownerToggle, section, ownerProxy
 			Default = enumDefault,
 			onBinded = function(bind)
 				keyProxy.Value = normalizeKeyName(bind)
-				if flag == "ScriptKeybind" and MacLib._activeWindow and type(MacLib._activeWindow.SetKeybind) == "function" then
+				if flag == "ScriptKeybind" and TiRexLib._activeWindow and type(TiRexLib._activeWindow.SetKeybind) == "function" then
 					local enumKey = enumItemByName(Enum.KeyCode, keyProxy.Value)
 					if enumKey then
-						MacLib._activeWindow:SetKeybind(enumKey)
+						TiRexLib._activeWindow:SetKeybind(enumKey)
 					end
 				end
 				runCallback(keyProxy.ChangedCallback, keyProxy.Value)
@@ -8523,10 +8523,10 @@ local function installKeyPicker(flag, settings, ownerToggle, section, ownerProxy
 			end
 		end
 
-		if flag == "ScriptKeybind" and MacLib._activeWindow and type(MacLib._activeWindow.SetKeybind) == "function" then
+		if flag == "ScriptKeybind" and TiRexLib._activeWindow and type(TiRexLib._activeWindow.SetKeybind) == "function" then
 			local enumKey = enumItemByName(Enum.KeyCode, self.Value)
 			if enumKey then
-				MacLib._activeWindow:SetKeybind(enumKey)
+				TiRexLib._activeWindow:SetKeybind(enumKey)
 			end
 		end
 
@@ -8554,7 +8554,7 @@ local function installKeyPicker(flag, settings, ownerToggle, section, ownerProxy
 		ownerProxy.KeyPicker = keyProxy
 	end
 	compatState.KeyPickers[flag] = keyProxy
-	MacLib.Options[flag] = keyProxy
+	TiRexLib.Options[flag] = keyProxy
 	return keyProxy
 end
 
@@ -9144,8 +9144,8 @@ local function makeGroupProxy(section)
 			return self:AddColorPicker(colorFlag, colorSettings)
 		end
 
-		MacLib.Toggles[flag] = toggleProxy
-		MacLib.Options[flag] = toggleProxy
+		TiRexLib.Toggles[flag] = toggleProxy
+		TiRexLib.Options[flag] = toggleProxy
 		return toggleProxy
 	end
 
@@ -9207,7 +9207,7 @@ local function makeGroupProxy(section)
 			self:SetValue(value)
 		end
 
-		MacLib.Options[flag] = sliderProxy
+		TiRexLib.Options[flag] = sliderProxy
 		return sliderProxy
 	end
 
@@ -9270,7 +9270,7 @@ local function makeGroupProxy(section)
 			end
 		end
 
-		MacLib.Options[flag] = dropdownProxy
+		TiRexLib.Options[flag] = dropdownProxy
 		return dropdownProxy
 	end
 
@@ -9309,7 +9309,7 @@ local function makeGroupProxy(section)
 			end
 		end
 
-		MacLib.Options[flag] = inputProxy
+		TiRexLib.Options[flag] = inputProxy
 		return inputProxy
 	end
 
@@ -9371,7 +9371,7 @@ local function makeGroupProxy(section)
 			return self:AddKeyPicker(keyFlag, keySettings)
 		end
 
-		MacLib.Options[flag] = colorProxy
+		TiRexLib.Options[flag] = colorProxy
 		return colorProxy
 	end
 	function groupProxy:AddColorpicker(flag, settings, ownerToggle)
@@ -9469,7 +9469,7 @@ local function makeTabProxy(rawTab)
 	return tabProxy
 end
 
-function MacLib:CreateLoading(settings)
+function TiRexLib:CreateLoading(settings)
 	local ok, loading = pcall(createLoadingGui, settings)
 	if ok and type(loading) == "table" then
 		return loading
@@ -9494,7 +9494,7 @@ function MacLib:CreateLoading(settings)
 	}
 end
 
-function MacLib:CreateWindow(settings)
+function TiRexLib:CreateWindow(settings)
 	settings = settings or {}
 	self.Name = settings.Title or "TiRex"
 	local rawWindow = self:Window({
@@ -9564,7 +9564,7 @@ function MacLib:CreateWindow(settings)
 	return windowProxy
 end
 
-function MacLib:Notify(settings, time)
+function TiRexLib:Notify(settings, time)
 	if self._activeWindow and type(self._activeWindow.Notify) == "function" then
 		return self._activeWindow:Notify(makeNotificationPayload(settings, time))
 	end
@@ -9572,17 +9572,17 @@ function MacLib:Notify(settings, time)
 	return nil
 end
 
-function MacLib:AddProfile(settings)
+function TiRexLib:AddProfile(settings)
 	if self._activeWindow and type(self._activeWindow.AddProfile) == "function" then
 		return self._activeWindow:AddProfile(settings)
 	end
 end
 
-function MacLib:AddDraggableLabel(text)
+function TiRexLib:AddDraggableLabel(text)
 	return createDraggableLabel(text)
 end
 
-function MacLib:Unload()
+function TiRexLib:Unload()
 	if compatState.InputBeganConnection then
 		pcall(function()
 			compatState.InputBeganConnection:Disconnect()
@@ -9676,7 +9676,7 @@ local function compatEnsureFolder(path)
 end
 
 local function compatGetLibrary(manager)
-	return (manager and manager.Library) or MacLib
+	return (manager and manager.Library) or TiRexLib
 end
 
 local function compatGetThemePayload(theme)
@@ -9854,8 +9854,8 @@ local function compatApplyThemeToRoot(root, theme)
 	end
 end
 
-MacLib.ThemeManager = MacLib.ThemeManager or {}
-MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
+TiRexLib.ThemeManager = TiRexLib.ThemeManager or {}
+TiRexLib.ThemeManager.BuiltInThemes = TiRexLib.ThemeManager.BuiltInThemes or {
 	Default = {
 		"Default",
 		{
@@ -9901,19 +9901,19 @@ MacLib.ThemeManager.BuiltInThemes = MacLib.ThemeManager.BuiltInThemes or {
 		}
 	}
 }
-MacLib.ThemeManager.Library = MacLib.ThemeManager.Library or MacLib
-MacLib.ThemeManager.Folder = MacLib.ThemeManager.Folder or "TiRex"
-MacLib.ThemeManager.CurrentTheme = MacLib.ThemeManager.CurrentTheme or "Default"
+TiRexLib.ThemeManager.Library = TiRexLib.ThemeManager.Library or TiRexLib
+TiRexLib.ThemeManager.Folder = TiRexLib.ThemeManager.Folder or "TiRex"
+TiRexLib.ThemeManager.CurrentTheme = TiRexLib.ThemeManager.CurrentTheme or "Default"
 
-function MacLib.ThemeManager:SetLibrary(lib)
-	self.Library = lib or MacLib
+function TiRexLib.ThemeManager:SetLibrary(lib)
+	self.Library = lib or TiRexLib
 end
 
-function MacLib.ThemeManager:SetFolder(folder)
+function TiRexLib.ThemeManager:SetFolder(folder)
 	self.Folder = folder or self.Folder or "TiRex"
 end
 
-function MacLib.ThemeManager:GetTheme(theme)
+function TiRexLib.ThemeManager:GetTheme(theme)
 	if type(theme) == "table" then
 		return theme
 	end
@@ -9921,7 +9921,7 @@ function MacLib.ThemeManager:GetTheme(theme)
 	return self.BuiltInThemes[name] or self.BuiltInThemes.Default
 end
 
-function MacLib.ThemeManager:GetThemeNames()
+function TiRexLib.ThemeManager:GetThemeNames()
 	local names = {}
 	for name in pairs(self.BuiltInThemes or {}) do
 		table.insert(names, name)
@@ -9930,7 +9930,7 @@ function MacLib.ThemeManager:GetThemeNames()
 	return names
 end
 
-function MacLib.ThemeManager:ApplyTheme(theme)
+function TiRexLib.ThemeManager:ApplyTheme(theme)
 	local library = compatGetLibrary(self)
 	local selectedTheme = self:GetTheme(theme)
 	self.CurrentTheme = type(theme) == "string" and theme or self.CurrentTheme or "Default"
@@ -9954,12 +9954,12 @@ function MacLib.ThemeManager:ApplyTheme(theme)
 	return true
 end
 
-function MacLib.ThemeManager:SetTheme(theme)
+function TiRexLib.ThemeManager:SetTheme(theme)
 	self.CurrentTheme = type(theme) == "string" and theme or self.CurrentTheme
 	return self:ApplyTheme(theme)
 end
 
-function MacLib.ThemeManager:LoadDefault()
+function TiRexLib.ThemeManager:LoadDefault()
 	local themeName = self.CurrentTheme or "Default"
 	if not isStudio and isfile and readfile and self.Folder then
 		local path = self.Folder .. "/theme.txt"
@@ -9973,7 +9973,7 @@ function MacLib.ThemeManager:LoadDefault()
 	return self:SetTheme(themeName)
 end
 
-function MacLib.ThemeManager:SaveDefault(theme)
+function TiRexLib.ThemeManager:SaveDefault(theme)
 	local themeName = tostring(theme or self.CurrentTheme or "Default")
 	self.CurrentTheme = themeName
 	if isStudio or not (writefile and self.Folder) then
@@ -9987,7 +9987,7 @@ function MacLib.ThemeManager:SaveDefault(theme)
 	return true
 end
 
-function MacLib.ThemeManager:ApplyToTab(tab)
+function TiRexLib.ThemeManager:ApplyToTab(tab)
 	self:ApplyTheme(self.CurrentTheme or "Default")
 	if not (tab and type(tab.AddLeftGroupbox) == "function") then
 		return nil
@@ -10006,16 +10006,16 @@ function MacLib.ThemeManager:ApplyToTab(tab)
 			self:SetTheme(themeName)
 		end
 	})
-	if MacLib.Options.ThemeManager_Theme then
-		MacLib.Options.ThemeManager_Theme.IgnoreConfig = true
+	if TiRexLib.Options.ThemeManager_Theme then
+		TiRexLib.Options.ThemeManager_Theme.IgnoreConfig = true
 	end
 	group:AddButton("Apply Theme", function()
 		self:ApplyTheme(dropdown.Value or self.CurrentTheme or "Default")
 	end)
 	group:AddButton("Save Theme Default", function()
 		local ok, err = self:SaveDefault(dropdown.Value or self.CurrentTheme or "Default")
-		if not ok and MacLib.Notify then
-			MacLib:Notify({
+		if not ok and TiRexLib.Notify then
+			TiRexLib:Notify({
 				Title = "TiRex",
 				Description = tostring(err),
 				Time = 2
@@ -10025,33 +10025,33 @@ function MacLib.ThemeManager:ApplyToTab(tab)
 	return group
 end
 
-MacLib.SaveManager = MacLib.SaveManager or {}
-MacLib.SaveManager.Library = MacLib.SaveManager.Library or MacLib
-MacLib.SaveManager.Folder = MacLib.SaveManager.Folder or "TiRex/Games"
-MacLib.SaveManager.IgnoreIndexes = MacLib.SaveManager.IgnoreIndexes or {}
-MacLib.SaveManager.IgnoreThemes = MacLib.SaveManager.IgnoreThemes or false
+TiRexLib.SaveManager = TiRexLib.SaveManager or {}
+TiRexLib.SaveManager.Library = TiRexLib.SaveManager.Library or TiRexLib
+TiRexLib.SaveManager.Folder = TiRexLib.SaveManager.Folder or "TiRex/Games"
+TiRexLib.SaveManager.IgnoreIndexes = TiRexLib.SaveManager.IgnoreIndexes or {}
+TiRexLib.SaveManager.IgnoreThemes = TiRexLib.SaveManager.IgnoreThemes or false
 
-function MacLib.SaveManager:SetLibrary(lib)
-	self.Library = lib or MacLib
+function TiRexLib.SaveManager:SetLibrary(lib)
+	self.Library = lib or TiRexLib
 end
 
-function MacLib.SaveManager:IgnoreThemeSettings()
+function TiRexLib.SaveManager:IgnoreThemeSettings()
 	self.IgnoreThemes = true
 	self:SetIgnoreIndexes({ "ThemeManager_Theme" })
 end
 
-function MacLib.SaveManager:SetIgnoreIndexes(indexes)
+function TiRexLib.SaveManager:SetIgnoreIndexes(indexes)
 	self.IgnoreIndexes = indexes or {}
 	if type(indexes) == "table" then
 		for _, flag in ipairs(indexes) do
-			if MacLib.Options[flag] then
-				MacLib.Options[flag].IgnoreConfig = true
+			if TiRexLib.Options[flag] then
+				TiRexLib.Options[flag].IgnoreConfig = true
 			end
 		end
 	end
 end
 
-function MacLib.SaveManager:SetFolder(folder)
+function TiRexLib.SaveManager:SetFolder(folder)
 	self.Folder = folder or self.Folder or "TiRex/Games"
 	local library = compatGetLibrary(self)
 	library.Folder = self.Folder
@@ -10062,11 +10062,11 @@ function MacLib.SaveManager:SetFolder(folder)
 	end
 end
 
-function MacLib.SaveManager:GetFolder()
+function TiRexLib.SaveManager:GetFolder()
 	return self.Folder or (compatGetLibrary(self).Folder) or "TiRex/Games"
 end
 
-function MacLib.SaveManager:Save(name)
+function TiRexLib.SaveManager:Save(name)
 	local library = compatGetLibrary(self)
 	self:SetFolder(self:GetFolder())
 	if type(library.SaveConfig) == "function" then
@@ -10075,7 +10075,7 @@ function MacLib.SaveManager:Save(name)
 	return false, "SaveConfig unavailable."
 end
 
-function MacLib.SaveManager:Load(name)
+function TiRexLib.SaveManager:Load(name)
 	local library = compatGetLibrary(self)
 	self:SetFolder(self:GetFolder())
 	if type(library.LoadConfig) == "function" then
@@ -10084,7 +10084,7 @@ function MacLib.SaveManager:Load(name)
 	return false, "LoadConfig unavailable."
 end
 
-function MacLib.SaveManager:RefreshConfigList()
+function TiRexLib.SaveManager:RefreshConfigList()
 	local library = compatGetLibrary(self)
 	self:SetFolder(self:GetFolder())
 	if type(library.RefreshConfigList) == "function" then
@@ -10093,7 +10093,7 @@ function MacLib.SaveManager:RefreshConfigList()
 	return {}
 end
 
-function MacLib.SaveManager:SetAutoload(name)
+function TiRexLib.SaveManager:SetAutoload(name)
 	if type(name) ~= "string" or name == "" then
 		return false, "Please select a config file."
 	end
@@ -10109,7 +10109,7 @@ function MacLib.SaveManager:SetAutoload(name)
 	return true
 end
 
-function MacLib.SaveManager:LoadAutoloadConfig()
+function TiRexLib.SaveManager:LoadAutoloadConfig()
 	local library = compatGetLibrary(self)
 	self:SetFolder(self:GetFolder())
 	if type(library.LoadAutoLoadConfig) == "function" then
@@ -10118,7 +10118,7 @@ function MacLib.SaveManager:LoadAutoloadConfig()
 	return false, "LoadAutoLoadConfig unavailable."
 end
 
-function MacLib.SaveManager:BuildConfigSection(tab)
+function TiRexLib.SaveManager:BuildConfigSection(tab)
 	self:SetFolder(self:GetFolder())
 	if tab and type(tab.InsertConfigSection) == "function" then
 		return tab:InsertConfigSection("Left")
@@ -10126,8 +10126,8 @@ function MacLib.SaveManager:BuildConfigSection(tab)
 	return nil
 end
 
-function MacLib:Demo()
-	local Window = MacLib:Window({
+function TiRexLib:Demo()
+	local Window = TiRexLib:Window({
 		Title = "TiRex Demo",
 		Subtitle = "This is a subtitle.",
 		Size = UDim2.fromOffset(868, 650),
@@ -10378,7 +10378,7 @@ function MacLib:Demo()
 		Text = "Sub-Label. Lorem ipsum odor amet, consectetuer adipiscing elit."
 	})
 
-	MacLib:SetFolder("TiRex")
+	TiRexLib:SetFolder("TiRex")
 	tabs.Settings:InsertConfigSection("Left")
 
 	Window.onUnloaded(function()
@@ -10386,7 +10386,7 @@ function MacLib:Demo()
 	end)
 
 	tabs.Main:Select()
-	MacLib:LoadAutoLoadConfig()
+	TiRexLib:LoadAutoLoadConfig()
 end
 
-return MacLib
+return TiRexLib
