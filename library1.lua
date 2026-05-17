@@ -1942,20 +1942,30 @@ function MacLib:Window(Settings)
 
 		informationGroup.Visible = false
 
-		local profileIcon = ResolveImageAsset(Settings.Icon or Settings.Avatar or Settings.Image, assets.tirexIcon)
+		local userId = LocalPlayer and LocalPlayer.UserId or 0
+		local profileIcon = ResolveImageAsset(Settings.Icon or Settings.Avatar or Settings.Image, nil)
+		if not profileIcon then
+			local okThumb, thumb = pcall(function()
+				return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+			end)
+			profileIcon = (okThumb and thumb) or assets.tirexIcon
+		end
+		local profileUsername = tostring(Settings.Username or Settings.User or (LocalPlayer and LocalPlayer.Name) or "Player")
+		local profileDisplayName = tostring(Settings.DisplayName or (LocalPlayer and LocalPlayer.DisplayName) or profileUsername)
+		local profileAccess = tostring(Settings.Access or Settings.Status or Settings.Tier or "Keyless")
 		local profile = {}
 
 		local profileButton = Instance.new("ImageButton")
 		profileButton.Name = "ProfileButton"
 		profileButton.AutoButtonColor = false
-		profileButton.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		profileButton.BackgroundColor3 = Color3.fromRGB(16, 16, 18)
 		profileButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		profileButton.BorderSizePixel = 0
 		profileButton.AnchorPoint = Vector2.new(0, 1)
-		profileButton.Position = UDim2.new(0, 15, 1, -25)
+		profileButton.Position = UDim2.new(0, -2, 1, -8)
 		profileButton.Size = UDim2.fromOffset(42, 42)
 		profileButton.Image = profileIcon
-		profileButton.ScaleType = Enum.ScaleType.Fit
+		profileButton.ScaleType = Enum.ScaleType.Crop
 		profileButton.Parent = userInfo
 
 		local profileButtonCorner = Instance.new("UICorner")
@@ -1968,17 +1978,57 @@ function MacLib:Window(Settings)
 		profileButtonStroke.Transparency = 0.88
 		profileButtonStroke.Parent = profileButton
 
+		local profileNamePill = Instance.new("TextButton")
+		profileNamePill.Name = "ProfileUsernamePill"
+		profileNamePill.AutoButtonColor = false
+		profileNamePill.BackgroundColor3 = Color3.fromRGB(20, 20, 23)
+		profileNamePill.BackgroundTransparency = 0.04
+		profileNamePill.BorderSizePixel = 0
+		profileNamePill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		profileNamePill.Text = profileUsername
+		profileNamePill.TextColor3 = Color3.fromRGB(235, 235, 235)
+		profileNamePill.TextSize = 11
+		profileNamePill.TextTruncate = Enum.TextTruncate.AtEnd
+		profileNamePill.TextXAlignment = Enum.TextXAlignment.Left
+		profileNamePill.AnchorPoint = Vector2.new(0, 1)
+		profileNamePill.Position = UDim2.new(0, 56, 1, -14)
+		profileNamePill.Size = UDim2.new(1, -68, 0, 28)
+		profileNamePill.ZIndex = 2
+		profileNamePill.Parent = userInfo
+
+		local profileNamePillCorner = Instance.new("UICorner")
+		profileNamePillCorner.CornerRadius = UI_THEME.Corners.Input
+		profileNamePillCorner.Parent = profileNamePill
+
+		local profileNamePillPadding = Instance.new("UIPadding")
+		profileNamePillPadding.PaddingLeft = UDim.new(0, 10)
+		profileNamePillPadding.PaddingRight = UDim.new(0, 10)
+		profileNamePillPadding.Parent = profileNamePill
+
+		local profileOverlay = Instance.new("TextButton")
+		profileOverlay.Name = "ProfileOverlay"
+		profileOverlay.AutoButtonColor = false
+		profileOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		profileOverlay.BackgroundTransparency = 0.42
+		profileOverlay.BorderSizePixel = 0
+		profileOverlay.Text = ""
+		profileOverlay.Size = UDim2.fromScale(1, 1)
+		profileOverlay.Visible = false
+		profileOverlay.ZIndex = 9
+		profileOverlay.Parent = base
+
 		local profileModal = Instance.new("Frame")
 		profileModal.Name = "ProfileModal"
-		profileModal.AnchorPoint = Vector2.new(0, 1)
+		profileModal.AnchorPoint = Vector2.new(0.5, 0.5)
 		profileModal.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 		profileModal.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		profileModal.BorderSizePixel = 0
-		profileModal.Position = UDim2.new(0, 18, 1, -18)
-		profileModal.Size = UDim2.fromOffset(342, 246)
-		profileModal.Visible = false
+		profileModal.Active = true
+		profileModal.Position = UDim2.fromScale(0.5, 0.5)
+		profileModal.Size = UDim2.fromOffset(342, 252)
+		profileModal.Visible = true
 		profileModal.ZIndex = 10
-		profileModal.Parent = base
+		profileModal.Parent = profileOverlay
 
 		local profileModalCorner = Instance.new("UICorner")
 		profileModalCorner.CornerRadius = UI_THEME.Corners.Profile
@@ -2031,7 +2081,7 @@ function MacLib:Window(Settings)
 		card.BackgroundColor3 = UI_THEME.Colors.WindowBg
 		card.BorderSizePixel = 0
 		card.Position = UDim2.fromOffset(16, 64)
-		card.Size = UDim2.new(1, -32, 0, 124)
+		card.Size = UDim2.new(1, -32, 0, 126)
 		card.ZIndex = 11
 		card.Parent = profileModal
 
@@ -2049,10 +2099,10 @@ function MacLib:Window(Settings)
 		avatar.Name = "ProfileAvatar"
 		avatar.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 		avatar.BorderSizePixel = 0
-		avatar.Position = UDim2.fromOffset(14, 15)
+		avatar.Position = UDim2.fromOffset(14, 14)
 		avatar.Size = UDim2.fromOffset(58, 58)
 		avatar.Image = profileIcon
-		avatar.ScaleType = Enum.ScaleType.Fit
+		avatar.ScaleType = Enum.ScaleType.Crop
 		avatar.ZIndex = 12
 		avatar.Parent = card
 
@@ -2065,10 +2115,10 @@ function MacLib:Window(Settings)
 		tier.BackgroundColor3 = Color3.fromRGB(218, 218, 218)
 		tier.BorderSizePixel = 0
 		tier.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-		tier.Text = Settings.Plan or Settings.Tier or "Free"
+		tier.Text = profileAccess
 		tier.TextColor3 = Color3.fromRGB(0, 0, 0)
 		tier.TextSize = 10
-		tier.Position = UDim2.fromOffset(14, 80)
+		tier.Position = UDim2.fromOffset(14, 82)
 		tier.Size = UDim2.fromOffset(58, 19)
 		tier.ZIndex = 12
 		tier.Parent = card
@@ -2082,12 +2132,12 @@ function MacLib:Window(Settings)
 		rows.BackgroundTransparency = 1
 		rows.BorderSizePixel = 0
 		rows.Position = UDim2.fromOffset(84, 16)
-		rows.Size = UDim2.new(1, -100, 1, -26)
+		rows.Size = UDim2.new(1, -100, 1, -28)
 		rows.ZIndex = 12
 		rows.Parent = card
 
 		local rowsLayout = Instance.new("UIListLayout")
-		rowsLayout.Padding = UDim.new(0, 9)
+		rowsLayout.Padding = UDim.new(0, 6)
 		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		rowsLayout.Parent = rows
 
@@ -2131,16 +2181,17 @@ function MacLib:Window(Settings)
 			return value
 		end
 
-		addProfileRow("Username", Settings.Username or Settings.User or (LocalPlayer and LocalPlayer.Name) or "Player")
-		addProfileRow("Expires In", Settings.ExpiresIn or Settings.Expires or Settings.Expiry or "Lifetime")
+		addProfileRow("Username", profileUsername)
+		addProfileRow("Display Name", profileDisplayName)
+		addProfileRow("Access", profileAccess)
 		addProfileRow("Game", Settings.Game or "Violence District")
 
 		local actions = Instance.new("Frame")
 		actions.Name = "ProfileActions"
 		actions.BackgroundTransparency = 1
 		actions.BorderSizePixel = 0
-		actions.Position = UDim2.new(0, 68, 1, -39)
-		actions.Size = UDim2.new(1, -84, 0, 29)
+		actions.Position = UDim2.new(0, 16, 1, -40)
+		actions.Size = UDim2.new(1, -32, 0, 30)
 		actions.ZIndex = 11
 		actions.Parent = profileModal
 
@@ -2172,7 +2223,7 @@ function MacLib:Window(Settings)
 
 		local function addActionButton(text, action, fallbackClose)
 			local button = Instance.new("TextButton")
-			button.Name = text:gsub("%s+", "") .. "Button"
+			button.Name = "ProfileActionButton"
 			button.AutoButtonColor = false
 			button.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
 			button.BorderSizePixel = 0
@@ -2209,9 +2260,37 @@ function MacLib:Window(Settings)
 			end)
 		end
 
-		addActionButton("Discord", Settings.Discord or Settings.DiscordCallback, false)
-		addActionButton("Website", Settings.Website or Settings.WebsiteCallback, false)
-		addActionButton("Logout", Settings.Logout or Settings.LogoutCallback or Settings.OnLogout, true)
+		local function copyProfileText(text, message)
+			return function()
+				if type(setclipboard) == "function" then
+					setclipboard(tostring(text or ""))
+					WindowFunctions:Notify({
+						Title = "TiRex",
+						Description = message or "Copied to clipboard.",
+						Lifetime = 2
+					})
+				end
+			end
+		end
+
+		local customActions = type(Settings.Actions) == "table" and Settings.Actions or nil
+		if customActions then
+			for _, actionInfo in ipairs(customActions) do
+				if type(actionInfo) == "table" then
+					addActionButton(
+						tostring(actionInfo.Text or actionInfo.Name or "Action"),
+						actionInfo.Callback or actionInfo.Action,
+						actionInfo.Close == true
+					)
+				end
+			end
+		else
+			addActionButton("Copy User", copyProfileText(profileUsername, "Username copied."), false)
+			addActionButton("Copy ID", copyProfileText(userId, "User ID copied."), false)
+			addActionButton("Close", function()
+				profile:Hide()
+			end, true)
+		end
 
 		profileButton.MouseEnter:Connect(function()
 			Tween(profileButtonStroke, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
@@ -2224,17 +2303,23 @@ function MacLib:Window(Settings)
 			}):Play()
 		end)
 		profileButton.MouseButton1Click:Connect(function()
-			profileModal.Visible = not profileModal.Visible
+			profileOverlay.Visible = not profileOverlay.Visible
+		end)
+		profileNamePill.MouseButton1Click:Connect(function()
+			profileOverlay.Visible = not profileOverlay.Visible
+		end)
+		profileOverlay.MouseButton1Click:Connect(function()
+			profile:Hide()
 		end)
 		close.MouseButton1Click:Connect(function()
 			profile:Hide()
 		end)
 
 		function profile:Show()
-			profileModal.Visible = true
+			profileOverlay.Visible = true
 		end
 		function profile:Hide()
-			profileModal.Visible = false
+			profileOverlay.Visible = false
 		end
 		function profile:SetIcon(newIcon)
 			profileIcon = ResolveImageAsset(newIcon, assets.tirexIcon)
@@ -2242,20 +2327,33 @@ function MacLib:Window(Settings)
 			avatar.Image = profileIcon
 		end
 		function profile:SetUsername(value)
-			valueLabels.Username.Text = tostring(value or "-")
+			profileUsername = tostring(value or "-")
+			profileNamePill.Text = profileUsername
+			if valueLabels.Username then
+				valueLabels.Username.Text = profileUsername
+			end
 		end
 		function profile:SetExpires(value)
-			valueLabels["Expires In"].Text = tostring(value or "-")
+			if valueLabels.Access then
+				valueLabels.Access.Text = tostring(value or "-")
+			end
 		end
 		function profile:SetGame(value)
-			valueLabels.Game.Text = tostring(value or "-")
+			if valueLabels.Game then
+				valueLabels.Game.Text = tostring(value or "-")
+			end
 		end
 		function profile:SetPlan(value)
-			tier.Text = tostring(value or "Free")
+			profileAccess = tostring(value or "Keyless")
+			tier.Text = profileAccess
+			if valueLabels.Access then
+				valueLabels.Access.Text = profileAccess
+			end
 		end
 		function profile:Destroy()
 			profileButton:Destroy()
-			profileModal:Destroy()
+			profileNamePill:Destroy()
+			profileOverlay:Destroy()
 			if self == WindowFunctions._Profile then
 				WindowFunctions._Profile = nil
 			end
@@ -9628,6 +9726,8 @@ local function compatApplyThemeToRoot(root, theme)
 		Confirm = true,
 		Cancel = true,
 		ProfileButton = true,
+		ProfileUsernamePill = true,
+		ProfileActionButton = true,
 		ProfileCard = true,
 		CheckboxButton = true,
 		DiscordButton = true,
@@ -9670,6 +9770,8 @@ local function compatApplyThemeToRoot(root, theme)
 			if obj.BackgroundTransparency < 0.99 then
 				if obj.Name == "Value" and obj:FindFirstChild("Slide") then
 					-- Keep the colorpicker value slider hue intact.
+				elseif obj.Name == "ProfileOverlay" then
+					obj.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
 				elseif obj.Name == "BinderBox" then
