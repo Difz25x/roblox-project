@@ -248,7 +248,7 @@ local function GetGui()
 			task.wait()
 		end
 	end
-	
+
 	if not newGui.Parent then
 		newGui.Parent = cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui")
 	end
@@ -1012,6 +1012,7 @@ function MacLib:Window(Settings)
 	tabIndex = 0
 
 	local WindowFunctions = {Settings = Settings}
+	local windowConnections = {}
 	if Settings.AcrylicBlur ~= nil then
 		acrylicBlur = Settings.AcrylicBlur == true
 	else
@@ -7527,6 +7528,14 @@ function MacLib:Window(Settings)
 	function WindowFunctions:Unload()
 		setWindowMouseState(false)
 		optionCall(onUnloadCallback)
+		for _, connection in ipairs(windowConnections) do
+			if connection then
+				pcall(function()
+					connection:Disconnect()
+				end)
+			end
+		end
+		table.clear(windowConnections)
 		macLib:Destroy()
 		unloaded = true
 	end
@@ -7551,8 +7560,9 @@ function MacLib:Window(Settings)
 		})
 	end
 
-	UserInputService.InputEnded:Connect(function(inp, gpe)
+	windowConnections[#windowConnections + 1] = UserInputService.InputEnded:Connect(function(inp, gpe)
 		if gpe then return end
+		if unloaded then return end
 		if inp.KeyCode == MenuKeybind then
 			ToggleMenu()
 		end
@@ -8488,7 +8498,10 @@ local function wrapLabel(rawLabel, groupProxy)
 			end
 		end
 
-		binderBox.MouseButton1Click:Connect(function()
+		local inlineConnections = {}
+		keyProxy._InlineConnections = inlineConnections
+
+		inlineConnections[#inlineConnections + 1] = binderBox.MouseButton1Click:Connect(function()
 			if tick() < suppressUntil then
 				return
 			end
@@ -8496,7 +8509,7 @@ local function wrapLabel(rawLabel, groupProxy)
 			updateInlineVisual(binding)
 		end)
 
-		UserInputService.InputBegan:Connect(function(input)
+		inlineConnections[#inlineConnections + 1] = UserInputService.InputBegan:Connect(function(input)
 			if not binding then
 				return
 			end
@@ -8795,7 +8808,10 @@ local function makeGroupProxy(section)
 				end
 			end
 
-			binderBox.MouseButton1Click:Connect(function()
+			local inlineConnections = {}
+			keyProxy._InlineConnections = inlineConnections
+
+			inlineConnections[#inlineConnections + 1] = binderBox.MouseButton1Click:Connect(function()
 				if tick() < suppressUntil then
 					return
 				end
@@ -8803,7 +8819,7 @@ local function makeGroupProxy(section)
 				updateInlineVisual(binding)
 			end)
 
-			UserInputService.InputBegan:Connect(function(input)
+			inlineConnections[#inlineConnections + 1] = UserInputService.InputBegan:Connect(function(input)
 				if not binding then
 					return
 				end
@@ -9328,6 +9344,18 @@ function MacLib:Unload()
 		compatState.InputEndedConnection = nil
 	end
 	compatState.InputBound = false
+	for _, keyPicker in pairs(compatState.KeyPickers) do
+		local inlineConnections = keyPicker and keyPicker._InlineConnections
+		if type(inlineConnections) == "table" then
+			for _, conn in ipairs(inlineConnections) do
+				if conn then
+					pcall(function()
+						conn:Disconnect()
+					end)
+				end
+			end
+		end
+	end
 	compatState.KeyPickers = {}
 
 	for _, statusLabel in ipairs(compatState.StatusLabels) do
