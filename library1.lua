@@ -1957,12 +1957,12 @@ function MacLib:Window(Settings)
 
 		local profileDock = Instance.new("Frame")
 		profileDock.Name = "ProfileDock"
-		profileDock.BackgroundColor3 = UI_THEME.Colors.WindowBg
-		profileDock.BackgroundTransparency = 0.02
+		profileDock.BackgroundColor3 = UI_THEME.Colors.SectionBg
+		profileDock.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 		profileDock.BorderSizePixel = 0
 		profileDock.AnchorPoint = Vector2.new(0, 1)
 		profileDock.Position = UDim2.new(0, -10, 1, -4)
-		profileDock.Size = UDim2.new(1, 20, 0, 58)
+		profileDock.Size = UDim2.new(1, 20, 0, 62)
 		profileDock.Parent = userInfo
 
 		local profileDockCorner = Instance.new("UICorner")
@@ -1983,7 +1983,7 @@ function MacLib:Window(Settings)
 		profileButton.BorderSizePixel = 0
 		profileButton.AnchorPoint = Vector2.new(0, 0.5)
 		profileButton.Position = UDim2.new(0, 12, 0.5, 0)
-		profileButton.Size = UDim2.fromOffset(42, 42)
+		profileButton.Size = UDim2.fromOffset(46, 46)
 		profileButton.Image = profileIcon
 		profileButton.ScaleType = Enum.ScaleType.Crop
 		profileButton.ZIndex = 2
@@ -2002,18 +2002,18 @@ function MacLib:Window(Settings)
 		local profileNamePill = Instance.new("TextButton")
 		profileNamePill.Name = "ProfileUsernamePill"
 		profileNamePill.AutoButtonColor = false
-		profileNamePill.BackgroundColor3 = UI_THEME.Colors.InputBg
-		profileNamePill.BackgroundTransparency = 0.04
+		profileNamePill.BackgroundColor3 = UI_THEME.Colors.SectionBg
+		profileNamePill.BackgroundTransparency = 1
 		profileNamePill.BorderSizePixel = 0
-		profileNamePill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		profileNamePill.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 		profileNamePill.Text = profileUsername
 		profileNamePill.TextColor3 = Color3.fromRGB(235, 235, 235)
-		profileNamePill.TextSize = 11
+		profileNamePill.TextSize = 13
 		profileNamePill.TextTruncate = Enum.TextTruncate.AtEnd
 		profileNamePill.TextXAlignment = Enum.TextXAlignment.Left
 		profileNamePill.AnchorPoint = Vector2.new(0, 0.5)
-		profileNamePill.Position = UDim2.new(0, 64, 0.5, 0)
-		profileNamePill.Size = UDim2.new(1, -76, 0, 34)
+		profileNamePill.Position = UDim2.new(0, 68, 0.5, 0)
+		profileNamePill.Size = UDim2.new(1, -82, 0, 40)
 		profileNamePill.ZIndex = 2
 		profileNamePill.Parent = profileDock
 
@@ -2051,7 +2051,7 @@ function MacLib:Window(Settings)
 		profileModal.BorderSizePixel = 0
 		profileModal.Active = true
 		profileModal.Position = UDim2.fromScale(0.5, 0.5)
-		profileModal.Size = UDim2.fromOffset(342, 252)
+		profileModal.Size = UDim2.fromOffset(390, 286)
 		profileModal.Visible = true
 		profileModal.ZIndex = 10
 		profileModal.Parent = profileOverlay
@@ -2080,7 +2080,7 @@ function MacLib:Window(Settings)
 		headerText.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		headerText.Text = Settings.Title or "Profile"
 		headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
-		headerText.TextSize = 15
+		headerText.TextSize = 17
 		headerText.TextXAlignment = Enum.TextXAlignment.Left
 		headerText.Position = UDim2.fromOffset(16, 0)
 		headerText.Size = UDim2.new(1, -58, 1, 0)
@@ -2095,7 +2095,7 @@ function MacLib:Window(Settings)
 		close.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 		close.Text = "x"
 		close.TextColor3 = Color3.fromRGB(220, 220, 220)
-		close.TextSize = 18
+		close.TextSize = 20
 		close.AnchorPoint = Vector2.new(1, 0.5)
 		close.Position = UDim2.new(1, -17, 0.5, 0)
 		close.Size = UDim2.fromOffset(24, 24)
@@ -2104,10 +2104,11 @@ function MacLib:Window(Settings)
 
 		local card = Instance.new("Frame")
 		card.Name = "ProfileCard"
-		card.BackgroundColor3 = UI_THEME.Colors.InputBg
+		card.BackgroundColor3 = UI_THEME.Colors.SectionBg
+		card.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 		card.BorderSizePixel = 0
 		card.Position = UDim2.fromOffset(16, 64)
-		card.Size = UDim2.new(1, -32, 0, 126)
+		card.Size = UDim2.new(1, -32, 0, 146)
 		card.ZIndex = 11
 		card.Parent = profileModal
 
@@ -2125,8 +2126,8 @@ function MacLib:Window(Settings)
 		avatar.Name = "ProfileAvatar"
 		avatar.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 		avatar.BorderSizePixel = 0
-		avatar.Position = UDim2.fromOffset(14, 14)
-		avatar.Size = UDim2.fromOffset(58, 58)
+		avatar.Position = UDim2.fromOffset(14, 16)
+		avatar.Size = UDim2.fromOffset(64, 64)
 		avatar.Image = profileIcon
 		avatar.ScaleType = Enum.ScaleType.Crop
 		avatar.ZIndex = 12
@@ -2143,9 +2144,9 @@ function MacLib:Window(Settings)
 		tier.FontFace = SafeFont(assets.interFont, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 		tier.Text = profileAccess
 		tier.TextColor3 = Color3.fromRGB(0, 0, 0)
-		tier.TextSize = 10
-		tier.Position = UDim2.fromOffset(14, 82)
-		tier.Size = UDim2.fromOffset(58, 19)
+		tier.TextSize = 12
+		tier.Position = UDim2.fromOffset(14, 90)
+		tier.Size = UDim2.fromOffset(64, 22)
 		tier.ZIndex = 12
 		tier.Parent = card
 
@@ -2157,13 +2158,13 @@ function MacLib:Window(Settings)
 		rows.Name = "ProfileRows"
 		rows.BackgroundTransparency = 1
 		rows.BorderSizePixel = 0
-		rows.Position = UDim2.fromOffset(84, 16)
-		rows.Size = UDim2.new(1, -100, 1, -28)
+		rows.Position = UDim2.fromOffset(96, 17)
+		rows.Size = UDim2.new(1, -112, 1, -28)
 		rows.ZIndex = 12
 		rows.Parent = card
 
 		local rowsLayout = Instance.new("UIListLayout")
-		rowsLayout.Padding = UDim.new(0, 6)
+		rowsLayout.Padding = UDim.new(0, 8)
 		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		rowsLayout.Parent = rows
 
@@ -2173,7 +2174,7 @@ function MacLib:Window(Settings)
 			row.Name = rowName:gsub("%s+", "") .. "Row"
 			row.BackgroundTransparency = 1
 			row.BorderSizePixel = 0
-			row.Size = UDim2.new(1, 0, 0, 16)
+			row.Size = UDim2.new(1, 0, 0, 20)
 			row.ZIndex = 12
 			row.Parent = rows
 
@@ -2183,9 +2184,9 @@ function MacLib:Window(Settings)
 			label.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			label.Text = rowName
 			label.TextColor3 = Color3.fromRGB(170, 170, 170)
-			label.TextSize = 11
+			label.TextSize = 13
 			label.TextXAlignment = Enum.TextXAlignment.Left
-			label.Size = UDim2.fromOffset(92, 16)
+			label.Size = UDim2.fromOffset(110, 20)
 			label.ZIndex = 13
 			label.Parent = row
 
@@ -2195,11 +2196,11 @@ function MacLib:Window(Settings)
 			value.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			value.Text = tostring(rowValue or "-")
 			value.TextColor3 = Color3.fromRGB(245, 245, 245)
-			value.TextSize = 11
+			value.TextSize = 13
 			value.TextXAlignment = Enum.TextXAlignment.Right
 			value.TextTruncate = Enum.TextTruncate.AtEnd
-			value.Position = UDim2.fromOffset(94, 0)
-			value.Size = UDim2.new(1, -94, 0, 16)
+			value.Position = UDim2.fromOffset(112, 0)
+			value.Size = UDim2.new(1, -112, 0, 20)
 			value.ZIndex = 13
 			value.Parent = row
 
@@ -2216,8 +2217,8 @@ function MacLib:Window(Settings)
 		actions.Name = "ProfileActions"
 		actions.BackgroundTransparency = 1
 		actions.BorderSizePixel = 0
-		actions.Position = UDim2.new(0, 16, 1, -40)
-		actions.Size = UDim2.new(1, -32, 0, 30)
+		actions.Position = UDim2.new(0, 16, 1, -48)
+		actions.Size = UDim2.new(1, -32, 0, 34)
 		actions.ZIndex = 11
 		actions.Parent = profileModal
 
@@ -2251,13 +2252,14 @@ function MacLib:Window(Settings)
 			local button = Instance.new("TextButton")
 			button.Name = "ProfileActionButton"
 			button.AutoButtonColor = false
-			button.BackgroundColor3 = UI_THEME.Colors.InputBg
+			button.BackgroundColor3 = UI_THEME.Colors.SectionBg
+			button.BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 			button.BorderSizePixel = 0
 			button.FontFace = SafeFont(assets.interFont, Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			button.Text = text
 			button.TextColor3 = Color3.fromRGB(255, 255, 255)
-			button.TextSize = 11
-			button.Size = UDim2.fromOffset(82, 29)
+			button.TextSize = 13
+			button.Size = UDim2.fromOffset(102, 34)
 			button.ZIndex = 12
 			button.Parent = actions
 
@@ -2273,12 +2275,14 @@ function MacLib:Window(Settings)
 
 			button.MouseEnter:Connect(function()
 				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
-					BackgroundColor3 = UI_THEME.Colors.ToggleDisabled
+					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+					BackgroundTransparency = 0.88
 				}):Play()
 			end)
 			button.MouseLeave:Connect(function()
 				Tween(button, TweenInfo.new(0.15, Enum.EasingStyle.Sine), {
-					BackgroundColor3 = UI_THEME.Colors.InputBg
+					BackgroundColor3 = UI_THEME.Colors.SectionBg,
+					BackgroundTransparency = UI_THEME.Colors.SectionBgTransparency
 				}):Play()
 			end)
 			button.MouseButton1Click:Connect(function()
@@ -9752,8 +9756,6 @@ local function compatApplyThemeToRoot(root, theme)
 		Confirm = true,
 		Cancel = true,
 		ProfileButton = true,
-		ProfileUsernamePill = true,
-		ProfileActionButton = true,
 		ProfileCard = true,
 		CheckboxButton = true
 	}
@@ -9797,6 +9799,9 @@ local function compatApplyThemeToRoot(root, theme)
 					obj.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				elseif obj.Name == "ProfileTier" then
 					obj.BackgroundColor3 = normalized.Font
+				elseif obj.Name == "ProfileActionButton" then
+					obj.BackgroundColor3 = panelColor
+					obj.BackgroundTransparency = 0.10
 				elseif obj.Name == "BinderBox" then
 					-- Keybind boxes manage their own enabled/empty/binding colors.
 				elseif obj.Name == "CheckboxButton" then
@@ -9814,7 +9819,10 @@ local function compatApplyThemeToRoot(root, theme)
 			end
 		elseif obj:IsA("Frame") or obj:IsA("CanvasGroup") then
 			if obj.BackgroundTransparency < 0.99 then
-				if backgroundNames[obj.Name] then
+				if obj.Name == "ProfileDock" or obj.Name == "ProfileCard" then
+					obj.BackgroundColor3 = panelColor
+					obj.BackgroundTransparency = 0.10
+				elseif backgroundNames[obj.Name] then
 					obj.BackgroundColor3 = normalized.Background
 				elseif obj.Name == "SliderFill" then
 					obj.BackgroundColor3 = sliderFillColor
