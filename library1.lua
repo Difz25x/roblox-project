@@ -14,6 +14,7 @@ local RunService = MacLib.GetService("RunService")
 local HttpService = MacLib.GetService("HttpService")
 local ContentProvider = MacLib.GetService("ContentProvider")
 local UserInputService = MacLib.GetService("UserInputService")
+local ContextActionService = MacLib.GetService("ContextActionService")
 local Lighting = MacLib.GetService("Lighting")
 local Players = MacLib.GetService("Players")
 
@@ -63,6 +64,51 @@ local function optionArgs(settings, flag)
 end
 
 local optionUnpack = table.unpack or unpack
+
+local keybindCaptureDepth = 0
+local keybindCaptureActionName = "MacLib_BlockGameInputWhileBinding"
+local keybindCaptureInputs = {
+	Enum.UserInputType.Keyboard,
+	Enum.UserInputType.MouseButton1,
+	Enum.UserInputType.MouseButton2,
+	Enum.UserInputType.MouseButton3
+}
+
+local function sinkKeybindCaptureInput()
+	return Enum.ContextActionResult.Sink
+end
+
+local function beginKeybindCaptureSink()
+	keybindCaptureDepth = keybindCaptureDepth + 1
+	if keybindCaptureDepth ~= 1 then
+		return
+	end
+
+	pcall(function()
+		ContextActionService:BindActionAtPriority(
+			keybindCaptureActionName,
+			sinkKeybindCaptureInput,
+			false,
+			1000000,
+			optionUnpack(keybindCaptureInputs)
+		)
+	end)
+end
+
+local function endKeybindCaptureSink()
+	if keybindCaptureDepth <= 0 then
+		return
+	end
+
+	keybindCaptureDepth = keybindCaptureDepth - 1
+	if keybindCaptureDepth ~= 0 then
+		return
+	end
+
+	pcall(function()
+		ContextActionService:UnbindAction(keybindCaptureActionName)
+	end)
+end
 
 local function optionCall(callback, ...)
 	if type(callback) ~= "function" then
@@ -4138,8 +4184,19 @@ function MacLib:Window(Settings)
 					end
 
 					local function resetBindingState()
+						if isBinding then
+							endKeybindCaptureSink()
+						end
 						isBinding = false
 						updateBindVisual(false)
+					end
+
+					local function startBindingState()
+						if not isBinding then
+							beginKeybindCaptureSink()
+						end
+						isBinding = true
+						updateBindVisual(true)
 					end
 
 					local function canBindInput(input)
@@ -4166,8 +4223,7 @@ function MacLib:Window(Settings)
 							return
 						end
 
-						isBinding = true
-						updateBindVisual(true)
+						startBindingState()
 					end)
 
 					UserInputService.InputBegan:Connect(function(inp)
@@ -4197,7 +4253,7 @@ function MacLib:Window(Settings)
 								setBind(inp.UserInputType)
 							end
 							reset = true
-							isBinding = false
+							resetBindingState()
 							return
 						end
 
@@ -4220,6 +4276,10 @@ function MacLib:Window(Settings)
 								optionCall(KeybindFunctions.Settings.onBindHeld, false, binded)
 							end
 						end
+					end)
+
+					keybind.Destroying:Connect(function()
+						resetBindingState()
 					end)
 
 					function KeybindFunctions:Bind(Key)
@@ -8459,6 +8519,7 @@ local function wrapLabel(rawLabel, groupProxy)
 		sizeConstraint.Parent = binderBox
 
 		local binding = false
+		local captureSinkActive = false
 		local suppressUntil = 0
 		local function formatKeyName(value)
 			local name = normalizeKeyName(value)
@@ -8499,6 +8560,24 @@ local function wrapLabel(rawLabel, groupProxy)
 			end
 		end
 
+		local function stopInlineBinding()
+			if captureSinkActive then
+				endKeybindCaptureSink()
+				captureSinkActive = false
+			end
+			binding = false
+			updateInlineVisual(false)
+		end
+
+		local function startInlineBinding()
+			if not captureSinkActive then
+				beginKeybindCaptureSink()
+				captureSinkActive = true
+			end
+			binding = true
+			updateInlineVisual(true)
+		end
+
 		local inlineConnections = {}
 		keyProxy._InlineConnections = inlineConnections
 
@@ -8506,8 +8585,11 @@ local function wrapLabel(rawLabel, groupProxy)
 			if tick() < suppressUntil then
 				return
 			end
-			binding = not binding
-			updateInlineVisual(binding)
+			if binding then
+				stopInlineBinding()
+			else
+				startInlineBinding()
+			end
 		end)
 
 		inlineConnections[#inlineConnections + 1] = UserInputService.InputBegan:Connect(function(input)
@@ -8531,8 +8613,11 @@ local function wrapLabel(rawLabel, groupProxy)
 				end
 				keyProxy:SetValue(input.UserInputType.Name)
 			end
-			binding = false
-			updateInlineVisual(false)
+			stopInlineBinding()
+		end)
+
+		inlineConnections[#inlineConnections + 1] = binderBox.Destroying:Connect(function()
+			stopInlineBinding()
 		end)
 
 		local oldSetValue = keyProxy.SetValue
@@ -8545,6 +8630,9 @@ local function wrapLabel(rawLabel, groupProxy)
 		function keyProxy:SetVisibility(state)
 			if oldSetVisibility then
 				oldSetVisibility(self, state)
+			end
+			if state ~= true then
+				stopInlineBinding()
 			end
 			binderBox.Visible = state == true
 		end
@@ -8777,6 +8865,7 @@ local function makeGroupProxy(section)
 			sizeConstraint.Parent = binderBox
 
 			local binding = false
+			local captureSinkActive = false
 			local suppressUntil = 0
 			local function formatKeyName(value)
 				local name = normalizeKeyName(value)
@@ -8817,6 +8906,24 @@ local function makeGroupProxy(section)
 				end
 			end
 
+			local function stopInlineBinding()
+				if captureSinkActive then
+					endKeybindCaptureSink()
+					captureSinkActive = false
+				end
+				binding = false
+				updateInlineVisual(false)
+			end
+
+			local function startInlineBinding()
+				if not captureSinkActive then
+					beginKeybindCaptureSink()
+					captureSinkActive = true
+				end
+				binding = true
+				updateInlineVisual(true)
+			end
+
 			local inlineConnections = {}
 			keyProxy._InlineConnections = inlineConnections
 
@@ -8824,8 +8931,11 @@ local function makeGroupProxy(section)
 				if tick() < suppressUntil then
 					return
 				end
-				binding = not binding
-				updateInlineVisual(binding)
+				if binding then
+					stopInlineBinding()
+				else
+					startInlineBinding()
+				end
 			end)
 
 			inlineConnections[#inlineConnections + 1] = UserInputService.InputBegan:Connect(function(input)
@@ -8849,8 +8959,11 @@ local function makeGroupProxy(section)
 					end
 					keyProxy:SetValue(input.UserInputType.Name)
 				end
-				binding = false
-				updateInlineVisual(false)
+				stopInlineBinding()
+			end)
+
+			inlineConnections[#inlineConnections + 1] = binderBox.Destroying:Connect(function()
+				stopInlineBinding()
 			end)
 
 			local oldSetValue = keyProxy.SetValue
@@ -8863,6 +8976,9 @@ local function makeGroupProxy(section)
 			function keyProxy:SetVisibility(state)
 				if oldSetVisibility then
 					oldSetVisibility(self, state)
+				end
+				if state ~= true then
+					stopInlineBinding()
 				end
 				binderBox.Visible = state == true
 			end
