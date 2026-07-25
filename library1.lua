@@ -7529,7 +7529,7 @@ function TiRexLib:Window(Settings)
 			Settings.Lifetime = Settings.Lifetime or 3
 
 			if Settings.Lifetime ~= 0 then
-				task.wait(Settings.Lifetime)
+				task.wait(tonumber(Settings.Lifetime) or 3)
 
 				local out = tweens.Out
 				out:Play()
