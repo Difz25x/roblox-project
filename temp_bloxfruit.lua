@@ -151,6 +151,8 @@ local isMultiMobDamage = false
 local isAutoRaidKill = false
 local isAutoNextIsland = false
 local currentRaidIsland = 1
+local isAutoBone = false
+local isAutoSpinBones = false
 
 -- State Variables
 local enabled = false
@@ -172,6 +174,8 @@ local lastPlayerPos = nil
 
 local currentTargetInstance = nil
 local targetLockStartTime = 0
+local lastTargetHealth = -1
+local lastTargetHealthChangeAt = 0
 local enemyBlacklist = {}
 
 local cachedWeapon = nil
@@ -510,7 +514,7 @@ local function GetIslandLocations()
         end
     end
     table.sort(islandList)
-    if #islandList == 0 then table.insert(islandList, "Tidak ada pulau (Error)") end
+    if #islandList == 0 then table.insert(islandList, "No islands found (Error)") end
     return islandList
 end
 
@@ -773,7 +777,7 @@ local function ServerHop()
         if getgenv().RayfieldObject then
             getgenv().RayfieldObject:Notify({
                 Title = "Server Hop",
-                Content = "Mencari server baru, mohon tunggu...",
+                Content = "Looking for a new server, please wait...",
                 Duration = 3,
                 Image = 4483362458
             })
@@ -815,6 +819,8 @@ local lastLevelCalculated = -1
 local questBracketKey = nil
 local lastStartedQuestKey = nil
 local lastStartedQuestAt = 0
+	lastTargetHealth = -1
+	lastTargetHealthChangeAt = 0
 
 if getgenv then
 	if not getgenv().QuestCache then
@@ -1012,6 +1018,8 @@ local function CycleQuestProfile()
 	end
 	lastStartedQuestKey = nil
 	lastStartedQuestAt = 0
+	lastTargetHealth = -1
+	lastTargetHealthChangeAt = 0
 	currentTargetInstance = nil
 	isReadyToAttack = false
 	lastTargetRefreshAt = 0
@@ -1032,7 +1040,24 @@ end
 -- [ COMBAT SYSTEM ]
 --==================================================
 
-local preferredHitParts = { "Head", "UpperTorso", "LowerTorso", "ModelHitbox", "HumanoidRootPart" }
+local preferredHitParts = {
+    "RightUpperArm",
+    "RightLowerArm",
+    "RightHand",
+    "RightUpperLeg",
+    "RightLowerLeg",
+    "RightFoot",
+    "LeftUpperArm",
+    "LeftLowerArm",
+    "LeftHand",
+    "LeftUpperLeg",
+    "LeftLowerLeg",
+    "LeftFoot",
+    "UpperTorso",
+    "LowerTorso",
+    "Head",
+    "ModelHitbox",
+}
 local meleeNames = {
 	Combat = true, ["Dark Step"] = true, Electro = true, ["Water Kung Fu"] = true, ["Fishman Karate"] = true,
 	["Dragon Breath"] = true, Superhuman = true, ["Death Step"] = true, ["Sharkman Karate"] = true, ["Electric Claw"] = true,
@@ -1201,15 +1226,13 @@ local function ExecuteAttack(myChar, myHrp)
             local enemiesFolder = workspace:FindFirstChild("Enemies")
             if enemiesFolder then
                 local hitTargets = {}
-                
-                -- Kumpulkan musuh yang berdekatan
                 for _, enemy in ipairs(enemiesFolder:GetChildren()) do
                     if IsEnemyVulnerable(enemy) then
                         local eHrp = enemy:FindFirstChild("HumanoidRootPart")
                         if eHrp and (eHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius then
                             local ePart = GetHitPart(enemy)
                             if ePart then
-                                table.insert(hitTargets, ePart)
+                                table.insert(hitTargets, {EnemyModel = enemy, HitPart = ePart})
                             end
                         end
                     end
@@ -1217,31 +1240,31 @@ local function ExecuteAttack(myChar, myHrp)
                 
                 if #hitTargets > 0 then
                     task.spawn(function()
-                        -- Spam klik animasi client side untuk bypass limit server visual
-                        pcall(function() if VirtualUser then VirtualUser:ClickButton1(Vector2.new()) end end)
-                        
-                        -- Cross-Fire Multi Damage Logic
                         local maxTargets = math.min(#hitTargets, isMultiMobDamage and (cfg.MaxAdditionalTargets or 6) or 1)
                         
                         for i = 1, maxTargets do
-                            local crossTarget = hitTargets[i]
-                            local crossAdditionalHits = {}
+                            local crossTargetDict = hitTargets[i]
+                            local crossTargetPart = crossTargetDict.HitPart
                             
-                            -- Kumpulkan sisanya sebagai additional hits untuk target ke-i
+                            local crossAdditionalHits = {}
                             if isMultiMobDamage then
                                 for j = 1, maxTargets do
                                     if i ~= j then
-                                        table.insert(crossAdditionalHits, hitTargets[j])
+                                        local adjDict = hitTargets[j]
+                                        table.insert(crossAdditionalHits, {adjDict.EnemyModel, adjDict.HitPart})
                                     end
                                 end
                             end
                             
                             pcall(function()
-                                if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
-                                if RegisterHitEvent then RegisterHitEvent:FireServer(crossTarget, crossAdditionalHits, nil, sessionSecret) end
+                                if RegisterAttackEvent then 
+                                    -- Bypass Cooldown Animasi ke Server (Super Fast = 0 detik cooldown)
+                                    local atkDur = (attackSpeedMode == "Super Fast Attack") and 0 or 0.125
+                                    RegisterAttackEvent:FireServer(atkDur) 
+                                end
+                                if RegisterHitEvent then RegisterHitEvent:FireServer(crossTargetPart, crossAdditionalHits, nil, sessionSecret) end
                             end)
                             
-                            -- Jeda ultra mikroskopis antar cross-fire agar tidak ter-drop oleh server rate limiter
                             if maxTargets > 1 then task.wait(0.015) end
                         end
                     end)
@@ -1270,7 +1293,199 @@ local function AttackThread(generation)
                     end
                 end
             end
-            task.wait(cfg.ThreadSleep)
+            
+            -- Jika kita sedang dalam mode serang (isReadyToAttack), kurangi bottleneck wait!
+            if enabled and isReadyToAttack and attackSpeedMode == "Super Fast Attack" then
+                task.wait() -- Tanpa argumen (menyesuaikan frame tercepat game)
+            else
+                task.wait(cfg.ThreadSleep)
+            end
+        end
+    end)
+end
+
+
+local function GetBestHauntedMob()
+    local hauntedMobs = {
+        { Name = "Reborn Skeletons", Mob = "Reborn Skeleton", MobPos = Vector3.new(-8760, 183, 6168) },
+        { Name = "Living Zombies", Mob = "Living Zombie", MobPos = Vector3.new(-10144, 139, 5932) },
+        { Name = "Demonic Souls", Mob = "Demonic Soul", MobPos = Vector3.new(-9507, 172, 6158) },
+        { Name = "Posessed Mummies", Mob = "Posessed Mummy", MobPos = Vector3.new(-9582, 6, 6205) }
+    }
+
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not enemies then return hauntedMobs[math.random(1, #hauntedMobs)] end
+
+    local availableMobTypes = {}
+    local seenMobTypes = {}
+
+    for _, enemy in ipairs(enemies:GetChildren()) do
+        for _, mobInfo in ipairs(hauntedMobs) do
+            if enemy.Name == mobInfo.Mob and IsEnemyVulnerable(enemy, mobInfo.Mob) then
+                if not seenMobTypes[mobInfo.Mob] then
+                    seenMobTypes[mobInfo.Mob] = true
+                    table.insert(availableMobTypes, mobInfo)
+                end
+            end
+        end
+    end
+
+    if #availableMobTypes > 0 then
+        local randomIndex = math.random(1, #availableMobTypes)
+        return availableMobTypes[randomIndex]
+    end
+
+    return hauntedMobs[math.random(1, #hauntedMobs)]
+end
+
+local function StartAutoBone()
+    if attacking then return end
+    attacking = true
+    local generation = workerGeneration
+    ToggleFloat(true)
+    
+    -- State variabel agar tidak di-random setiap tick
+    local activeHauntedMobInfo = GetBestHauntedMob()
+
+    task.spawn(function()
+        while isAutoBone and ScriptContext.Running and generation == workerGeneration do
+            if isReadyToAttack then
+                local now = os.clock()
+                local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
+                if now - lastAttackAt >= interval then
+                    local myChar = GetCharacter()
+                    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    if myHrp then
+                        ExecuteAttack(myChar, myHrp)
+                        lastAttackAt = now
+                    end
+                end
+                if attackSpeedMode == "Super Fast Attack" then task.wait() else task.wait(cfg.ThreadSleep) end
+            else
+                task.wait(cfg.ThreadSleep)
+            end
+        end
+    end)
+
+    local boneBringConn
+    boneBringConn = RunService.Heartbeat:Connect(function()
+        if not isAutoBone or not ScriptContext.Running or generation ~= workerGeneration then
+            if boneBringConn then boneBringConn:Disconnect() end
+            return
+        end
+        if isReadyToAttack then
+            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local target = currentTargetInstance
+            local tHrp = target and target:FindFirstChild("HumanoidRootPart")
+            if myHrp and tHrp then
+                local enemiesFolder = workspace:FindFirstChild("Enemies")
+                if enemiesFolder then
+                    local targetMobInfo = activeHauntedMobInfo or GetBestHauntedMob()
+                    local targetMobName = targetMobInfo.Mob
+                    local magnetPos = targetMobInfo.MobPos or tHrp.Position
+
+					if magnetPos then
+                        -- Gunakan posisi absolut spawn / mob, jangan dikaitkan dengan myHrp.CFrame (evasion) agar tidak rubber-band.
+                        -- magnetPos sudah mewakili titik tanah/asli.
+					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
+
+                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                            if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
+                                local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                                local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                if eHrp and eHum and eHum.Health > 0 then
+                                    local dist = (eHrp.Position - myHrp.Position).Magnitude
+                                    if dist <= (cfg.BringRadius * 2) then
+                                        eHrp.CFrame = gatherCFrame
+                                        eHrp.AssemblyLinearVelocity = Vector3.zero
+                                        eHrp.AssemblyAngularVelocity = Vector3.zero
+                                        if eHrp.CanCollide then eHrp.CanCollide = false end
+                                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    ScriptContext:AddConnection(boneBringConn)
+
+    task.spawn(function()
+        while isAutoBone and ScriptContext.Running and generation == workerGeneration do
+            local ok, err = pcall(function()
+                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                if not myHrp then return end
+
+                local now = os.clock()
+                if now - lastEvasionTime >= cfg.EvasionTick then
+                    lastEvasionTime = now
+                    local radius = math.max(0, math.floor(cfg.EvasionRadius))
+                    currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                end
+
+                if not activeHauntedMobInfo then
+                    activeHauntedMobInfo = GetBestHauntedMob()
+                end
+
+                local targetMobInfo = activeHauntedMobInfo
+                local targetMobName = targetMobInfo.Mob
+                local targetEnemy = currentTargetInstance
+
+                if targetEnemy then
+                    if targetLockStartTime > 0 and (now - targetLockStartTime >= cfg.StuckTimeout) then
+                        enemyBlacklist[targetEnemy] = now + 3
+                        currentTargetInstance = nil
+                        isReadyToAttack = false
+                        return
+                    end
+                end
+
+                if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
+                    targetEnemy = GetTargetEnemy(targetMobName)
+                    -- Jika masih nil, berarti seluruh jenis mob ini SUDAH MUSNAH! Kita ganti target acak yang baru.
+                    if not targetEnemy then
+                        activeHauntedMobInfo = GetBestHauntedMob()
+                        targetMobInfo = activeHauntedMobInfo
+                        targetMobName = targetMobInfo.Mob
+                        targetEnemy = GetTargetEnemy(targetMobName)
+                    end
+                    
+                    currentTargetInstance = targetEnemy
+                    if targetEnemy then targetLockStartTime = now end
+                end
+
+                if targetEnemy then
+                    local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
+                    if tHrp then
+                        local centerPos = tHrp.Position
+                        local targetDistance = (centerPos - myHrp.Position).Magnitude
+                        if targetDistance > 80 then
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                        else
+                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+                            end
+                        end
+                        isReadyToAttack = targetDistance <= cfg.HitRadius
+                    end
+                else
+                    currentTargetInstance = nil
+                    isReadyToAttack = false
+                    local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
+                    if distToSpawn > 80 then
+                        TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
+                    else
+                        if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            lastEvasionMoveAt = now
+                            TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
+                        end
+                    end
+                end
+            end)
+            task.wait(0.05)
         end
     end)
 end
@@ -1410,23 +1625,34 @@ local function StartAutoFarm()
 						targetEnemy = GetTargetEnemy(profile.Mob)
 						currentTargetInstance = targetEnemy
 						lastTargetRefreshAt = now
-						if targetEnemy then targetLockStartTime = now end
+						if targetEnemy then 
+						    targetLockStartTime = now 
+						    local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                            lastTargetHealth = h and h.Health or -1
+                            lastTargetHealthChangeAt = now
+						end
 					end
 
 					if targetEnemy then
-                            -- Cek jika kita nyangkut (Stuck Timeout) dengan musuh ini
-                            if targetLockStartTime > 0 and (now - targetLockStartTime >= cfg.StuckTimeout) then
-                                -- Blacklist musuh ini selama 3 detik
-                                enemyBlacklist[targetEnemy] = now + 3
-                                currentTargetInstance = nil
-                                isReadyToAttack = false
-                                return -- Ulangi iterasi untuk cari musuh baru
+                            local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                            if h then
+                                if h.Health ~= lastTargetHealth then
+                                    lastTargetHealth = h.Health
+                                    lastTargetHealthChangeAt = now
+                                end
+                                
+                                if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
+                                    enemyBlacklist[targetEnemy] = now + 3
+                                    currentTargetInstance = nil
+                                    isReadyToAttack = false
+                                    return
+                                end
                             end
                             
                             local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
                             if tHrp then
-                                -- JANGAN kejar tHrp (musuh), kejar pusat spawn agar tidak keluar batas server
-                                local centerPos = profile.MobPos or tHrp.Position
+                                -- Kejar musuh secara aktif. StuckTimeout akan meng-handle jika musuh ternyata bug/keluar batas.
+                                local centerPos = tHrp.Position
                                 local targetDistance = (centerPos - myHrp.Position).Magnitude
                                 if targetDistance > 80 then
                                     TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
@@ -1436,7 +1662,7 @@ local function StartAutoFarm()
                                         TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                                     end
                                 end
-                                isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius
+                                isReadyToAttack = targetDistance <= cfg.HitRadius
                             end
                         else
 						currentTargetInstance = nil
@@ -1476,6 +1702,8 @@ local function StopAutoFarm()
 	lastEvasionMoveAt = 0
 	lastStartedQuestKey = nil
 	lastStartedQuestAt = 0
+	lastTargetHealth = -1
+	lastTargetHealthChangeAt = 0
 
 	if activeTween then activeTween:Cancel(); activeTween = nil end
 	attacking = false
@@ -1571,8 +1799,11 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 					end
 					
 					if magnetPos then
-					    -- Kumpulkan mob sedikit di atas tanah agar tidak nyangkut (Y + 5)
-					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y + 5, magnetPos.Z)
+					    -- Tepat di bawah karakter (-TweenHeight) dan sedikit di depan (-5) agar Melee kena sempurna
+					    local frontPos = (myHrp.CFrame * CFrame.new(0, 0, -5)).Position
+					    local targetY = myHrp.Position.Y - cfg.TweenHeight
+					    local gatherCFrame = CFrame.new(frontPos.X, targetY, frontPos.Z)
+					    
 					    for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
 						    if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
 							    local eHrp = enemy:FindFirstChild("HumanoidRootPart")
@@ -1607,6 +1838,23 @@ task.spawn(function()
     while task.wait(1) do
         if not ScriptContext.Running then break end
         if cfg.autoFruit then ScanForFruits() end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(3) do -- Interval 3 detik agar aman dari limit server
+        if not ScriptContext.Running then break end
+        if isAutoSpinBones then
+            pcall(function()
+                local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+                if CommF_ then
+                    local bonesCount = CommF_:InvokeServer("Bones", "Check")
+                    if type(bonesCount) == "number" and bonesCount >= 50 then
+                        CommF_:InvokeServer("Bones", "Buy", 1, 1)
+                    end
+                end
+            end)
+        end
     end
 end)
 
@@ -1796,7 +2044,13 @@ local function StartStandaloneAutoAttackThread()
                     end
                 end
             end
-            task.wait(cfg.ThreadSleep)
+            
+            -- Jika kita sedang dalam mode serang (isReadyToAttack), kurangi bottleneck wait!
+            if enabled and isReadyToAttack and attackSpeedMode == "Super Fast Attack" then
+                task.wait() -- Tanpa argumen (menyesuaikan frame tercepat game)
+            else
+                task.wait(cfg.ThreadSleep)
+            end
         end
     end)
 end
@@ -1859,6 +2113,74 @@ task.spawn(function()
     local bossNames = {}
     for _, boss in ipairs(BOSSES) do table.insert(bossNames, boss.Name) end
 
+    Tabs.Main:CreateSection("Material Farming")
+    Tabs.Main:CreateToggle({
+        Name = "Auto Spin Bones", CurrentValue = false, Flag = "ToggleAutoSpinBones",
+        Callback = function(Value)
+            isAutoSpinBones = Value
+        end,
+    })
+    
+    Tabs.Main:CreateButton({
+        Name = "Spin Bones 1x",
+        Callback = function()
+            task.spawn(function()
+                pcall(function()
+                    local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+                    if CommF_ then
+                        local bonesCount = CommF_:InvokeServer("Bones", "Check")
+                        if type(bonesCount) == "number" and bonesCount >= 50 then
+                            local result = CommF_:InvokeServer("Bones", "Buy", 1, 1)
+                            if getgenv().RayfieldObject then
+                                getgenv().RayfieldObject:Notify({
+                                    Title = "Spin Bones Success",
+                                    Content = "Successfully spun! Remaining Bones: " .. tostring(bonesCount - 50),
+                                    Duration = 3,
+                                    Image = 4483362458
+                                })
+                            end
+                        else
+                            if getgenv().RayfieldObject then
+                                getgenv().RayfieldObject:Notify({
+                                    Title = "Spin Bones Failed",
+                                    Content = "Bones tidak cukup/anda terkena limit 10 spin per hari",
+                                    Duration = 3,
+                                    Image = 4483362458
+                                })
+                            end
+                        end
+                    end
+                end)
+            end)
+        end,
+    })
+
+    Tabs.Main:CreateToggle({
+        Name = "Auto Farm Bone (Sea 3)", CurrentValue = false, Flag = "ToggleAutoBone",
+        Callback = function(Value)
+            isAutoBone = Value
+            if Value then
+                -- Disable Auto Farm normal
+                enabled = false
+                FarmToggle:Set(false)
+                
+                workerGeneration = workerGeneration + 1
+                attacking = false
+                
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+                isReadyToAttack = false
+                currentTargetInstance = nil
+                lastTargetPos = nil
+                StartAutoBone()
+            else
+                workerGeneration = workerGeneration + 1
+                attacking = false
+                ToggleFloat(false)
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+            end
+        end,
+    })
+    
     Tabs.Main:CreateToggle({
         Name = "Boss Hunter", CurrentValue = false, Flag = "ToggleBossHunter",
         Callback = function(Value)
@@ -1932,19 +2254,19 @@ task.spawn(function()
 
     Tabs.Travel:CreateSection("Server & Teleport")
     Tabs.Travel:CreateButton({
-        Name = "Server Hop Sekarang",
+        Name = "Server Hop Now",
         Callback = function()
             ServerHop()
         end,
     })
 
     Tabs.Travel:CreateToggle({
-        Name = "Cari Server Sepi", CurrentValue = false, Flag = "LowPlayerServerEnabled",
+        Name = "Find Low Player Server", CurrentValue = false, Flag = "LowPlayerServerEnabled",
         Callback = function(Value) cfg.lowPlayerServer = Value end,
     })
 
     Tabs.Travel:CreateSlider({
-        Name = "Max Players untuk Hop", Range = {1, 20}, Increment = 1, CurrentValue = 8,
+        Name = "Max Players for Hop", Range = {1, 20}, Increment = 1, CurrentValue = 8,
         Flag = "MaxPlayersForHop", Callback = function(Value) cfg.maxPlayersForHop = Value end,
     })
 
@@ -1977,7 +2299,7 @@ task.spawn(function()
                         if getgenv().RayfieldObject then
                             getgenv().RayfieldObject:Notify({
                                 Title = "Rendering Map",
-                                Content = "Memuat semua pulau... Karakter mungkin akan lag sesaat.",
+                                Content = "Loading all islands... Character might lag for a moment.",
                                 Duration = 3,
                                 Image = 4483362458
                             })
@@ -1996,8 +2318,8 @@ task.spawn(function()
                         
                         if getgenv().RayfieldObject then
                             getgenv().RayfieldObject:Notify({
-                                Title = "Render Selesai",
-                                Content = "Semua pulau berhasil dimuat & dikunci!",
+                                Title = "Render Complete",
+                                Content = "All islands successfully loaded & locked!",
                                 Duration = 3,
                                 Image = 4483362458
                             })
@@ -2107,7 +2429,7 @@ task.spawn(function()
             end
 
             -- Mulai Teleport
-            if selectedIslandToTeleport == "" or selectedIslandToTeleport == "Tidak ada pulau (Error)" then 
+            if selectedIslandToTeleport == "" or selectedIslandToTeleport == "No islands found (Error)" then 
                 if getgenv().RayfieldObject then
                     getgenv().RayfieldObject:Notify({
                         Title = "Teleportasi Gagal",
