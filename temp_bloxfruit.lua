@@ -17,11 +17,6 @@ if getgenv().RayfieldObject then
     getgenv().RayfieldObject = nil
 end
 
-if getgenv().Fluent_Overdrive then
-	pcall(function() end)
-	getgenv().Fluent_Overdrive = nil
-end
-
 if getgenv and getgenv()[SCRIPT_ID] then
 	pcall(function() getgenv()[SCRIPT_ID]:Destroy() end)
 end
