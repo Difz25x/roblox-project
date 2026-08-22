@@ -1560,12 +1560,24 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 								    local dist = (eHrp.Position - myHrp.Position).Magnitude
 								    if dist <= (cfg.BringRadius * 2) then
 								        -- Semua monster yang terjangkau disedot tepat ke titik magnet
-									    eHrp.CFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
+									    -- Paksa mob stuck ke lantai pusat spawn
+									    eHrp.CFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z) * CFrame.Angles(0, 0, 0)
 									    eHrp.AssemblyLinearVelocity = Vector3.zero
 									    eHrp.AssemblyAngularVelocity = Vector3.zero
-									    eHrp.Size = Vector3.new(60, 60, 60)
+									    
+									    -- Disable pergerakan physics agar server tidak melempar balik
 									    if eHrp.CanCollide then eHrp.CanCollide = false end
-									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
+									    if not eHum.PlatformStand then eHum.PlatformStand = true end
+									    
+									    -- Hitbox buatan agar pukulan kita gampang kena
+									    eHrp.Size = Vector3.new(60, 60, 60)
+									    
+									    -- Freeze state
+									    pcall(function()
+									        eHrp.Anchored = true
+									        task.wait()
+									        eHrp.Anchored = false
+									    end)
 								    end
 							    end
 						    end
