@@ -45,7 +45,7 @@ function ScriptContext:Destroy()
 	table.clear(self.Connections)
 
 	pcall(function()
-	    -- Batalkan semua penerbangan
+	    -- Cancel all active tweens
 	    if activeTween then
 	        activeTween:Cancel()
 	        activeTween = nil
@@ -81,11 +81,10 @@ local player = Players.LocalPlayer
 -- Anti-AFK Fallbacks
 ScriptContext:AddConnection(player.Idled:Connect(function()
 	if ScriptContext.Running then
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton2(Vector2.new())
-		VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-		task.wait(1)
-		VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
 	end
 end))
 
@@ -149,6 +148,9 @@ local cfg = {
 local attackSpeedMode = "Fast Attack"
 local isMultiMobDamage = false
 local isAutoRaidKill = false
+local isAutoRaidAttack = false
+local isAutoRaidBring = false
+local isAutoRaidNextIsland = false
 local isAutoNextIsland = false
 local currentRaidIsland = 1
 local isAutoBone = false
@@ -382,7 +384,7 @@ end
 -- [ SUBMERGED & MOVEMENT SYSTEM ]
 --==================================================
 
--- Fungsi tersentralisasi untuk menangani teleport NPC Submerged ke/dari laut dalam
+-- Centralized function for handling teleportation to/from Submerged NPC
 local lastSubmergedTeleportAt = 0
 local function HandleSubmerged(targetPos)
     local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
@@ -456,6 +458,27 @@ local function TweenTo(targetCFrame)
     if not hrp then return end
 
     local targetPos = targetCFrame.Position
+
+    -- Water Detection Anti-Drowning System
+    -- Check if target is near or below the sea level (but not Submerged layer which is < -1000)
+    -- Water objects in Blox Fruits usually sit around Y = 10 to 15.
+    if targetPos.Y > -500 and targetPos.Y < 25 then
+        local waterObj = workspace:FindFirstChild("Water")
+        if waterObj and waterObj:IsA("BasePart") then
+            local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
+            if targetPos.Y <= waterTop + 5 then
+                -- Elevate the target safely above water
+                targetPos = Vector3.new(targetPos.X, waterTop + 25, targetPos.Z)
+                targetCFrame = CFrame.new(targetPos)
+            end
+        else
+            -- Failsafe if Water object isn't found but Y is dangerously low
+            if targetPos.Y < 20 then
+                targetPos = Vector3.new(targetPos.X, 25, targetPos.Z)
+                targetCFrame = CFrame.new(targetPos)
+            end
+        end
+    end
     local subState, subPos = HandleSubmerged(targetPos)
     if subState == true then
         if activeTween then activeTween:Cancel(); activeTween = nil end
@@ -473,7 +496,7 @@ local function TweenTo(targetCFrame)
         return
     end
 
-    -- Mencegah Stuttering: Jika tween sudah jalan menuju titik yang sama, biarkan saja!
+    -- Anti-Stutter: If tween is already heading to the same point, leave it running!
     if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 3 then
         if activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing then
             return
@@ -1075,12 +1098,12 @@ end
 
 local function IsEnemyVulnerable(targetChar, targetMobName)
 	if not targetChar or not targetChar.Parent then return false end
-	-- Cek blacklist sementara (expiry time)
+	-- Check temporary blacklist (expiry time)
 	if enemyBlacklist[targetChar] then
 	    if os.clock() < enemyBlacklist[targetChar] then
 	        return false
 	    else
-	        enemyBlacklist[targetChar] = nil -- Cabut blacklist jika sudah kadaluarsa
+	        enemyBlacklist[targetChar] = nil -- Remove from blacklist if expired
 	    end
 	end
 	if targetMobName and targetChar.Name ~= targetMobName then return false end
@@ -1183,9 +1206,12 @@ local function TriggerSkills(weaponCategory)
 			lastSkillFiredAt = now
 			task.spawn(function()
 				local key = skillKeys[skillIndex]
-				VirtualInputManager:SendKeyEvent(true, key, false, game)
-				task.wait(0.1)
-				VirtualInputManager:SendKeyEvent(false, key, false, game)
+				-- Wrap in pcall to avoid crash on Mobile executors that don't support SendKeyEvent
+				pcall(function()
+				    VirtualInputManager:SendKeyEvent(true, key, false, game)
+				    task.wait(0.1)
+				    VirtualInputManager:SendKeyEvent(false, key, false, game)
+				end)
 				skillIndex = skillIndex + 1
 				if skillIndex > #skillKeys then skillIndex = 1 end
 			end)
@@ -1258,7 +1284,7 @@ local function ExecuteAttack(myChar, myHrp)
                             
                             pcall(function()
                                 if RegisterAttackEvent then 
-                                    -- Bypass Cooldown Animasi ke Server (Super Fast = 0 detik cooldown)
+                                    -- Bypass Animation Cooldown to Server (Super Fast = 0s cooldown)
                                     local atkDur = (attackSpeedMode == "Super Fast Attack") and 0 or 0.125
                                     RegisterAttackEvent:FireServer(atkDur) 
                                 end
@@ -1294,9 +1320,9 @@ local function AttackThread(generation)
                 end
             end
             
-            -- Jika kita sedang dalam mode serang (isReadyToAttack), kurangi bottleneck wait!
+            -- If in attack mode (isReadyToAttack), reduce wait bottleneck!
             if enabled and isReadyToAttack and attackSpeedMode == "Super Fast Attack" then
-                task.wait() -- Tanpa argumen (menyesuaikan frame tercepat game)
+                task.wait() -- No arguments (matching fastest game frame)
             else
                 task.wait(cfg.ThreadSleep)
             end
@@ -1349,7 +1375,7 @@ local function StartAutoBone()
 
     task.spawn(function()
         while isAutoBone and ScriptContext.Running and generation == workerGeneration do
-            if isReadyToAttack then
+            if isReadyToAttack and isAutoRaidAttack then
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
                 if now - lastAttackAt >= interval then
@@ -1373,7 +1399,7 @@ local function StartAutoBone()
             if boneBringConn then boneBringConn:Disconnect() end
             return
         end
-        if isReadyToAttack then
+        if isReadyToAttack and isAutoRaidBring then
             local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -1385,8 +1411,8 @@ local function StartAutoBone()
                     local magnetPos = targetMobInfo.MobPos or tHrp.Position
 
 					if magnetPos then
-                        -- Gunakan posisi absolut spawn / mob, jangan dikaitkan dengan myHrp.CFrame (evasion) agar tidak rubber-band.
-                        -- magnetPos sudah mewakili titik tanah/asli.
+                        -- Use absolute spawn/mob position, don't link to myHrp.CFrame (evasion) to avoid rubber-banding.
+                        -- magnetPos already represents original/ground point.
 					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
 
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
@@ -1444,7 +1470,7 @@ local function StartAutoBone()
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
                     targetEnemy = GetTargetEnemy(targetMobName)
-                    -- Jika masih nil, berarti seluruh jenis mob ini SUDAH MUSNAH! Kita ganti target acak yang baru.
+                    -- If still nil, this mob species is WIPED OUT! Switch to new random target.
                     if not targetEnemy then
                         activeHauntedMobInfo = GetBestHauntedMob()
                         targetMobInfo = activeHauntedMobInfo
@@ -1651,7 +1677,7 @@ local function StartAutoFarm()
                             
                             local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
                             if tHrp then
-                                -- Kejar musuh secara aktif. StuckTimeout akan meng-handle jika musuh ternyata bug/keluar batas.
+                                -- Actively chase enemy. StuckTimeout will handle if enemy is bugged/out of bounds.
                                 local centerPos = tHrp.Position
                                 local targetDistance = (centerPos - myHrp.Position).Magnitude
                                 if targetDistance > 80 then
@@ -1714,9 +1740,9 @@ ScriptContext:AddConnection(RunService.Stepped:Connect(function()
         local c = player.Character
         if c then
 			local hrp = c:FindFirstChild("HumanoidRootPart")
-            -- Pastikan tween benar-benar berjalan, bukan sisa variabel yang selesai
+            -- Ensure tween is actively playing, not just a leftover finished variable
             local isTweening = activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing
-            -- Hanya noclip ketika fitur movement otomatis menyala
+            -- Noclip only when automatic movement features are active
             if isTweening or enabled or isAutoRaidKill or isAutoNextIsland or cfg.autoChest or cfg.autoFruit then
                 for _, v in ipairs(c:GetDescendants()) do
                     if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
@@ -1790,7 +1816,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 			if targetMobName then
 				if not cachedEnemiesFolder or not cachedEnemiesFolder.Parent then cachedEnemiesFolder = workspace:FindFirstChild("Enemies") end
 				if cachedEnemiesFolder then
-					-- Titik kumpul utama (Magnet)
+					-- Main gather point (Magnet)
 					local magnetPos = nil
 					if profile and profile.MobPos then
 					    magnetPos = profile.MobPos
@@ -1799,7 +1825,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 					end
 					
 					if magnetPos then
-					    -- Tepat di bawah karakter (-TweenHeight) dan sedikit di depan (-5) agar Melee kena sempurna
+					    -- Directly below character (-TweenHeight) and slightly forward (-5) for perfect Melee hit
 					    local frontPos = (myHrp.CFrame * CFrame.new(0, 0, -5)).Position
 					    local targetY = myHrp.Position.Y - cfg.TweenHeight
 					    local gatherCFrame = CFrame.new(frontPos.X, targetY, frontPos.Z)
@@ -1819,9 +1845,9 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 									    if eHrp.CanCollide then eHrp.CanCollide = false end
 									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
 									    
-									    -- Jangan ubah size ke 60x60x60 karena anti-cheat server akan nge-glitch musuh
+									    -- Do not change size to 60x60x60 to prevent anti-cheat from glitching the enemies
 									    if eHrp.Size.X > 10 then
-									        eHrp.Size = Vector3.new(2, 2, 1) -- Kembali ke ukuran normal RootPart
+									        eHrp.Size = Vector3.new(2, 2, 1) -- Revert to normal RootPart size
 									    end
 								    end
 							    end
@@ -1884,9 +1910,11 @@ task.spawn(function()
                     pcall(function()
                         local isKenActive = game.ReplicatedStorage.Events.IsObservationActive:Invoke()
                         if not isKenActive then
-                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                            task.wait(0.1)
-                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            pcall(function()
+                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                task.wait(0.1)
+                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            end)
                         end
                     end)
                 end
@@ -1895,67 +1923,91 @@ task.spawn(function()
     end
 end)
 
-local raidLockedTarget = nil
+local raidWorkerGeneration = 0
 
-local function StartAutoRaidKill()
+local function GetTargetRaidIsland()
+    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
+    if not myHrp or not raidMap then return nil, 0 end
+
+    local targetIsland = nil
+    local highestNum = 0
+
+    for _, island in ipairs(raidMap:GetChildren()) do
+        if string.match(island.Name, "RaidIsland") then
+            local iPos = island:IsA("Model") and island:GetBoundingBox().Position or island.Position
+            local dist = (myHrp.Position - iPos).Magnitude
+            
+            -- Get island with highest number (stage) loaded within 11k radius
+            if dist <= 11000 then
+                local num = string.match(island.Name, "%d+")
+                num = num and tonumber(num) or 0
+                
+                if num > highestNum then
+                    highestNum = num
+                    targetIsland = island
+                end
+            end
+        end
+    end
+
+    return targetIsland, highestNum
+end
+
+local function StartAutoRaid()
+    raidWorkerGeneration = raidWorkerGeneration + 1
+    local generation = raidWorkerGeneration
+    ToggleFloat(true)
+
     task.spawn(function()
-        while ScriptContext.Running do
-            if isAutoRaidKill and not (enabled and isReadyToAttack) then
+        while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
+            if isReadyToAttack and isAutoRaidAttack then
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-
                 if now - lastAttackAt >= interval then
                     local myChar = GetCharacter()
                     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    local weapon = myChar and myChar:FindFirstChildOfClass("Tool")
+                    if myHrp then
+                        ExecuteAttack(myChar, myHrp)
+                        lastAttackAt = now
+                    end
+                end
+                if attackSpeedMode == "Super Fast Attack" then task.wait() else task.wait(cfg.ThreadSleep) end
+            else
+                task.wait(cfg.ThreadSleep)
+            end
+        end
+    end)
 
-                    if myHrp and weapon then
-                        local isPhysical = IsToolMatching(weapon, "Melee") or IsToolMatching(weapon, "Sword")
+    local raidBringConn
+    raidBringConn = RunService.Heartbeat:Connect(function()
+        if not isAutoRaidKill or not ScriptContext.Running or generation ~= raidWorkerGeneration then
+            if raidBringConn then raidBringConn:Disconnect() end
+            return
+        end
 
-                        if isPhysical then
-                            local enemiesFolder = workspace:FindFirstChild("Enemies")
-                            if enemiesFolder then
-                                if not raidLockedTarget or not IsEnemyVulnerable(raidLockedTarget) then
-                                    local closest, shortestDist = nil, 800
-                                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                                        if IsEnemyVulnerable(enemy) then
-                                            local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-                                            if eHrp then
-                                                local dist = (eHrp.Position - myHrp.Position).Magnitude
-                                                if dist < shortestDist then
-                                                    shortestDist = dist
-                                                    closest = enemy
-                                                end
-                                            end
-                                        end
-                                    end
-                                    raidLockedTarget = closest
-                                end
-
-                                if raidLockedTarget then
-                                    local tHrp = raidLockedTarget:FindFirstChild("HumanoidRootPart")
-                                    if tHrp then
-                                        local targetDist = (tHrp.Position - myHrp.Position).Magnitude
-
-                                        if now - lastEvasionTime >= cfg.EvasionTick then
-                                            lastEvasionTime = now
-                                            local radius = math.max(0, math.floor(cfg.EvasionRadius))
-                                            currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                                        end
-
-                                        if targetDist > cfg.HitRadius then
-                                            TweenTo(CFrame.new(tHrp.Position + currentEvasionOffset, tHrp.Position))
-                                        else
-                                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
-                                                lastEvasionMoveAt = now
-                                                TweenTo(CFrame.new(tHrp.Position + currentEvasionOffset, tHrp.Position))
-                                            end
-                                        end
-
-                                        if targetDist <= cfg.HitRadius then
-                                            ExecuteAttack(myChar, myHrp)
-                                            lastAttackAt = now
-                                        end
+        if isReadyToAttack and isAutoRaidBring then
+            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local target = currentTargetInstance
+            local tHrp = target and target:FindFirstChild("HumanoidRootPart")
+            if myHrp and tHrp then
+                local enemiesFolder = workspace:FindFirstChild("Enemies")
+                if enemiesFolder then
+                    local magnetPos = tHrp.Position
+					if magnetPos then
+					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
+                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                            if IsEnemyVulnerable(enemy) then
+                                local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                                local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                if eHrp and eHum and eHum.Health > 0 then
+                                    local dist = (eHrp.Position - myHrp.Position).Magnitude
+                                    if dist <= (cfg.BringRadius * 2) then
+                                        eHrp.CFrame = gatherCFrame
+                                        eHrp.AssemblyLinearVelocity = Vector3.zero
+                                        eHrp.AssemblyAngularVelocity = Vector3.zero
+                                        if eHrp.CanCollide then eHrp.CanCollide = false end
+                                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
                                     end
                                 end
                             end
@@ -1963,69 +2015,125 @@ local function StartAutoRaidKill()
                     end
                 end
             end
-            task.wait(cfg.ThreadSleep)
         end
     end)
-end
+    ScriptContext:AddConnection(raidBringConn)
 
-local function StartAutoNextIsland()
     task.spawn(function()
-        while ScriptContext.Running do
-            if isAutoNextIsland then
-                local myChar = GetCharacter()
-                local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
+            local ok, err = pcall(function()
+                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                if not myHrp then return end
+
+                local now = os.clock()
+                if now - lastEvasionTime >= cfg.EvasionTick then
+                    lastEvasionTime = now
+                    local radius = math.max(0, math.floor(cfg.EvasionRadius))
+                    currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                end
+
+                local enemiesFolder = workspace:FindFirstChild("Enemies")
                 local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
-                
-                if myHrp and raidMap then
-                    local enemiesFolder = workspace:FindFirstChild("Enemies")
-                    local enemiesAlive = false
-                    
+                local targetEnemy = currentTargetInstance
+
+                if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
+                    local closest = nil
+                    local shortestDist = 2000
                     if enemiesFolder then
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                            local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-                            if eHrp and (eHrp.Position - myHrp.Position).Magnitude < 800 and IsEnemyVulnerable(enemy) then
-                                enemiesAlive = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if not enemiesAlive then
-                        local targetIslandName = "RaidIsland" .. tostring(currentRaidIsland)
-                        local nearestIsland = nil
-                        local shortestDist = math.huge
-                        
-                        for _, island in ipairs(raidMap:GetChildren()) do
-                            if island.Name == targetIslandName then
-                                local iPos = island:IsA("Model") and island:GetBoundingBox().Position
-                                local dist = (myHrp.Position - iPos).Magnitude
-                                if dist < shortestDist then
-                                    shortestDist = dist
-                                    nearestIsland = island
+                            if IsEnemyVulnerable(enemy) then
+                                local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                                if eHrp then
+                                    local dist = (eHrp.Position - myHrp.Position).Magnitude
+                                    if dist < shortestDist then
+                                        shortestDist = dist
+                                        closest = enemy
+                                    end
                                 end
                             end
                         end
+                    end
+                    targetEnemy = closest
+                    currentTargetInstance = targetEnemy
+                    if targetEnemy then 
+                        targetLockStartTime = now 
+                        local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                        lastTargetHealth = h and h.Health or -1
+                        lastTargetHealthChangeAt = now
+                    end
+                end
+
+                if targetEnemy then
+                    local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                    if h then
+                        if h.Health ~= lastTargetHealth then
+                            lastTargetHealth = h.Health
+                            lastTargetHealthChangeAt = now
+                        end
                         
-                        if nearestIsland and shortestDist <= 7000 then
-                            local islandPos = nearestIsland:IsA("Model") and nearestIsland:GetBoundingBox().Position
-                            
-                            if shortestDist > 100 then
-                                TweenTo(CFrame.new(islandPos + Vector3.new(0, 50, 0)))
-                            else
-                                currentRaidIsland = currentRaidIsland + 1
-                                if currentRaidIsland > 5 then currentRaidIsland = 1 end
-                            end
+                        if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
+                            enemyBlacklist[targetEnemy] = now + 3
+                            currentTargetInstance = nil
+                            isReadyToAttack = false
+                            targetEnemy = nil
                         end
                     end
                 end
-            end
-            task.wait(cfg.ThreadSleep)
+
+                if targetEnemy then
+                    local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
+                    if tHrp then
+                        local centerPos = tHrp.Position
+                        local targetDistance = (centerPos - myHrp.Position).Magnitude
+                        if targetDistance > 80 then
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                        else
+                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+                            end
+                        end
+                        isReadyToAttack = targetDistance <= cfg.HitRadius
+                    end
+                else
+                    isReadyToAttack = false
+                    currentTargetInstance = nil
+
+                    if isAutoRaidNextIsland then
+                        local activeIsland, activeIslandNum = GetTargetRaidIsland()
+                        if activeIsland then
+                            local iPos = activeIsland:IsA("Model") and activeIsland:GetBoundingBox().Position or activeIsland.Position
+                            
+                            if activeIslandNum >= 5 then
+                                local dist = (myHrp.Position - iPos).Magnitude
+                                if dist > 80 then
+                                    TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
+                                else
+                                    if activeTween then activeTween:Cancel(); activeTween = nil end
+                                end
+                                return
+                            end
+
+                            local dist = (myHrp.Position - iPos).Magnitude
+                            if dist > 80 then
+                                TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
+                            else
+                                -- Already at highest available island, wait for spawns while doing relaxed evasion
+                                if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                    lastEvasionMoveAt = now
+                                    TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
+                                end
+                            end
+                        end
+                    else
+                        if activeTween then activeTween:Cancel(); activeTween = nil end
+                    end
+                end
+            end)
+            task.wait(0.05)
         end
     end)
 end
-
-StartAutoRaidKill()
-StartAutoNextIsland()
 
 local function StartStandaloneAutoAttackThread()
     task.spawn(function()
@@ -2045,9 +2153,9 @@ local function StartStandaloneAutoAttackThread()
                 end
             end
             
-            -- Jika kita sedang dalam mode serang (isReadyToAttack), kurangi bottleneck wait!
+            -- If in attack mode (isReadyToAttack), reduce wait bottleneck!
             if enabled and isReadyToAttack and attackSpeedMode == "Super Fast Attack" then
-                task.wait() -- Tanpa argumen (menyesuaikan frame tercepat game)
+                task.wait() -- No arguments (matching fastest game frame)
             else
                 task.wait(cfg.ThreadSleep)
             end
@@ -2189,14 +2297,34 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateSection("Auto Raid (Dungeon)")
+    Tabs.Main:CreateSection("Auto Raid")
     Tabs.Main:CreateToggle({
-        Name = "Auto Raid Kill", CurrentValue = false, Flag = "ToggleAutoRaidKill",
-        Callback = function(Value) isAutoRaidKill = Value; if not Value and activeTween then activeTween:Cancel(); activeTween = nil; ToggleFloat(false) end end,
+        Name = "Enable Auto Raid", CurrentValue = false, Flag = "ToggleAutoRaidMaster",
+        Callback = function(Value) 
+            isAutoRaidKill = Value
+            if Value then
+                StartAutoRaid()
+            else
+                raidWorkerGeneration = raidWorkerGeneration + 1
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+                ToggleFloat(false)
+            end
+        end,
     })
+
     Tabs.Main:CreateToggle({
-        Name = "Auto Next Island", CurrentValue = false, Flag = "ToggleAutoNextIsland",
-        Callback = function(Value) isAutoNextIsland = Value; if Value then currentRaidIsland = 1 else if activeTween then activeTween:Cancel(); activeTween = nil; ToggleFloat(false) end end end,
+        Name = "Auto Raid Attack", CurrentValue = false, Flag = "ToggleRaidAttack",
+        Callback = function(Value) isAutoRaidAttack = Value end,
+    })
+
+    Tabs.Main:CreateToggle({
+        Name = "Auto Raid Bring", CurrentValue = false, Flag = "ToggleRaidBring",
+        Callback = function(Value) isAutoRaidBring = Value end,
+    })
+
+    Tabs.Main:CreateToggle({
+        Name = "Auto Next Island", CurrentValue = false, Flag = "ToggleRaidNextIsland",
+        Callback = function(Value) isAutoRaidNextIsland = Value end,
     })
 
     Tabs.Main:CreateSection("Boss & Targeting")
@@ -2403,7 +2531,7 @@ task.spawn(function()
     
     local selectedIslandToTeleport = ""
     Tabs.Travel:CreateDropdown({
-        Name = "Pilih Pulau",
+        Name = "Select Island",
         Options = islandOptions,
         CurrentOption = {islandOptions[1] or ""},
         MultipleOptions = false,
