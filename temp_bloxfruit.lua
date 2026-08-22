@@ -1049,7 +1049,15 @@ local function GetHitPart(model)
 end
 
 local function IsEnemyVulnerable(targetChar, targetMobName)
-	if not targetChar or not targetChar.Parent or enemyBlacklist[targetChar] then return false end
+	if not targetChar or not targetChar.Parent then return false end
+	-- Cek blacklist sementara (expiry time)
+	if enemyBlacklist[targetChar] then
+	    if os.clock() < enemyBlacklist[targetChar] then
+	        return false
+	    else
+	        enemyBlacklist[targetChar] = nil -- Cabut blacklist jika sudah kadaluarsa
+	    end
+	end
 	if targetMobName and targetChar.Name ~= targetMobName then return false end
 	local hum = targetChar:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return false end
@@ -1406,20 +1414,31 @@ local function StartAutoFarm()
 					end
 
 					if targetEnemy then
-						local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
-						if tHrp then
-							local targetDistance = (tHrp.Position - myHrp.Position).Magnitude
-							if targetDistance > 80 then
-								TweenTo(CFrame.new(tHrp.Position + Vector3.new(0, cfg.TweenHeight, 0), tHrp.Position))
-							else
-								if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
-									lastEvasionMoveAt = now
-									TweenTo(CFrame.new(tHrp.Position + currentEvasionOffset, tHrp.Position))
-								end
-							end
-							isReadyToAttack = targetDistance <= cfg.HitRadius
-						end
-					else
+                            -- Cek jika kita nyangkut (Stuck Timeout) dengan musuh ini
+                            if targetLockStartTime > 0 and (now - targetLockStartTime >= cfg.StuckTimeout) then
+                                -- Blacklist musuh ini selama 3 detik
+                                enemyBlacklist[targetEnemy] = now + 3
+                                currentTargetInstance = nil
+                                isReadyToAttack = false
+                                return -- Ulangi iterasi untuk cari musuh baru
+                            end
+                            
+                            local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
+                            if tHrp then
+                                -- JANGAN kejar tHrp (musuh), kejar pusat spawn agar tidak keluar batas server
+                                local centerPos = profile.MobPos or tHrp.Position
+                                local targetDistance = (centerPos - myHrp.Position).Magnitude
+                                if targetDistance > 80 then
+                                    TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                                else
+                                    if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                        lastEvasionMoveAt = now
+                                        TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+                                    end
+                                end
+                                isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius
+                            end
+                        else
 						currentTargetInstance = nil
 						isReadyToAttack = false
 						local distToSpawn = (myHrp.Position - profile.MobPos).Magnitude
@@ -1543,15 +1562,17 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 			if targetMobName then
 				if not cachedEnemiesFolder or not cachedEnemiesFolder.Parent then cachedEnemiesFolder = workspace:FindFirstChild("Enemies") end
 				if cachedEnemiesFolder then
-					-- Tentukan satu titik absolut magnet agar stabil, tidak ikut joget evasion
+					-- Titik kumpul utama (Magnet)
 					local magnetPos = nil
-					if currentTargetInstance and currentTargetInstance:FindFirstChild("HumanoidRootPart") then
-					    magnetPos = currentTargetInstance.HumanoidRootPart.Position
-					elseif profile and profile.MobPos then
+					if profile and profile.MobPos then
 					    magnetPos = profile.MobPos
+					elseif currentTargetInstance and currentTargetInstance:FindFirstChild("HumanoidRootPart") then
+					    magnetPos = currentTargetInstance.HumanoidRootPart.Position
 					end
 					
 					if magnetPos then
+					    -- Kumpulkan mob sedikit di atas tanah agar tidak nyangkut (Y + 5)
+					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y + 5, magnetPos.Z)
 					    for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
 						    if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
 							    local eHrp = enemy:FindFirstChild("HumanoidRootPart")
@@ -1559,25 +1580,18 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 							    if eHrp and eHum and eHum.Health > 0 then
 								    local dist = (eHrp.Position - myHrp.Position).Magnitude
 								    if dist <= (cfg.BringRadius * 2) then
-								        -- Semua monster yang terjangkau disedot tepat ke titik magnet
-									    -- Paksa mob stuck ke lantai pusat spawn
-									    eHrp.CFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z) * CFrame.Angles(0, 0, 0)
+								        -- Bring & Stun
+									    eHrp.CFrame = gatherCFrame
 									    eHrp.AssemblyLinearVelocity = Vector3.zero
 									    eHrp.AssemblyAngularVelocity = Vector3.zero
 									    
-									    -- Disable pergerakan physics agar server tidak melempar balik
 									    if eHrp.CanCollide then eHrp.CanCollide = false end
-									    if not eHum.PlatformStand then eHum.PlatformStand = true end
+									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
 									    
-									    -- Hitbox buatan agar pukulan kita gampang kena
-									    eHrp.Size = Vector3.new(60, 60, 60)
-									    
-									    -- Freeze state
-									    pcall(function()
-									        eHrp.Anchored = true
-									        task.wait()
-									        eHrp.Anchored = false
-									    end)
+									    -- Jangan ubah size ke 60x60x60 karena anti-cheat server akan nge-glitch musuh
+									    if eHrp.Size.X > 10 then
+									        eHrp.Size = Vector3.new(2, 2, 1) -- Kembali ke ukuran normal RootPart
+									    end
 								    end
 							    end
 						    end
