@@ -340,8 +340,8 @@ local SEA3 = {
 	{ Min = 2050, Max = 2074, Quest = "HauntedQuest2", Stage = 2, Name = "Posessed Mummies", Mob = "Posessed Mummy", Count = 8, NPC = Vector3.new(-9515, 172, 6078), MobPos = Vector3.new(-9582, 6, 6205) },
 	{ Min = 2075, Max = 2099, Quest = "NutsIslandQuest", Stage = 1, Name = "Peanut Scouts", Mob = "Peanut Scout", Count = 8, NPC = Vector3.new(-2104, 38, -10192), MobPos = Vector3.new(-2150, 122, -10358) },
 	{ Min = 2100, Max = 2124, Quest = "NutsIslandQuest", Stage = 2, Name = "Peanut Presidents", Mob = "Peanut President", Count = 8, NPC = Vector3.new(-2104, 38, -10192), MobPos = Vector3.new(-2150, 123, -10536) },
-	{ Min = 2125, Max = 2149, Quest = "IceCreamIslandQuest", Stage = 1, Name = "Ice Cream Chefs", Mob = "Ice Cream Chef", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-872, 66, -10920) },
-	{ Min = 2150, Max = 2199, Quest = "IceCreamIslandQuest", Stage = 2, Name = "Ice Cream Commanders", Mob = "Ice Cream Commander", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-558, 112, -11291) },
+	{ Min = 2125, Max = 2149, Quest = "IceCreamIslandQuest", Stage = 1, Name = "Ice Cream Chefs", Mob = "Ice Cream Chef", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-848.671204, 65.882126, -10914.947266) },
+	{ Min = 2150, Max = 2199, Quest = "IceCreamIslandQuest", Stage = 2, Name = "Ice Cream Commanders", Mob = "Ice Cream Commander", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-610.750732, 208.282623, -11254.516602) },
 	{ Min = 2200, Max = 2224, Quest = "CakeQuest1", Stage = 1, Name = "Cookie Crafters", Mob = "Cookie Crafter", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-2374, 38, -12125) },
 	{ Min = 2225, Max = 2249, Quest = "CakeQuest1", Stage = 2, Name = "Cake Guards", Mob = "Cake Guard", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-1598, 44, -12244) },
 	{ Min = 2250, Max = 2274, Quest = "CakeQuest2", Stage = 1, Name = "Baking Staff", Mob = "Baking Staff", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-1887, 78, -12998) },
@@ -1825,10 +1825,9 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 					end
 					
 					if magnetPos then
-					    -- Directly below character (-TweenHeight) and slightly forward (-5) for perfect Melee hit
-					    local frontPos = (myHrp.CFrame * CFrame.new(0, 0, -5)).Position
-					    local targetY = myHrp.Position.Y - cfg.TweenHeight
-					    local gatherCFrame = CFrame.new(frontPos.X, targetY, frontPos.Z)
+                        -- STATIC MAGNET: Gather all enemies to the exact position of the locked enemy (or MobPos)
+                        -- DO NOT USE myHrp.CFrame (Evasion) to prevent server rubber-banding!
+					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
 					    
 					    for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
 						    if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
