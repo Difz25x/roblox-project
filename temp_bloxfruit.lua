@@ -117,8 +117,8 @@ local cfg = {
 
 	TargetRefresh = 0,
 	BringInterval = 0,
-	AttackIntervalFast = 0.12,
-	AttackIntervalSuper = 0.01,
+	AttackIntervalFast = 0.05,
+	AttackIntervalSuper = 0.001,
 	MaxAdditionalTargets = 12,
 	EvasionMoveInterval = 0.12,
 	ThreadSleep = 0.025,
@@ -197,7 +197,7 @@ local currentIsland = nil
 local fruitWaypoints = {}
 local chestWaypoints = {}
 
-local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF")
+local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 local CommE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommE")
 
 local RegisterHitEvent, RegisterAttackEvent
@@ -379,6 +379,7 @@ end
 --==================================================
 
 -- Fungsi tersentralisasi untuk menangani teleport NPC Submerged ke/dari laut dalam
+local lastSubmergedTeleportAt = 0
 local function HandleSubmerged(targetPos)
     local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
@@ -387,22 +388,44 @@ local function HandleSubmerged(targetPos)
     local isTargetSubmerged = (targetPos.Y < -1000)
 
     if isCurrentlySubmerged and not isTargetSubmerged then
-        pcall(function()
-            local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-            net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToTikiOutpost")
-        end)
-        task.wait(1)
-        return true -- Return true artinya sedang di-handle NPC, hentikan gerak sementera
+        local subWorkerSubmerged = Vector3.new(10480.9, -2091, 9363)
+        local dist = (hrp.Position - subWorkerSubmerged).Magnitude
+        if dist > 35 then
+            return "TRAVEL", subWorkerSubmerged
+        else
+            if os.clock() - lastSubmergedTeleportAt > 5 then
+                lastSubmergedTeleportAt = os.clock()
+                task.spawn(function()
+                    pcall(function()
+                        local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
+                        net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToTikiOutpost")
+                    end)
+                end)
+            end
+            return true
+        end
     elseif not isCurrentlySubmerged and isTargetSubmerged then
-        pcall(function()
-            local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-            net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToSubmergedIsland")
-        end)
-        task.wait(1)
-        return true
+        local subWorkerTiki = Vector3.new(-16266.4, 25.3, 1374.9)
+        local dist = (hrp.Position - subWorkerTiki).Magnitude
+        if dist > 35 then
+            return "TRAVEL", subWorkerTiki
+        else
+            if os.clock() - lastSubmergedTeleportAt > 5 then
+                lastSubmergedTeleportAt = os.clock()
+                task.spawn(function()
+                    pcall(function()
+                        local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
+                        net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToSubmergedIsland")
+                    end)
+                end)
+            end
+            return true
+        end
     end
     return false
 end
+
+
 
 local function ToggleFloat(state)
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
@@ -429,9 +452,13 @@ local function TweenTo(targetCFrame)
     if not hrp then return end
 
     local targetPos = targetCFrame.Position
-    if HandleSubmerged(targetPos) then
+    local subState, subPos = HandleSubmerged(targetPos)
+    if subState == true then
         if activeTween then activeTween:Cancel(); activeTween = nil end
         return
+    elseif subState == "TRAVEL" then
+        targetPos = subPos
+        targetCFrame = CFrame.new(targetPos)
     end
 
     ToggleFloat(true)
@@ -1109,7 +1136,7 @@ end
 
 local function EnableBuso()
 	local c = GetCharacter()
-	if c and not c:GetAttribute("BusoEnabled") then pcall(function() CommF:InvokeServer("Buso") end) end
+	if c and not c:GetAttribute("BusoEnabled") then pcall(function() CommF_:InvokeServer("Buso") end) end
 end
 
 local lastSkillFiredAt = 0
@@ -1137,95 +1164,101 @@ end
 -- [ AUTO FARM BRAIN ]
 --==================================================
 
+
+local function ExecuteAttack(myChar, myHrp)
+    local targetCategory = cfg.WeaponCategory
+    if cfg.AutoMastery then
+        if currentTargetInstance then
+            local hum = currentTargetInstance:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local pct = (hum.Health / hum.MaxHealth) * 100
+                if cfg.MasteryCategory == "Fruit" or cfg.MasteryCategory == "Gun" then
+                    targetCategory = (pct <= cfg.MasteryHealth) and cfg.MasteryCategory or "Melee"
+                else
+                    targetCategory = cfg.MasteryCategory
+                end
+            end
+        end
+    end
+    
+    local weapon = cachedWeapon
+    if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
+        weapon = EquipWeapon(targetCategory)
+    end
+    
+    if weapon then
+        local isPhysical = IsToolMatching(weapon, "Melee") or IsToolMatching(weapon, "Sword")
+        if isPhysical then
+            EnableBuso()
+            local enemiesFolder = workspace:FindFirstChild("Enemies")
+            if enemiesFolder then
+                local hitTargets = {}
+                
+                -- Kumpulkan musuh yang berdekatan
+                for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                    if IsEnemyVulnerable(enemy) then
+                        local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+                        if eHrp and (eHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius then
+                            local ePart = GetHitPart(enemy)
+                            if ePart then
+                                table.insert(hitTargets, ePart)
+                            end
+                        end
+                    end
+                end
+                
+                if #hitTargets > 0 then
+                    task.spawn(function()
+                        -- Spam klik animasi client side untuk bypass limit server visual
+                        pcall(function() if VirtualUser then VirtualUser:ClickButton1(Vector2.new()) end end)
+                        
+                        -- Cross-Fire Multi Damage Logic
+                        local maxTargets = math.min(#hitTargets, isMultiMobDamage and (cfg.MaxAdditionalTargets or 6) or 1)
+                        
+                        for i = 1, maxTargets do
+                            local crossTarget = hitTargets[i]
+                            local crossAdditionalHits = {}
+                            
+                            -- Kumpulkan sisanya sebagai additional hits untuk target ke-i
+                            if isMultiMobDamage then
+                                for j = 1, maxTargets do
+                                    if i ~= j then
+                                        table.insert(crossAdditionalHits, hitTargets[j])
+                                    end
+                                end
+                            end
+                            
+                            pcall(function()
+                                if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
+                                if RegisterHitEvent then RegisterHitEvent:FireServer(crossTarget, crossAdditionalHits, nil, sessionSecret) end
+                            end)
+                            
+                            -- Jeda ultra mikroskopis antar cross-fire agar tidak ter-drop oleh server rate limiter
+                            if maxTargets > 1 then task.wait(0.015) end
+                        end
+                    end)
+                    if cfg.AutoMastery then TriggerSkills(targetCategory) end
+                end
+            end
+        else
+            if cfg.AutoMastery then TriggerSkills(targetCategory) end
+        end
+    end
+end
+
 local function AttackThread(generation)
     task.spawn(function()
         while ScriptContext.Running and generation == workerGeneration do
-            if enabled or isAutoRaidKill or isAutoAttackEnabled then
+            if enabled and isReadyToAttack then
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
 
                 if now - lastAttackAt >= interval then
                     local myChar = GetCharacter()
                     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    
                     if myHrp then
-                        local targetCategory = cfg.WeaponCategory
-                        if cfg.AutoMastery then
-                            if currentTargetInstance then
-                                local hum = currentTargetInstance:FindFirstChildOfClass("Humanoid")
-                                if hum and hum.Health > 0 then
-                                    local pct = (hum.Health / hum.MaxHealth) * 100
-                                    if cfg.MasteryCategory == "Fruit" or cfg.MasteryCategory == "Gun" then
-                                        targetCategory = (pct <= cfg.MasteryHealth) and cfg.MasteryCategory or "Melee"
-                                    else
-                                        targetCategory = cfg.MasteryCategory
-                                    end
-                                end
-                            end
-                        end
-                        
-                        local weapon = cachedWeapon
-                        if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
-                            weapon = EquipWeapon(targetCategory)
-                        end
-                        
-                        if weapon then
-                            local isPhysical = IsToolMatching(weapon, "Melee") or IsToolMatching(weapon, "Sword")
-                            if isPhysical then
-                                EnableBuso()
-                                local enemiesFolder = workspace:FindFirstChild("Enemies")
-                                if enemiesFolder then
-                                    local mainTargetHitPart = nil
-                                    local additionalHits = {}
-                                    local hitTargets = {}
-                                    
-                                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                                        if IsEnemyVulnerable(enemy) then
-                                            local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-                                            if eHrp and (eHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius then
-                                                local ePart = GetHitPart(enemy)
-                                                if ePart then
-                                                    table.insert(hitTargets, ePart)
-                                                    if not mainTargetHitPart then
-                                                        mainTargetHitPart = ePart
-                                                    else
-                                                        if isMultiMobDamage then
-                                                            table.insert(additionalHits, ePart)
-                                                        end
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                    
-                                    if #hitTargets > 0 then
-                                        task.spawn(function()
-                                            pcall(function()
-                                                if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
-                                                if RegisterHitEvent then RegisterHitEvent:FireServer(mainTargetHitPart, additionalHits, nil, sessionSecret) end
-                                            end)
-                                        end)
-                                        
-                                        if isMultiMobDamage then
-                                            for _, ePart in ipairs(hitTargets) do
-                                                task.spawn(function()
-                                                    pcall(function()
-                                                        if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
-                                                        if RegisterHitEvent then RegisterHitEvent:FireServer(ePart, {}, nil, sessionSecret) end
-                                                    end)
-                                                end)
-                                            end
-                                        end
-                                        
-                                        TriggerSkills(targetCategory)
-                                        lastAttackAt = now
-                                    end
-                                end
-                            else
-                                TriggerSkills(targetCategory)
-                                lastAttackAt = now
-                            end
-                        end
+                        ExecuteAttack(myChar, myHrp)
+                        lastAttackAt = now
                     end
                 end
             end
@@ -1268,9 +1301,9 @@ local function StartAutoFarm()
 								TweenTo(CFrame.new(bossProfile.NPC))
 							else
 								if activeTween then activeTween:Cancel(); activeTween = nil end
-								if CommF then
-									if HasActiveQuest() then CommF:InvokeServer("AbandonQuest") end
-									CommF:InvokeServer("StartQuest", bossProfile.Quest, bossProfile.Stage or 1)
+								if CommF_ then
+									if HasActiveQuest() then CommF_:InvokeServer("AbandonQuest") end
+									CommF_:InvokeServer("StartQuest", bossProfile.Quest, bossProfile.Stage or 1)
 									task.wait(0.5)
 								end
 							end
@@ -1332,7 +1365,7 @@ local function StartAutoFarm()
 				end
 
 				if hasQuestUI and not isCorrectQuestOnUI then
-					pcall(function() CommF:InvokeServer("AbandonQuest") end)
+					pcall(function() CommF_:InvokeServer("AbandonQuest") end)
 					QuestCache.IsActive = false
 					QuestCache.Finished = false
 					QuestCache.MobName = nil
@@ -1351,37 +1384,19 @@ local function StartAutoFarm()
 						return
 					end
 					if activeTween then activeTween:Cancel(); activeTween = nil end
-					pcall(function() CommF:InvokeServer("StartQuest", profile.Quest, profile.Stage) end)
+					pcall(function() CommF_:InvokeServer("StartQuest", profile.Quest, profile.Stage) end)
 					lastStartedQuestKey = GetQuestProfileKey(profile)
 					lastStartedQuestAt = os.clock()
 					return
 				end
 
-				local now = os.clock()
-				if now - lastEvasionTime >= cfg.EvasionTick then
-					lastEvasionTime = now
-					local radius = math.max(0, math.floor(cfg.EvasionRadius))
-					currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-				end
-
-				if not hasQuestUI or not isCorrectQuestOnUI then
-					isReadyToAttack = false
-					currentTargetInstance = nil
-					if (myHrp.Position - profile.NPC).Magnitude > 8 then
-						TweenTo(CFrame.new(profile.NPC))
-					else
-						if activeTween then activeTween:Cancel(); activeTween = nil end
-						if hasQuestUI and not isCorrectQuestOnUI then
-							CommF:InvokeServer("AbandonQuest")
-							QuestCache.IsActive = false
-							QuestCache.Finished = true
-							isReadyToAttack = false
-							currentTargetInstance = nil
-							return
-						end
-						CommF:InvokeServer("StartQuest", profile.Quest, profile.Stage)
+					local now = os.clock()
+					if now - lastEvasionTime >= cfg.EvasionTick then
+						lastEvasionTime = now
+						local radius = math.max(0, math.floor(cfg.EvasionRadius))
+						currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
 					end
-				else
+
 					local targetEnemy = currentTargetInstance
 					if not targetEnemy or not IsEnemyVulnerable(targetEnemy, profile.Mob) then
 						targetEnemy = GetTargetEnemy(profile.Mob)
@@ -1394,8 +1409,8 @@ local function StartAutoFarm()
 						local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
 						if tHrp then
 							local targetDistance = (tHrp.Position - myHrp.Position).Magnitude
-							if targetDistance > 80 and (tHrp.Position - profile.MobPos).Magnitude > 80 then
-								TweenTo(CFrame.new(tHrp.Position + currentEvasionOffset, tHrp.Position))
+							if targetDistance > 80 then
+								TweenTo(CFrame.new(tHrp.Position + Vector3.new(0, cfg.TweenHeight, 0), tHrp.Position))
 							else
 								if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
 									lastEvasionMoveAt = now
@@ -1407,9 +1422,16 @@ local function StartAutoFarm()
 					else
 						currentTargetInstance = nil
 						isReadyToAttack = false
-						TweenTo(CFrame.new(profile.MobPos + currentEvasionOffset, profile.MobPos))
+						local distToSpawn = (myHrp.Position - profile.MobPos).Magnitude
+						if distToSpawn > 80 then
+							TweenTo(CFrame.new(profile.MobPos + Vector3.new(0, cfg.TweenHeight, 0), profile.MobPos))
+						else
+							if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+								lastEvasionMoveAt = now
+								TweenTo(CFrame.new(profile.MobPos + currentEvasionOffset, profile.MobPos))
+							end
+						end
 					end
-				end
 			end)
 
 			if not ok then
@@ -1521,24 +1543,33 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 			if targetMobName then
 				if not cachedEnemiesFolder or not cachedEnemiesFolder.Parent then cachedEnemiesFolder = workspace:FindFirstChild("Enemies") end
 				if cachedEnemiesFolder then
-					local frontPos = (myHrp.CFrame * CFrame.new(0, 0, -5)).Position
-					local targetY = myHrp.Position.Y - cfg.TweenHeight
-					for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
-						if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
-							local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-							local eHum = enemy:FindFirstChildOfClass("Humanoid")
-							if eHrp and eHum and eHum.Health > 0 then
-								local dist = (eHrp.Position - myHrp.Position).Magnitude
-								if dist <= (cfg.BringRadius * 2) then
-									eHrp.CFrame = CFrame.new(frontPos.X, targetY, frontPos.Z)
-									eHrp.AssemblyLinearVelocity = Vector3.zero
-									eHrp.AssemblyAngularVelocity = Vector3.zero
-									eHrp.Size = Vector3.new(60, 60, 60)
-									if eHrp.CanCollide then eHrp.CanCollide = false end
-									if eHum.PlatformStand == false then eHum.PlatformStand = true end
-								end
-							end
-						end
+					-- Tentukan satu titik absolut magnet agar stabil, tidak ikut joget evasion
+					local magnetPos = nil
+					if currentTargetInstance and currentTargetInstance:FindFirstChild("HumanoidRootPart") then
+					    magnetPos = currentTargetInstance.HumanoidRootPart.Position
+					elseif profile and profile.MobPos then
+					    magnetPos = profile.MobPos
+					end
+					
+					if magnetPos then
+					    for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
+						    if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
+							    local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+							    local eHum = enemy:FindFirstChildOfClass("Humanoid")
+							    if eHrp and eHum and eHum.Health > 0 then
+								    local dist = (eHrp.Position - myHrp.Position).Magnitude
+								    if dist <= (cfg.BringRadius * 2) then
+								        -- Semua monster yang terjangkau disedot tepat ke titik magnet
+									    eHrp.CFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
+									    eHrp.AssemblyLinearVelocity = Vector3.zero
+									    eHrp.AssemblyAngularVelocity = Vector3.zero
+									    eHrp.Size = Vector3.new(60, 60, 60)
+									    if eHrp.CanCollide then eHrp.CanCollide = false end
+									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
+								    end
+							    end
+						    end
+					    end
 					end
 				end
 			end
@@ -1561,7 +1592,7 @@ task.spawn(function()
             local points = data and data:FindFirstChild("Points")
             if points and points.Value > 0 then
                 pcall(function()
-                    if CommF then CommF:InvokeServer("AddPoint", selectedStatCategory, 1) end
+                    if CommF_ then CommF_:InvokeServer("AddPoint", selectedStatCategory, 1) end
                 end)
             end
         end
@@ -1648,25 +1679,7 @@ local function StartAutoRaidKill()
                                         end
 
                                         if targetDist <= cfg.HitRadius then
-                                            EnableBuso()
-                                            AttackThread(workerGeneration)
-                                            for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                                                if IsEnemyVulnerable(enemy) then
-                                                    local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-                                                    if eHrp and (eHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius then
-                                                        local eHitPart = GetHitPart(enemy)
-                                                        if eHitPart then
-                                                            task.spawn(function()
-                                                                pcall(function()
-                                                                    if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
-                                                                    if RegisterHitEvent then RegisterHitEvent:FireServer(eHitPart, {}, nil, sessionSecret) end
-                                                                end)
-                                                            end)
-                                                            if not isMultiMobDamage then break end
-                                                        end
-                                                    end
-                                                end
-                                            end
+                                            ExecuteAttack(myChar, myHrp)
                                             lastAttackAt = now
                                         end
                                     end
@@ -1750,37 +1763,10 @@ local function StartStandaloneAutoAttackThread()
                 if now - lastAttackAt >= interval then
                     local myChar = GetCharacter()
                     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    local weapon = myChar and myChar:FindFirstChildOfClass("Tool")
 
-                    if myHrp and weapon then
-                        local isPhysical = IsToolMatching(weapon, "Melee") or IsToolMatching(weapon, "Sword")
-
-                        if isPhysical then
-                            local enemiesFolder = workspace:FindFirstChild("Enemies")
-                            if enemiesFolder then
-                                EnableBuso()
-                                local hitCount = 0
-                                for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                                    if IsEnemyVulnerable(enemy) then
-                                        local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-                                        if eHrp and (eHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius then
-                                            local eHitPart = GetHitPart(enemy)
-                                            if eHitPart then
-                                                hitCount = hitCount + 1
-                                                task.spawn(function()
-                                                    pcall(function()
-                                                        if RegisterAttackEvent then RegisterAttackEvent:FireServer(0) end
-                                                        if RegisterHitEvent then RegisterHitEvent:FireServer(eHitPart, {}, nil, sessionSecret) end
-                                                    end)
-                                                end)
-                                                if not isMultiMobDamage then break end
-                                            end
-                                        end
-                                    end
-                                end
-                                if hitCount > 0 then lastAttackAt = now end
-                            end
-                        end
+                    if myHrp then
+                        ExecuteAttack(myChar, myHrp)
+                        lastAttackAt = now
                     end
                 end
             end
@@ -1793,7 +1779,7 @@ StartStandaloneAutoAttackThread()
 
 -- [ UI CONFIGURATION & DEFER INITIALIZATION ]
 --==================================================
-task.defer(function()
+task.spawn(function()
     local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
     local Window = Rayfield:CreateWindow({
