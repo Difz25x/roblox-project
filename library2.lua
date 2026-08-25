@@ -645,12 +645,14 @@ function Lonum:CreateWindow(options)
 
             local State = defaultVal
 
+            -- Sinkronisasikan state konfigurasi awal ke skrip utama secara langsung
+            if options.Callback then options.Callback(State) end
+
             local function Fire()
                 if options.Callback then options.Callback(State) end
                 configData[flag] = State
                 Lonum:SaveConfig()
             end
-            task.spawn(Fire)
 
             tFrame.MouseButton1Click:Connect(function()
                 State = not State
@@ -757,13 +759,17 @@ function Lonum:CreateWindow(options)
             knobCorner.Parent = sKnob
 
             local Value = defaultVal
+
+            -- Sinkronisasikan state konfigurasi awal ke skrip utama secara langsung
+            sValLabel.Text = tostring(Value)
+            if options.Callback then options.Callback(Value) end
+
             local function Fire()
                 sValLabel.Text = tostring(Value)
                 if options.Callback then options.Callback(Value) end
                 configData[flag] = Value
                 Lonum:SaveConfig()
             end
-            task.spawn(Fire)
 
             local dragging = false
             local function updateSlider(input)
@@ -858,9 +864,11 @@ function Lonum:CreateWindow(options)
 
             if configData[flag] ~= nil then
                 selected = configData[flag]
-                dValue.Text = selected .. " ▾"
-                if options.Callback then options.Callback({selected}) end
             end
+
+            -- Initial state sync
+            dValue.Text = selected .. " ▾"
+            if options.Callback then options.Callback({selected}) end
 
             local function Fire(val)
                 selected = val
@@ -944,6 +952,9 @@ function Lonum:CreateWindow(options)
 
             -- Update master key
             if flag == "ToggleUIKeybind" then Lonum.ToggleKey = defaultVal end
+
+            -- Initial state sync
+            if options.Callback then options.Callback(defaultVal) end
 
             local kFrame = Instance.new("Frame")
             kFrame.Size = UDim2.new(1, 0, 0, 42)
