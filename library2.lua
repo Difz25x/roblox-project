@@ -19,8 +19,7 @@ Lonum.Theme = {
     TextDim = Color3.fromRGB(150, 150, 150),        -- #969696
     CornerRadius = UDim.new(0, 10),                  -- Standard rounded
     Font = Enum.Font.Gotham,
-    FontBold = Enum.Font.GothamBold,
-    FontSemiBold = Enum.Font.GothamSemibold
+    FontBold = Enum.Font.GothamBold
 }
 
 Lonum.ToggleKey = Enum.KeyCode.K
@@ -450,7 +449,7 @@ function Lonum:CreateWindow(options)
         TabButton.BackgroundTransparency = 1
         TabButton.Text = "  " .. tabName
         TabButton.TextColor3 = Lonum.Theme.TextDim
-        TabButton.Font = Lonum.Theme.FontSemiBold
+        TabButton.Font = Enum.Font.GothamMedium
         TabButton.TextSize = 13
         TabButton.TextXAlignment = Enum.TextXAlignment.Left
         TabButton.AutoButtonColor = false
@@ -565,7 +564,7 @@ function Lonum:CreateWindow(options)
             btn.BackgroundColor3 = Lonum.Theme.ElementBackground
             btn.Text = options.Name or "Button"
             btn.TextColor3 = Lonum.Theme.TextTitle
-            btn.Font = Lonum.Theme.FontSemiBold
+            btn.Font = Enum.Font.GothamMedium
             btn.TextSize = 13
             btn.AutoButtonColor = false
             btn.Parent = TabPage
