@@ -17,8 +17,10 @@ Lonum.Theme = {
     TextTitle = Color3.fromRGB(255, 255, 255),      -- #ffffff
     TextNormal = Color3.fromRGB(200, 200, 200),     -- #c8c8c8
     TextDim = Color3.fromRGB(150, 150, 150),        -- #969696
-    CornerRadius = UDim.new(0, 6)                   -- Standard rounded
+    CornerRadius = UDim.new(0, 10)                   -- Standard rounded
 }
+
+Lonum.ToggleKey = Enum.KeyCode.K
 
 local configData = {}
 local currentConfigFolder = "Lonum_Data"
@@ -315,6 +317,18 @@ function Lonum:CreateWindow(options)
     MainFrame.BackgroundColor3 = self.Theme.MainBackground
     MainFrame.BorderSizePixel = 0
     MainFrame.Parent = ScreenGui
+
+    local Shadow = Instance.new("ImageLabel")
+    Shadow.Name = "Shadow"
+    Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    Shadow.Position = UDim2.new(0.5, 0, 0.5, 5)
+    Shadow.Size = UDim2.new(1, 40, 1, 40)
+    Shadow.BackgroundTransparency = 1
+    Shadow.Image = "http://www.roblox.com/asset/?id=5554236805"
+    Shadow.ImageColor3 = Color3.new(0, 0, 0)
+    Shadow.ImageTransparency = 0.4
+    Shadow.ZIndex = 0
+    Shadow.Parent = MainFrame
 
     local MainCorner = Instance.new("UICorner")
     MainCorner.CornerRadius = self.Theme.CornerRadius
@@ -918,8 +932,104 @@ function Lonum:CreateWindow(options)
             return DropObj
         end
 
+        function TabObj:CreateKeybind(options)
+            local flag = options.Flag or options.Name
+            local defaultVal = options.CurrentValue or Enum.KeyCode.K
+
+            if configData[flag] ~= nil then
+                -- Parse from string (JSON save) to Enum
+                local success, result = pcall(function() return Enum.KeyCode[configData[flag]] end)
+                if success and result then defaultVal = result end
+            end
+
+            -- Update master key
+            if flag == "ToggleUIKeybind" then Lonum.ToggleKey = defaultVal end
+
+            local kFrame = Instance.new("Frame")
+            kFrame.Size = UDim2.new(1, 0, 0, 42)
+            kFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
+            kFrame.Parent = TabPage
+
+            local kCorner = Instance.new("UICorner")
+            kCorner.CornerRadius = Lonum.Theme.CornerRadius
+            kCorner.Parent = kFrame
+
+            local kStroke = Instance.new("UIStroke")
+            kStroke.Color = Color3.fromRGB(255,255,255)
+            kStroke.Transparency = 0.95
+            kStroke.Parent = kFrame
+
+            local kLabel = Instance.new("TextLabel")
+            kLabel.Size = UDim2.new(1, -100, 1, 0)
+            kLabel.Position = UDim2.new(0, 15, 0, 0)
+            kLabel.BackgroundTransparency = 1
+            kLabel.Text = options.Name or "Keybind"
+            kLabel.TextColor3 = Lonum.Theme.TextNormal
+            kLabel.Font = Enum.Font.Gotham
+            kLabel.TextSize = 13
+            kLabel.TextXAlignment = Enum.TextXAlignment.Left
+            kLabel.Parent = kFrame
+
+            local kBtn = Instance.new("TextButton")
+            kBtn.Size = UDim2.new(0, 80, 0, 26)
+            kBtn.Position = UDim2.new(1, -95, 0.5, -13)
+            kBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+            kBtn.Text = defaultVal.Name
+            kBtn.TextColor3 = Lonum.Theme.Accent
+            kBtn.Font = Enum.Font.GothamBold
+            kBtn.TextSize = 12
+            kBtn.AutoButtonColor = false
+            kBtn.Parent = kFrame
+
+            local btnCorner = Instance.new("UICorner")
+            btnCorner.CornerRadius = UDim.new(0, 4)
+            btnCorner.Parent = kBtn
+
+            local isListening = false
+            local connection
+
+            local function Fire(val)
+                kBtn.Text = val.Name
+                if options.Callback then options.Callback(val) end
+                if flag == "ToggleUIKeybind" then Lonum.ToggleKey = val end
+                configData[flag] = val.Name
+                Lonum:SaveConfig()
+            end
+
+            kBtn.MouseButton1Click:Connect(function()
+                if isListening then return end
+                isListening = true
+                kBtn.Text = "..."
+                TweenService:Create(kBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.SidebarBackground}):Play()
+
+                connection = UserInputService.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        local key = input.KeyCode
+                        isListening = false
+                        connection:Disconnect()
+                        TweenService:Create(kBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 55)}):Play()
+
+                        -- Prevent binding to critical system keys
+                        if key ~= Enum.KeyCode.Escape and key ~= Enum.KeyCode.Unknown then
+                            Fire(key)
+                        else
+                            kBtn.Text = defaultVal.Name
+                        end
+                    end
+                end)
+            end)
+        end
+
         return TabObj
     end
+
+    -- Toggle UI Visibility Logic
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end -- Don't trigger if typing in chat
+        if input.KeyCode == Lonum.ToggleKey then
+            ScreenGui.Enabled = not ScreenGui.Enabled
+        end
+    end)
 
     return WindowObj
 end
