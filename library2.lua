@@ -134,7 +134,7 @@ function Lonum:CreateFloatingHUD(options)
     HUDFrame.Parent = ScreenGui
 
     local HUDCorner = Instance.new("UICorner")
-    HUDCorner.CornerRadius = self.Theme.CornerRadius
+    HUDCorner.CornerRadius = Lonum.Theme.CornerRadius
     HUDCorner.Parent = HUDFrame
 
     local HUDStroke = Instance.new("UIStroke")
@@ -163,8 +163,8 @@ function Lonum:CreateFloatingHUD(options)
     HeaderText.Position = UDim2.new(0, 12, 0, 0)
     HeaderText.BackgroundTransparency = 1
     HeaderText.Text = string.upper(Title)
-    HeaderText.TextColor3 = self.Theme.Accent
-    HeaderText.Font = self.Theme.FontBold
+    HeaderText.TextColor3 = Lonum.Theme.Accent
+    HeaderText.Font = Lonum.Theme.FontBold
     HeaderText.TextSize = 11
     HeaderText.TextXAlignment = Enum.TextXAlignment.Left
     HeaderText.Parent = Header
@@ -241,7 +241,7 @@ function Lonum:CreateFloatingHUD(options)
                 lText.Size = UDim2.new(0.5, 0, 1, 0)
                 lText.BackgroundTransparency = 1
                 lText.TextColor3 = Lonum.Theme.TextDim
-                lText.Font = self.Theme.Font
+                lText.Font = Lonum.Theme.Font
                 lText.TextSize = 12
                 lText.TextXAlignment = Enum.TextXAlignment.Left
                 lText.Parent = rFrame
@@ -251,7 +251,7 @@ function Lonum:CreateFloatingHUD(options)
                 rText.Position = UDim2.new(0.5, 0, 0, 0)
                 rText.BackgroundTransparency = 1
                 rText.TextColor3 = Lonum.Theme.TextTitle
-                rText.Font = self.Theme.Font
+                rText.Font = Lonum.Theme.Font
                 rText.TextSize = 12
                 rText.TextXAlignment = Enum.TextXAlignment.Right
                 rText.Parent = rFrame
@@ -318,7 +318,7 @@ function Lonum:CreateWindow(options)
     MainFrame.Size = UDim2.new(0, 700, 0, 480)
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    MainFrame.BackgroundColor3 = self.Theme.MainBackground
+    MainFrame.BackgroundColor3 = Lonum.Theme.MainBackground
     MainFrame.BorderSizePixel = 0
     MainFrame.Parent = ScreenGui
 
@@ -335,25 +335,25 @@ function Lonum:CreateWindow(options)
     Shadow.Parent = MainFrame
 
     local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = self.Theme.CornerRadius
+    MainCorner.CornerRadius = Lonum.Theme.CornerRadius
     MainCorner.Parent = MainFrame
 
     -- SIDEBAR
     local Sidebar = Instance.new("Frame")
     Sidebar.Name = "Sidebar"
     Sidebar.Size = UDim2.new(0, 190, 1, 0)
-    Sidebar.BackgroundColor3 = self.Theme.SidebarBackground
+    Sidebar.BackgroundColor3 = Lonum.Theme.SidebarBackground
     Sidebar.BorderSizePixel = 0
     Sidebar.Parent = MainFrame
 
     local SidebarCorner = Instance.new("UICorner")
-    SidebarCorner.CornerRadius = self.Theme.CornerRadius
+    SidebarCorner.CornerRadius = Lonum.Theme.CornerRadius
     SidebarCorner.Parent = Sidebar
 
     local SidebarHideCorner = Instance.new("Frame")
     SidebarHideCorner.Size = UDim2.new(0, 10, 1, 0)
     SidebarHideCorner.Position = UDim2.new(1, -10, 0, 0)
-    SidebarHideCorner.BackgroundColor3 = self.Theme.SidebarBackground
+    SidebarHideCorner.BackgroundColor3 = Lonum.Theme.SidebarBackground
     SidebarHideCorner.BorderSizePixel = 0
     SidebarHideCorner.Parent = Sidebar
 
@@ -376,7 +376,7 @@ function Lonum:CreateWindow(options)
     local HeaderLine = Instance.new("Frame")
     HeaderLine.Size = UDim2.new(1, 0, 0, 1)
     HeaderLine.Position = UDim2.new(0, 0, 1, -1)
-    HeaderLine.BackgroundColor3 = self.Theme.ElementBackground
+    HeaderLine.BackgroundColor3 = Lonum.Theme.ElementBackground
     HeaderLine.BorderSizePixel = 0
     HeaderLine.Parent = Header
 
@@ -385,8 +385,8 @@ function Lonum:CreateWindow(options)
     TitleLabel.Position = UDim2.new(0, 15, 0, 15)
     TitleLabel.BackgroundTransparency = 1
     TitleLabel.Text = Title
-    TitleLabel.TextColor3 = self.Theme.Accent
-    TitleLabel.Font = self.Theme.FontBold
+    TitleLabel.TextColor3 = Lonum.Theme.Accent
+    TitleLabel.Font = Lonum.Theme.FontBold
     TitleLabel.TextSize = 16
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = Header
@@ -396,8 +396,8 @@ function Lonum:CreateWindow(options)
     SubLabel.Position = UDim2.new(0, 15, 0, 38)
     SubLabel.BackgroundTransparency = 1
     SubLabel.Text = Subtitle
-    SubLabel.TextColor3 = self.Theme.TextDim
-    SubLabel.Font = self.Theme.Font
+    SubLabel.TextColor3 = Lonum.Theme.TextDim
+    SubLabel.Font = Lonum.Theme.Font
     SubLabel.TextSize = 11
     SubLabel.TextXAlignment = Enum.TextXAlignment.Left
     SubLabel.Parent = Header
@@ -450,7 +450,7 @@ function Lonum:CreateWindow(options)
         TabButton.BackgroundTransparency = 1
         TabButton.Text = "  " .. tabName
         TabButton.TextColor3 = Lonum.Theme.TextDim
-        TabButton.Font = self.Theme.FontSemiBold
+        TabButton.Font = Lonum.Theme.FontSemiBold
         TabButton.TextSize = 13
         TabButton.TextXAlignment = Enum.TextXAlignment.Left
         TabButton.AutoButtonColor = false
@@ -532,7 +532,7 @@ function Lonum:CreateWindow(options)
             SecLabel.BackgroundTransparency = 1
             SecLabel.Text = string.upper(name)
             SecLabel.TextColor3 = Lonum.Theme.Accent
-            SecLabel.Font = self.Theme.FontBold
+            SecLabel.Font = Lonum.Theme.FontBold
             SecLabel.TextSize = 13
             SecLabel.TextXAlignment = Enum.TextXAlignment.Left
             SecLabel.TextYAlignment = Enum.TextYAlignment.Bottom
@@ -545,7 +545,7 @@ function Lonum:CreateWindow(options)
             lbl.BackgroundTransparency = 1
             lbl.Text = text
             lbl.TextColor3 = Lonum.Theme.TextDim
-            lbl.Font = self.Theme.Font
+            lbl.Font = Lonum.Theme.Font
             lbl.TextSize = 12
             lbl.TextXAlignment = Enum.TextXAlignment.Left
             lbl.Parent = TabPage
@@ -565,7 +565,7 @@ function Lonum:CreateWindow(options)
             btn.BackgroundColor3 = Lonum.Theme.ElementBackground
             btn.Text = options.Name or "Button"
             btn.TextColor3 = Lonum.Theme.TextTitle
-            btn.Font = self.Theme.FontSemiBold
+            btn.Font = Lonum.Theme.FontSemiBold
             btn.TextSize = 13
             btn.AutoButtonColor = false
             btn.Parent = TabPage
@@ -623,7 +623,7 @@ function Lonum:CreateWindow(options)
             tLabel.BackgroundTransparency = 1
             tLabel.Text = options.Name or "Toggle"
             tLabel.TextColor3 = Lonum.Theme.TextNormal
-            tLabel.Font = self.Theme.Font
+            tLabel.Font = Lonum.Theme.Font
             tLabel.TextSize = 13
             tLabel.TextXAlignment = Enum.TextXAlignment.Left
             tLabel.Parent = tFrame
@@ -718,7 +718,7 @@ function Lonum:CreateWindow(options)
             sLabel.BackgroundTransparency = 1
             sLabel.Text = options.Name or "Slider"
             sLabel.TextColor3 = Lonum.Theme.TextNormal
-            sLabel.Font = self.Theme.Font
+            sLabel.Font = Lonum.Theme.Font
             sLabel.TextSize = 13
             sLabel.TextXAlignment = Enum.TextXAlignment.Left
             sLabel.Parent = sFrame
@@ -729,7 +729,7 @@ function Lonum:CreateWindow(options)
             sValLabel.BackgroundTransparency = 1
             sValLabel.Text = tostring(defaultVal)
             sValLabel.TextColor3 = Lonum.Theme.Accent
-            sValLabel.Font = self.Theme.FontBold
+            sValLabel.Font = Lonum.Theme.FontBold
             sValLabel.TextSize = 13
             sValLabel.TextXAlignment = Enum.TextXAlignment.Right
             sValLabel.Parent = sFrame
@@ -842,7 +842,7 @@ function Lonum:CreateWindow(options)
             dTitle.BackgroundTransparency = 1
             dTitle.Text = options.Name or "Dropdown"
             dTitle.TextColor3 = Lonum.Theme.TextNormal
-            dTitle.Font = self.Theme.Font
+            dTitle.Font = Lonum.Theme.Font
             dTitle.TextSize = 13
             dTitle.TextXAlignment = Enum.TextXAlignment.Left
             dTitle.Parent = dropBtn
@@ -853,7 +853,7 @@ function Lonum:CreateWindow(options)
             dValue.BackgroundTransparency = 1
             dValue.Text = (options.CurrentOption[1] or "") .. " ▾"
             dValue.TextColor3 = Lonum.Theme.TextDim
-            dValue.Font = self.Theme.Font
+            dValue.Font = Lonum.Theme.Font
             dValue.TextSize = 12
             dValue.TextXAlignment = Enum.TextXAlignment.Right
             dValue.Parent = dropBtn
@@ -896,7 +896,7 @@ function Lonum:CreateWindow(options)
                 oBtn.BackgroundColor3 = Lonum.Theme.ElementBackground
                 oBtn.Text = "    " .. opt
                 oBtn.TextColor3 = Lonum.Theme.TextDim
-                oBtn.Font = self.Theme.Font
+                oBtn.Font = Lonum.Theme.Font
                 oBtn.TextSize = 12
                 oBtn.TextXAlignment = Enum.TextXAlignment.Left
                 oBtn.AutoButtonColor = false
@@ -932,7 +932,7 @@ function Lonum:CreateWindow(options)
                     oBtn.BackgroundColor3 = Lonum.Theme.ElementBackground
                     oBtn.Text = "    " .. opt
                     oBtn.TextColor3 = Lonum.Theme.TextDim
-                    oBtn.Font = self.Theme.Font
+                    oBtn.Font = Lonum.Theme.Font
                     oBtn.TextSize = 12
                     oBtn.TextXAlignment = Enum.TextXAlignment.Left
                     oBtn.Parent = optionContainer
@@ -990,7 +990,7 @@ function Lonum:CreateWindow(options)
             kLabel.BackgroundTransparency = 1
             kLabel.Text = options.Name or "Keybind"
             kLabel.TextColor3 = Lonum.Theme.TextNormal
-            kLabel.Font = self.Theme.Font
+            kLabel.Font = Lonum.Theme.Font
             kLabel.TextSize = 13
             kLabel.TextXAlignment = Enum.TextXAlignment.Left
             kLabel.Parent = kFrame
@@ -1001,7 +1001,7 @@ function Lonum:CreateWindow(options)
             kBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
             kBtn.Text = defaultVal.Name
             kBtn.TextColor3 = Lonum.Theme.Accent
-            kBtn.Font = self.Theme.FontBold
+            kBtn.Font = Lonum.Theme.FontBold
             kBtn.TextSize = 12
             kBtn.AutoButtonColor = false
             kBtn.Parent = kFrame
@@ -1106,11 +1106,11 @@ function Lonum:Notify(options)
     local nFrame = Instance.new("Frame")
     nFrame.Size = UDim2.new(1, 0, 0, 60)
     nFrame.Position = UDim2.new(1, 300, 0, 0)
-    nFrame.BackgroundColor3 = self.Theme.ElementBackground
+    nFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
     nFrame.Parent = NotifContainer
 
     local nCorner = Instance.new("UICorner")
-    nCorner.CornerRadius = self.Theme.CornerRadius
+    nCorner.CornerRadius = Lonum.Theme.CornerRadius
     nCorner.Parent = nFrame
 
     local nStroke = Instance.new("UIStroke")
@@ -1121,7 +1121,7 @@ function Lonum:Notify(options)
     local nLine = Instance.new("Frame")
     nLine.Size = UDim2.new(0, 3, 1, -24)
     nLine.Position = UDim2.new(0, 8, 0, 12)
-    nLine.BackgroundColor3 = self.Theme.Accent
+    nLine.BackgroundColor3 = Lonum.Theme.Accent
     nLine.BorderSizePixel = 0
     nLine.Parent = nFrame
 
@@ -1134,8 +1134,8 @@ function Lonum:Notify(options)
     nTitle.Position = UDim2.new(0, 18, 0, 10)
     nTitle.BackgroundTransparency = 1
     nTitle.Text = Title
-    nTitle.TextColor3 = self.Theme.TextTitle
-    nTitle.Font = self.Theme.FontBold
+    nTitle.TextColor3 = Lonum.Theme.TextTitle
+    nTitle.Font = Lonum.Theme.FontBold
     nTitle.TextSize = 12
     nTitle.TextXAlignment = Enum.TextXAlignment.Left
     nTitle.Parent = nFrame
@@ -1145,8 +1145,8 @@ function Lonum:Notify(options)
     nText.Position = UDim2.new(0, 18, 0, 28)
     nText.BackgroundTransparency = 1
     nText.Text = Content
-    nText.TextColor3 = self.Theme.TextDim
-    nText.Font = self.Theme.Font
+    nText.TextColor3 = Lonum.Theme.TextDim
+    nText.Font = Lonum.Theme.Font
     nText.TextSize = 11
     nText.TextXAlignment = Enum.TextXAlignment.Left
     nText.Parent = nFrame
