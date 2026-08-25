@@ -645,11 +645,13 @@ function Lonum:CreateWindow(options)
 
             local State = defaultVal
 
-            -- Sinkronisasikan state konfigurasi awal ke skrip utama secara langsung
-            if options.Callback then options.Callback(State) end
+            -- Sinkronisasikan state konfigurasi awal secara aman
+            if options.Callback then
+                pcall(function() options.Callback(State) end)
+            end
 
             local function Fire()
-                if options.Callback then options.Callback(State) end
+                if options.Callback then pcall(function() options.Callback(State) end) end
                 configData[flag] = State
                 Lonum:SaveConfig()
             end
@@ -760,13 +762,15 @@ function Lonum:CreateWindow(options)
 
             local Value = defaultVal
 
-            -- Sinkronisasikan state konfigurasi awal ke skrip utama secara langsung
+            -- Sinkronisasikan state konfigurasi awal secara aman
             sValLabel.Text = tostring(Value)
-            if options.Callback then options.Callback(Value) end
+            if options.Callback then
+                pcall(function() options.Callback(Value) end)
+            end
 
             local function Fire()
                 sValLabel.Text = tostring(Value)
-                if options.Callback then options.Callback(Value) end
+                if options.Callback then pcall(function() options.Callback(Value) end) end
                 configData[flag] = Value
                 Lonum:SaveConfig()
             end
@@ -868,12 +872,14 @@ function Lonum:CreateWindow(options)
 
             -- Initial state sync
             dValue.Text = selected .. " ▾"
-            if options.Callback then options.Callback({selected}) end
+            if options.Callback then
+                pcall(function() options.Callback({selected}) end)
+            end
 
             local function Fire(val)
                 selected = val
                 dValue.Text = selected .. " ▾"
-                if options.Callback then options.Callback({selected}) end
+                if options.Callback then pcall(function() options.Callback({selected}) end) end
                 configData[flag] = selected
                 Lonum:SaveConfig()
             end
@@ -954,7 +960,9 @@ function Lonum:CreateWindow(options)
             if flag == "ToggleUIKeybind" then Lonum.ToggleKey = defaultVal end
 
             -- Initial state sync
-            if options.Callback then options.Callback(defaultVal) end
+            if options.Callback then
+                pcall(function() options.Callback(defaultVal) end)
+            end
 
             local kFrame = Instance.new("Frame")
             kFrame.Size = UDim2.new(1, 0, 0, 42)
