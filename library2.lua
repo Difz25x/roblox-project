@@ -18,8 +18,8 @@ Lonum.Theme = {
     TextNormal = Color3.fromRGB(200, 200, 200),     -- #c8c8c8
     TextDim = Color3.fromRGB(150, 150, 150),        -- #969696
     CornerRadius = UDim.new(0, 10),                  -- Standard rounded
-    Font = Enum.Font.Gotham,
-    FontBold = Enum.Font.GothamBold
+    Font = Enum.Font.Jura,
+    FontBold = Enum.Font.Jura
 }
 
 Lonum.ToggleKey = Enum.KeyCode.K
@@ -312,14 +312,52 @@ function Lonum:CreateWindow(options)
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = targetParent
 
+    -- MOBILE TOGGLE BUTTON (Cross-Platform Fallback)
+    local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+    local MobileBtn = Instance.new("TextButton")
+    MobileBtn.Name = "MobileToggle"
+    MobileBtn.Size = UDim2.new(0, 45, 0, 45)
+    MobileBtn.Position = UDim2.new(0, 20, 0, 20)
+    MobileBtn.BackgroundColor3 = Lonum.Theme.SidebarBackground
+    MobileBtn.Text = "L"
+    MobileBtn.TextColor3 = Lonum.Theme.Accent
+    MobileBtn.Font = Lonum.Theme.FontBold
+    MobileBtn.TextSize = 20
+    MobileBtn.ZIndex = 50
+    MobileBtn.AutoButtonColor = false
+    MobileBtn.Parent = ScreenGui
+
+    -- Always show mobile button if requested or if on touch device
+    if not isMobile then
+        MobileBtn.Visible = true -- You can set this to false if you only want it on Mobile
+    end
+
+    local MobileCorner = Instance.new("UICorner")
+    MobileCorner.CornerRadius = UDim.new(1, 0)
+    MobileCorner.Parent = MobileBtn
+
+    local MobileStroke = Instance.new("UIStroke")
+    MobileStroke.Color = Lonum.Theme.Accent
+    MobileStroke.Thickness = 2
+    MobileStroke.Transparency = 0.2
+    MobileStroke.Parent = MobileBtn
+
+    MakeDraggable(MobileBtn, MobileBtn)
+
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 700, 0, 480)
+    MainFrame.Size = UDim2.new(0.65, 0, 0.7, 0) -- Responsive Scale Size
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     MainFrame.BackgroundColor3 = Lonum.Theme.MainBackground
     MainFrame.BorderSizePixel = 0
     MainFrame.Parent = ScreenGui
+
+    local MainSizeConstraint = Instance.new("UISizeConstraint")
+    MainSizeConstraint.MaxSize = Vector2.new(700, 480)
+    MainSizeConstraint.MinSize = Vector2.new(450, 300)
+    MainSizeConstraint.Parent = MainFrame
 
     local Shadow = Instance.new("ImageLabel")
     Shadow.Name = "Shadow"
@@ -340,10 +378,15 @@ function Lonum:CreateWindow(options)
     -- SIDEBAR
     local Sidebar = Instance.new("Frame")
     Sidebar.Name = "Sidebar"
-    Sidebar.Size = UDim2.new(0, 190, 1, 0)
+    Sidebar.Size = UDim2.new(0.3, 0, 1, 0) -- Responsive Width
     Sidebar.BackgroundColor3 = Lonum.Theme.SidebarBackground
     Sidebar.BorderSizePixel = 0
     Sidebar.Parent = MainFrame
+
+    local SidebarConstraint = Instance.new("UISizeConstraint")
+    SidebarConstraint.MaxSize = Vector2.new(190, math.huge)
+    SidebarConstraint.MinSize = Vector2.new(140, 0)
+    SidebarConstraint.Parent = Sidebar
 
     local SidebarCorner = Instance.new("UICorner")
     SidebarCorner.CornerRadius = Lonum.Theme.CornerRadius
@@ -428,8 +471,8 @@ function Lonum:CreateWindow(options)
     -- CONTENT AREA
     local ContentArea = Instance.new("Frame")
     ContentArea.Name = "ContentArea"
-    ContentArea.Size = UDim2.new(1, -190, 1, 0)
-    ContentArea.Position = UDim2.new(0, 190, 0, 0)
+    ContentArea.Size = UDim2.new(0.7, 0, 1, 0)
+    ContentArea.Position = UDim2.new(0.3, 0, 0, 0)
     ContentArea.BackgroundTransparency = 1
     ContentArea.Parent = MainFrame
 
@@ -496,7 +539,7 @@ function Lonum:CreateWindow(options)
             TabPage.CanvasSize = UDim2.new(0, 0, 0, PageLayout.AbsoluteContentSize.Y + 50)
         end)
 
-        TabButton.MouseButton1Click:Connect(function()
+        TabButton.Activated:Connect(function()
             for _, t in pairs(self.Tabs) do
                 t.Page.Visible = false
                 TweenService:Create(t.Button, TweenInfo.new(0.2), {TextColor3 = Lonum.Theme.TextDim, BackgroundTransparency = 1}):Play()
@@ -586,7 +629,7 @@ function Lonum:CreateWindow(options)
                 TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.ElementBackground}):Play()
                 TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(255,255,255), Transparency = 0.95}):Play()
             end)
-            btn.MouseButton1Click:Connect(function()
+            btn.Activated:Connect(function()
                 TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0.98, 0, 0, 38)}):Play()
                 task.wait(0.1)
                 TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, 42)}):Play()
@@ -661,7 +704,7 @@ function Lonum:CreateWindow(options)
                 Lonum:SaveConfig()
             end
 
-            tFrame.MouseButton1Click:Connect(function()
+            tFrame.Activated:Connect(function()
                 State = not State
                 TweenService:Create(tBox, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                     BackgroundColor3 = State and Lonum.Theme.Accent or Color3.fromRGB(50, 50, 55)
@@ -907,14 +950,14 @@ function Lonum:CreateWindow(options)
                 oBtn.MouseLeave:Connect(function()
                     TweenService:Create(oBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.ElementBackground, TextColor3 = Lonum.Theme.TextDim}):Play()
                 end)
-                oBtn.MouseButton1Click:Connect(function()
+                oBtn.Activated:Connect(function()
                     Fire(opt)
                     isOpen = false
                     TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 42)}):Play()
                 end)
             end
 
-            dropBtn.MouseButton1Click:Connect(function()
+            dropBtn.Activated:Connect(function()
                 isOpen = not isOpen
                 local targetHeight = isOpen and (42 + (#(options.Options or {}) * 35)) or 42
                 TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
@@ -936,7 +979,7 @@ function Lonum:CreateWindow(options)
                     oBtn.TextXAlignment = Enum.TextXAlignment.Left
                     oBtn.Parent = optionContainer
 
-                    oBtn.MouseButton1Click:Connect(function()
+                    oBtn.Activated:Connect(function()
                         Fire(opt)
                         isOpen = false
                         TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 42)}):Play()
@@ -1020,7 +1063,7 @@ function Lonum:CreateWindow(options)
                 Lonum:SaveConfig()
             end
 
-            kBtn.MouseButton1Click:Connect(function()
+            kBtn.Activated:Connect(function()
                 if isListening then return end
                 isListening = true
                 kBtn.Text = "..."
@@ -1047,11 +1090,16 @@ function Lonum:CreateWindow(options)
         return TabObj
     end
 
-    -- Toggle UI Visibility Logic
+    -- Mobile Button Click Toggle
+    MobileBtn.Activated:Connect(function()
+        MainFrame.Visible = not MainFrame.Visible
+    end)
+
+    -- Toggle UI Visibility Logic (Keyboard)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end -- Don't trigger if typing in chat
         if input.KeyCode == Lonum.ToggleKey then
-            ScreenGui.Enabled = not ScreenGui.Enabled
+            MainFrame.Visible = not MainFrame.Visible
         end
     end)
 
