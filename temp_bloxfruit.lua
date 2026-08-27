@@ -131,7 +131,7 @@ local cfg = {
 	BringInterval = 0,
 	AttackIntervalFast = 0.05,
 	AttackIntervalSuper = 0,
-	EvasionMoveInterval = 0.45,
+	EvasionTick = 0.45,
 	ThreadSleep = 0.025,
 
 	StuckTimeout = 3,
@@ -333,7 +333,7 @@ local SEA3 = {
 	{ Min = 1575, Max = 1599, Quest = "DragonCrewQuest", Stage = 1, Name = "Dragon Crew Warriors", Mob = "Dragon Crew Warrior", Count = 8, NPC = Vector3.new(6737.21, 127.44, -712.48), MobPos = Vector3.new(6834.66, 192.74, -829.06) },
 	{ Min = 1600, Max = 1624, Quest = "DragonCrewQuest", Stage = 2, Name = "Dragon Crew Archers", Mob = "Dragon Crew Archer", Count = 8, NPC = Vector3.new(6737.21, 127.44, -712.48), MobPos = Vector3.new(6713.14, 716.12, 631.09) },
 	{ Min = 1625, Max = 1649, Quest = "VenomCrewQuest", Stage = 1, Name = "Hydra Enforcers", Mob = "Hydra Enforcer", Count = 8, NPC = Vector3.new(5214.16, 1004.13, 756.39), MobPos = Vector3.new(4570.93, 1026.70, 405.84) },
-	{ Min = 1650, Max = 1699, Quest = "VenomCrewQuest", Stage = 2, Name = "Venomous Assailant", Mob = "Venomous Assailant", Count = 8, NPC = Vector3.new(5214.16, 1004.13, 756.39), MobPos = Vector3.new(4778.37, 1474.12, 514.90) },
+	{ Min = 1650, Max = 1699, Quest = "VenomCrewQuest", Stage = 2, Name = "Venomous Assailant", Mob = "Venomous Assailant", Count = 8, NPC = Vector3.new(5214.16, 1004.13, 756.39), MobPos = Vector3.new(4499.958984, 1169.141724, 796.885559) },
 	{ Min = 1700, Max = 1724, Quest = "MarineTreeIsland", Stage = 1, Name = "Marine Commodores", Mob = "Marine Commodore", Count = 8, NPC = Vector3.new(2484.00, 74.29, -6787.78), MobPos = Vector3.new(2196.70, 284.17, -7413.28) },
 	{ Min = 1725, Max = 1774, Quest = "MarineTreeIsland", Stage = 2, Name = "Marine Rear Admirals", Mob = "Marine Rear Admiral", Count = 8, NPC = Vector3.new(2484.00, 74.29, -6787.78), MobPos = Vector3.new(3671, 161, -6932) },
 	{ Min = 1775, Max = 1799, Quest = "DeepForestIsland3", Stage = 1, Name = "Fishman Raiders", Mob = "Fishman Raider", Count = 8, NPC = Vector3.new(-10582, 332, -8758), MobPos = Vector3.new(-10407, 332, -8368) },
@@ -1427,7 +1427,6 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
     end
 
     if weapon then
-        -- Anti-Cheat Bypass: Server menolak serangan jika karakter memiliki part yang ter-Anchor.
         for _, v in ipairs(myChar:GetDescendants()) do
             if v:IsA("BasePart") and v.Anchored then
                 v.Anchored = false
@@ -1461,23 +1460,30 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
                 if #hitTargets > 0 then
                     task.spawn(function()
                         if isMultiMobDamage then
-                            local primaryDict = hitTargets[1]
-                            local primaryPart = primaryDict.HitPart
+                            local maxAoE = 1
+                            local index = 1
 
-                            local additionalHits = {}
-                            for j = 2, #hitTargets do
-                                local adjDict = hitTargets[j]
-                                table.insert(additionalHits, {adjDict.EnemyModel, adjDict.HitPart})
+                            while index <= #hitTargets do
+                                local primaryPart = hitTargets[index].HitPart
+                                local additionalHits = {}
+
+                                local endIdx = math.min(index + maxAoE, #hitTargets)
+                                for j = index + 1, endIdx do
+                                    local adjDict = hitTargets[j]
+                                    table.insert(additionalHits, {adjDict.HitPart, adjDict.EnemyModel})
+                                end
+
+                                pcall(function()
+                                    if RegisterAttackEvent then
+                                        RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
+                                    end
+                                    if RegisterHitEvent then
+                                        RegisterHitEvent:FireServer(primaryPart, additionalHits, nil, sessionSecret)
+                                    end
+                                end)
+
+                                index = endIdx + 1
                             end
-
-                            pcall(function()
-                                if RegisterAttackEvent then
-                                    RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
-                                end
-                                if RegisterHitEvent then
-                                    RegisterHitEvent:FireServer(primaryPart, additionalHits, nil, sessionSecret)
-                                end
-                            end)
                         else
                             local primaryDict = hitTargets[1]
                             pcall(function()
@@ -1788,12 +1794,12 @@ local function StartAutoBone()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -1808,7 +1814,7 @@ local function StartAutoBone()
                     if distToSpawn > 80 then
                         TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
                     else
-                        if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
                             lastEvasionMoveAt = now
                             TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
                         end
@@ -1957,12 +1963,12 @@ local function StartAutoCocoa()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -1976,7 +1982,7 @@ local function StartAutoCocoa()
                     if distToSpawn > 80 then
                         TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
                     else
-                        if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
                             lastEvasionMoveAt = now
                             TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
                         end
@@ -2159,12 +2165,12 @@ local function StartAutoCakePrince()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -2180,12 +2186,12 @@ local function StartAutoCakePrince()
                         local dimPos = GetSafePosition(cakeDimension)
                         local distToDim = (myHrp.Position - dimPos).Magnitude
                         if distToDim > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(dimPos + Vector3.new(0, cfg.TweenHeight, 0), dimPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
                             end
@@ -2193,12 +2199,12 @@ local function StartAutoCakePrince()
                     else
                         local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
                         if distToSpawn > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
                             end
@@ -2242,7 +2248,7 @@ local function StartAutoFarm()
 							currentTargetInstance = nil
 							if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
 								local now = os.clock()
-								if now - lastEvasionMoveAt >= 0.5 then
+								if now - lastEvasionMoveAt >= cfg.EvasionTick then
 									lastEvasionMoveAt = now
 									TweenTo(CFrame.new(bossProfile.NPC))
 								end
@@ -2267,12 +2273,12 @@ local function StartAutoFarm()
 								end
 
 									if targetDistance > 80 then
-										if now - lastEvasionMoveAt >= 0.5 then
+										if now - lastEvasionMoveAt >= cfg.EvasionTick then
 											lastEvasionMoveAt = now
 											TweenTo(CFrame.new(bHrp.Position + currentEvasionOffset, bHrp.Position))
 										end
 								else
-									if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+									if now - lastEvasionMoveAt >= cfg.EvasionTick then
 										lastEvasionMoveAt = now
 										TweenTo(CFrame.new(bHrp.Position + currentEvasionOffset, bHrp.Position))
 									end
@@ -2283,7 +2289,7 @@ local function StartAutoFarm()
 							end
 						end
 							if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
-								if now - lastEvasionMoveAt >= 0.5 then
+								if now - lastEvasionMoveAt >= cfg.EvasionTick then
 									lastEvasionMoveAt = now
 									TweenTo(CFrame.new(bossProfile.NPC))
 								end
@@ -2390,7 +2396,7 @@ local function StartAutoFarm()
                                 if targetDistance > 80 then
                                     TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                                 else
-                                    if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                    if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                         lastEvasionMoveAt = now
                                         TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                                     end
@@ -2403,12 +2409,12 @@ local function StartAutoFarm()
                             ToggleFloat(true)
                             local distToSpawn = (myHrp.Position - profile.MobPos).Magnitude
                             if distToSpawn > 80 then
-                                if now - lastEvasionMoveAt >= 0.5 then
+                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(profile.MobPos + Vector3.new(0, cfg.TweenHeight, 0), profile.MobPos))
                                 end
                             else
-                                if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(profile.MobPos + currentEvasionOffset, profile.MobPos))
                                 end
@@ -2889,12 +2895,12 @@ local function StartAutoRaid()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -2916,7 +2922,7 @@ local function StartAutoRaid()
                             if activeIslandNum >= 5 then
                                 local dist = (myHrp.Position - iPos).Magnitude
                                 if dist > 80 then
-                                    if now - lastEvasionMoveAt >= 0.5 then
+                                    if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                         lastEvasionMoveAt = now
                                         TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
                                     end
@@ -2927,14 +2933,14 @@ local function StartAutoRaid()
                             end
 
                             if dist > 80 then
-                                if now - lastEvasionMoveAt >= 0.5 then
+                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
                                 end
                                 TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
                             else
                                 -- Already at highest available island, wait for spawns while doing relaxed evasion
-                                if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
                                 end
@@ -3070,12 +3076,12 @@ local function StartFarmNearest()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -3294,12 +3300,12 @@ local function StartAutoDungeon()
                         end
 
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -3314,7 +3320,7 @@ local function StartAutoDungeon()
                         local exitPos = GetNearestDungeonExit()
                         if exitPos then
                             if dist > 15 then
-                                if now - lastEvasionMoveAt >= 0.5 then
+                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(exitPos))
                                 end
@@ -3454,12 +3460,12 @@ local function StartAutoKillVolcano()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= 0.5 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                 lastEvasionMoveAt = now
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
@@ -3615,7 +3621,7 @@ local function StartAutoFactory()
                     if dist > 80 then
                         TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                     else
-                        if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
                             lastEvasionMoveAt = now
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
