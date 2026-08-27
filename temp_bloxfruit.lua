@@ -1610,6 +1610,44 @@ local function GetBestCocoaMob()
     return nil
 end
 
+local function GetBestCakeMob()
+    local cakeMobs = {
+        { Name = "Cookie Crafters", Mob = "Cookie Crafter" },
+        { Name = "Cake Guards", Mob = "Cake Guard" },
+        { Name = "Baking Staff", Mob = "Baking Staff" },
+        { Name = "Head Bakers", Mob = "Head Baker" }
+    }
+
+    for _, info in ipairs(cakeMobs) do
+        local profile = GetMobProfileByName(info.Mob)
+        if profile then info.MobPos = profile.MobPos end
+    end
+
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not enemies then return nil end
+
+    local availableMobTypes = {}
+    local seenMobTypes = {}
+
+    for _, enemy in ipairs(enemies:GetChildren()) do
+        for _, mobInfo in ipairs(cakeMobs) do
+            if enemy.Name == mobInfo.Mob and IsEnemyVulnerable(enemy, mobInfo.Mob) then
+                if not seenMobTypes[mobInfo.Mob] then
+                    seenMobTypes[mobInfo.Mob] = true
+                    table.insert(availableMobTypes, mobInfo)
+                end
+            end
+        end
+    end
+
+    if #availableMobTypes > 0 then
+        local randomIndex = math.random(1, #availableMobTypes)
+        return availableMobTypes[randomIndex]
+    end
+
+    return nil
+end
+
 local function StartAutoBone()
     local generation = workerGeneration
     ToggleFloat(true)
@@ -1950,6 +1988,230 @@ local function StartAutoCocoa()
     end)
 end
 
+local isAutoCakePrince = false
+local cakePrinceWorkerGeneration = 0
+
+local function StartAutoCakePrince()
+    local generation = cakePrinceWorkerGeneration
+    ToggleFloat(true)
+
+    local defaultCakeFallback = { Name = "Cookie Crafters", Mob = "Cookie Crafter", MobPos = Vector3.new(-2374, 38, -12125) }
+    local activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
+
+    task.spawn(function()
+        while isAutoCakePrince and ScriptContext.Running and generation == cakePrinceWorkerGeneration do
+            local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
+            local myChar = GetCharacter()
+            local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+            if myHrp then
+                local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
+                -- Special override for boss
+                local mapFolder = workspace:FindFirstChild("Map")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
+                if not cakeDimension and mapFolder then
+                    for _, child in ipairs(mapFolder:GetChildren()) do
+                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
+                            cakeDimension = child
+                            break
+                        end
+                    end
+                end
+
+                if cakeDimension then tName = "Cake Prince" end
+                ExecuteAttack(myChar, myHrp, false, tName)
+            end
+
+            if interval <= 0 then task.wait() else task.wait(interval) end
+        end
+    end)
+
+    local cakeBringConn
+    cakeBringConn = RunService.Heartbeat:Connect(function()
+        if not isAutoCakePrince or not ScriptContext.Running or generation ~= cakePrinceWorkerGeneration then
+            if cakeBringConn then cakeBringConn:Disconnect() end
+            return
+        end
+        local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+        local target = currentTargetInstance
+        local tHrp = target and target:FindFirstChild("HumanoidRootPart")
+        if myHrp and tHrp then
+            local enemiesFolder = workspace:FindFirstChild("Enemies")
+            if enemiesFolder then
+                local targetMobName = target.Name
+                if targetMobName == "Cake Prince" then return end
+
+                local magnetPos = activeCakeMobInfo.MobPos or tHrp.Position
+                if magnetPos then
+                    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
+                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                        if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
+                            if enemy.Name ~= "PropHitboxPlaceholder" then
+                                local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+                                local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                if eHrp and eHum and eHum.Health > 0 then
+                                    local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
+                                    if dist <= cfg.BringRadius then
+                                        eHrp.CFrame = gatherCFrame
+                                        eHrp.AssemblyLinearVelocity = Vector3.zero
+                                        eHrp.AssemblyAngularVelocity = Vector3.zero
+                                        if eHrp.CanCollide then eHrp.CanCollide = false end
+                                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    ScriptContext:AddConnection(cakeBringConn)
+
+    task.spawn(function()
+        while isAutoCakePrince and ScriptContext.Running and generation == cakePrinceWorkerGeneration do
+            local ok, err = pcall(function()
+                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                if not myHrp then return end
+
+                local now = os.clock()
+                if now - lastEvasionTime >= cfg.EvasionTick then
+                    lastEvasionTime = now
+                    local radius = math.max(0, math.floor(cfg.EvasionRadius))
+                    currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                end
+
+                local mapFolder = workspace:FindFirstChild("Map")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
+                if not cakeDimension and mapFolder then
+                    for _, child in ipairs(mapFolder:GetChildren()) do
+                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
+                            cakeDimension = child
+                            break
+                        end
+                    end
+                end
+
+                local targetMobInfo = activeCakeMobInfo
+                local targetMobName = targetMobInfo.Mob
+
+                if cakeDimension then
+                    targetMobName = "Cake Prince"
+                else
+                    if not activeCakeMobInfo then
+                        activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
+                    end
+                    targetMobInfo = activeCakeMobInfo
+                    targetMobName = targetMobInfo.Mob
+                end
+
+                local targetEnemy = currentTargetInstance
+
+                if targetEnemy then
+                    local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                    if h then
+                        if h.Health ~= lastTargetHealth then
+                            lastTargetHealth = h.Health
+                            lastTargetHealthChangeAt = now
+                        end
+
+                        if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
+                            if not IsBossEntity(targetEnemy) and targetEnemy.Name ~= "Cake Prince" then
+                                enemyBlacklist[targetEnemy] = now + 3
+                                currentTargetInstance = nil
+                                isReadyToAttack = false
+                                return
+                            else
+                                lastTargetHealthChangeAt = now
+                            end
+                        end
+                    end
+                end
+
+                if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
+                    targetEnemy = GetTargetEnemy(targetMobName)
+                    if not targetEnemy and not cakeDimension then
+                        local checkNewMob = GetBestCakeMob()
+                        if checkNewMob then
+                            activeCakeMobInfo = checkNewMob
+                            targetMobInfo = activeCakeMobInfo
+                            targetMobName = targetMobInfo.Mob
+                            targetEnemy = GetTargetEnemy(targetMobName)
+                        end
+                    end
+
+                    currentTargetInstance = targetEnemy
+                    if targetEnemy then
+                        local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                        lastTargetHealth = h and h.Health or -1
+                        lastTargetHealthChangeAt = now
+                    end
+                end
+
+                if targetEnemy then
+                    local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
+                    if tHrp then
+                        ToggleFloat(true)
+                        local mobProfile = GetMobProfileByName(targetEnemy.Name)
+                        local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+
+                        if cakeDimension then centerPos = tHrp.Position end
+
+                        local targetDistance = (centerPos - myHrp.Position).Magnitude
+                        if targetDistance > 80 then
+                            if now - lastEvasionMoveAt >= 0.5 then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            end
+                        else
+                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+                            end
+                        end
+                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                    end
+                else
+                    currentTargetInstance = nil
+                    isReadyToAttack = false
+                    ToggleFloat(true)
+
+                    if cakeDimension then
+                        local dimPos = GetSafePosition(cakeDimension)
+                        local distToDim = (myHrp.Position - dimPos).Magnitude
+                        if distToDim > 80 then
+                            if now - lastEvasionMoveAt >= 0.5 then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(dimPos + Vector3.new(0, cfg.TweenHeight, 0), dimPos))
+                            end
+                        else
+                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
+                            end
+                        end
+                    else
+                        local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
+                        if distToSpawn > 80 then
+                            if now - lastEvasionMoveAt >= 0.5 then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
+                            end
+                        else
+                            if now - lastEvasionMoveAt >= cfg.EvasionMoveInterval then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
+                            end
+                        end
+                    end
+                end
+            end)
+            if not ok then warn("[Lonum Error]: " .. tostring(err)); currentTargetInstance = nil; isReadyToAttack = false end
+            task.wait()
+        end
+    end)
+end
+
 local function StartAutoFarm()
 	local generation = workerGeneration
 
@@ -2152,6 +2414,7 @@ local function StartAutoFarm()
                                 end
                             end
                         end
+                    end
                 end)
 
                 if not ok then warn("[Lonum Error]: " .. tostring(err))
@@ -3566,15 +3829,15 @@ task.spawn(function()
     local bossNames = {}
     for _, boss in ipairs(BOSSES) do table.insert(bossNames, boss.Name) end
 
-    Tabs.Main:CreateSection("Material Farming")
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateSection("Material Farming")
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Spin Bones", CurrentValue = false, Flag = "ToggleAutoSpinBones",
         Callback = function(Value)
             isAutoSpinBones = Value
         end,
     })
-    
-    Tabs.Main:CreateButton({
+
+    Tabs.Sea3:CreateButton({
         Name = "Spin Bones 1x",
         Callback = function()
             task.spawn(function()
@@ -3608,7 +3871,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Farm Bone (Sea 3)", CurrentValue = false, Flag = "ToggleAutoBone",
         Callback = function(Value)
             isAutoBone = Value
@@ -3633,7 +3896,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Farm Cocoa (Sea 3)", CurrentValue = false, Flag = "ToggleAutoCocoa",
         Callback = function(Value)
             isAutoCocoa = Value
@@ -3651,6 +3914,31 @@ task.spawn(function()
                 StartAutoCocoa()
             else
                 workerGeneration = workerGeneration + 1
+                ToggleFloat(false)
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+            end
+        end,
+    })
+
+    Tabs.Sea3:CreateToggle({
+        Name = "Auto Cake Prince (Sea 3)", CurrentValue = false, Flag = "ToggleAutoCakePrince",
+        Callback = function(Value)
+            isAutoCakePrince = Value
+            if Value then
+                enabled = false
+                isAutoBone = false
+                isAutoCocoa = false
+                if FarmToggle then FarmToggle:Set(false) end
+
+                cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
+
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+                isReadyToAttack = false
+                currentTargetInstance = nil
+                lastTargetPos = nil
+                StartAutoCakePrince()
+            else
+                cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
                 ToggleFloat(false)
                 if activeTween then activeTween:Cancel(); activeTween = nil end
             end
@@ -4347,16 +4635,39 @@ task.spawn(function()
                 local gen = debugWorker
 
                 task.spawn(function()
+                    local lastCakeCheck = 0
+                    local lastCakeStatus = "Checking..."
+                    local commF = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+
                     while isDebugActive and ScriptContext.Running and gen == debugWorker do
                         local lighting = game:GetService("Lighting")
                         local phaseNum = lighting:GetAttribute("MoonPhase") or 0
                         local isBlueMoon = lighting:GetAttribute("IsBlueMoon") or false
 
                         local phaseName = MoonPhases[phaseNum] or (tostring(phaseNum) .. " (Unknown)")
-                        local blueMoonStatus = isBlueMoon and "✅ ACTIVE (KITSUNE SPAWNED!)" or "❌ Inactive"
+                        local blueMoonStatus = isBlueMoon and "✅ Active" or "❌ Inactive"
 
-                        DebugHUD:UpdateText(string.format("Moon Phase: %s\nBlue Moon: %s", phaseName, blueMoonStatus))
-                        task.wait(1)
+                        if os.clock() - lastCakeCheck > 5 then
+                            lastCakeCheck = os.clock()
+                            if commF then
+                                pcall(function()
+                                    local res = commF:InvokeServer("CakePrinceSpawner", true)
+                                    if type(res) == "string" then
+                                        local left = string.match(res, "We still need to defeat <Color=Yellow>(%d+)<Color=/>")
+                                        if left then
+                                            lastCakeStatus = "❌ " .. left .. " left"
+                                        elseif string.find(string.lower(res), "portal is already open") or string.find(string.lower(res), "behind the house") then
+                                            lastCakeStatus = "✅ Spawned"
+                                        else
+                                            lastCakeStatus = "Unknown"
+                                        end
+                                    end
+                                end)
+                            end
+                        end
+
+                        DebugHUD:UpdateText(string.format("Moon Phase: %s\nBlue Moon: %s\nCake Prince: %s", phaseName, blueMoonStatus, lastCakeStatus))
+                        task.wait(0.2)
                     end
                 end)
             else
