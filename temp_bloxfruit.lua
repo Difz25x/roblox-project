@@ -350,10 +350,10 @@ local SEA3 = {
 	{ Min = 2100, Max = 2124, Quest = "NutsIslandQuest", Stage = 2, Name = "Peanut Presidents", Mob = "Peanut President", Count = 8, NPC = Vector3.new(-2104, 38, -10192), MobPos = Vector3.new(-2150, 123, -10536) },
 	{ Min = 2125, Max = 2149, Quest = "IceCreamIslandQuest", Stage = 1, Name = "Ice Cream Chefs", Mob = "Ice Cream Chef", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-848.671204, 65.882126, -10914.947266) },
 	{ Min = 2150, Max = 2199, Quest = "IceCreamIslandQuest", Stage = 2, Name = "Ice Cream Commanders", Mob = "Ice Cream Commander", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-610.750732, 208.282623, -11254.516602) },
-	{ Min = 2200, Max = 2224, Quest = "CakeQuest1", Stage = 1, Name = "Cookie Crafters", Mob = "Cookie Crafter", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-2374, 38, -12125) },
-	{ Min = 2225, Max = 2249, Quest = "CakeQuest1", Stage = 2, Name = "Cake Guards", Mob = "Cake Guard", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-1598, 44, -12244) },
-	{ Min = 2250, Max = 2274, Quest = "CakeQuest2", Stage = 1, Name = "Baking Staff", Mob = "Baking Staff", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-1887, 78, -12998) },
-	{ Min = 2275, Max = 2299, Quest = "CakeQuest2", Stage = 2, Name = "Head Bakers", Mob = "Head Baker", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-2216, 82, -12869) },
+	{ Min = 2200, Max = 2224, Quest = "CakeQuest1", Stage = 1, Name = "Cookie Crafters", Mob = "Cookie Crafter", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-2288.005371, 37.860714, -12088.270508) },
+	{ Min = 2225, Max = 2249, Quest = "CakeQuest1", Stage = 2, Name = "Cake Guards", Mob = "Cake Guard", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-1577.599976, 46.978756, -12365.185547) },
+	{ Min = 2250, Max = 2274, Quest = "CakeQuest2", Stage = 1, Name = "Baking Staff", Mob = "Baking Staff", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-1883.478638, 37.860714, -12885.438477) },
+	{ Min = 2275, Max = 2299, Quest = "CakeQuest2", Stage = 2, Name = "Head Bakers", Mob = "Head Baker", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-2207.034424, 53.564850, -12857.274414) },
 	{ Min = 2300, Max = 2324, Quest = "ChocQuest1", Stage = 1, Name = "Cocoa Warriors", Mob = "Cocoa Warrior", Count = 8, NPC = Vector3.new(233, 30, -12201), MobPos = Vector3.new(31.493752, 24.796925, -12246.680664) },
 	{ Min = 2325, Max = 2349, Quest = "ChocQuest1", Stage = 2, Name = "Chocolate Bar Battlers", Mob = "Chocolate Bar Battler", Count = 8, NPC = Vector3.new(233, 30, -12201), MobPos = Vector3.new(683.419617, 24.796822, -12576.225586) },
 	{ Min = 2350, Max = 2374, Quest = "ChocQuest2", Stage = 1, Name = "Sweet Thieves", Mob = "Sweet Thief", Count = 8, NPC = Vector3.new(151, 30, -12774), MobPos = Vector3.new(165, 77, -12600) },
@@ -483,20 +483,15 @@ local function TweenTo(targetCFrame)
 
     local targetPos = targetCFrame.Position
 
-    -- Water Detection Anti-Drowning System
-    -- Check if target is near or below the sea level (but not Submerged layer which is < -1000)
-    -- Water objects in Blox Fruits usually sit around Y = 10 to 15.
     if targetPos.Y > -500 and targetPos.Y < 25 then
         local waterObj = workspace:FindFirstChild("Water")
         if waterObj and waterObj:IsA("BasePart") then
             local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
             if targetPos.Y <= waterTop + 5 then
-                -- Elevate the target safely above water
                 targetPos = Vector3.new(targetPos.X, waterTop + 25, targetPos.Z)
                 targetCFrame = CFrame.new(targetPos)
             end
         else
-            -- Failsafe if Water object isn't found but Y is dangerously low
             if targetPos.Y < 20 then
                 targetPos = Vector3.new(targetPos.X, 25, targetPos.Z)
                 targetCFrame = CFrame.new(targetPos)
@@ -516,8 +511,7 @@ local function TweenTo(targetCFrame)
 
     local distance = (hrp.Position - targetPos).Magnitude
 
-    -- CFrame Bypass for fast short-distance travel (Instantly teleports if under 300 studs)
-    if distance <= 300 then
+    if distance <= 280 then
         if activeTween then activeTween:Cancel(); activeTween = nil end
         hrp.CFrame = targetCFrame
         lastTargetPos = targetPos
@@ -1334,6 +1328,22 @@ local function GetSpawnedBoss(targetBossName)
 	return nil, bossProfile
 end
 
+local function getDripMamaStatus()
+    local res = CommF_:InvokeServer("CakePrinceSpawner", true)
+    if type(res) == "string" then
+        local left = string.match(res, "We still need to defeat <Color=Yellow>(%d+)<Color=/>")
+        if left then
+            return left .. " left"
+        elseif string.find(string.lower(res), "portal is already open") or string.find(string.lower(res), "behind the house") then
+            return "spawned"
+        elseif string.find(string.lower(res), "we have defeated enough")  or string.find(string.lower(res), "do you want to open the portal") then
+            return "ready"
+        else
+            return "unknown"
+        end
+    end
+end
+
 local function IsToolMatching(tool, wantedCategory)
 	if not tool or not tool:IsA("Tool") or tool.Name == "Tool" then return false end
 	local expectedToolTip = wantedCategory
@@ -2006,17 +2016,8 @@ local function StartAutoCakePrince()
 
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
-                -- Special override for boss
                 local mapFolder = workspace:FindFirstChild("Map")
-                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
-                if not cakeDimension and mapFolder then
-                    for _, child in ipairs(mapFolder:GetChildren()) do
-                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
-                            cakeDimension = child
-                            break
-                        end
-                    end
-                end
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension")
 
                 if cakeDimension then tName = "Cake Prince" end
                 ExecuteAttack(myChar, myHrp, false, tName)
@@ -2081,16 +2082,14 @@ local function StartAutoCakePrince()
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
                 end
 
-                local mapFolder = workspace:FindFirstChild("Map")
-                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
-                if not cakeDimension and mapFolder then
-                    for _, child in ipairs(mapFolder:GetChildren()) do
-                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
-                            cakeDimension = child
-                            break
-                        end
-                    end
+                local status = getDripMamaStatus()
+
+                if status == "ready" then
+                    CommF_:InvokeServer("CakePrinceSpawner")
                 end
+
+                local mapFolder = workspace:FindFirstChild("Map")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
 
                 local targetMobInfo = activeCakeMobInfo
                 local targetMobName = targetMobInfo.Mob
@@ -2899,7 +2898,6 @@ local function StartAutoRaid()
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
                         end
-                        -- Attack can start when character is close enough to MobPos center OR actual enemy
                         isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
                     end
                 else
@@ -2916,24 +2914,17 @@ local function StartAutoRaid()
                             if activeIslandNum >= 5 then
                                 local dist = (myHrp.Position - iPos).Magnitude
                                 if dist > 80 then
-                                    if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                        lastEvasionMoveAt = now
-                                        TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
-                                    end
+                                    TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
                                 else
                                     if activeTween then activeTween:Cancel(); activeTween = nil end
                                 end
                                 return
                             end
 
+                            local dist = (myHrp.Position - iPos).Magnitude
                             if dist > 80 then
-                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                    lastEvasionMoveAt = now
-                                    TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
-                                end
                                 TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
                             else
-                                -- Already at highest available island, wait for spawns while doing relaxed evasion
                                 if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
                                     TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
@@ -2950,7 +2941,6 @@ local function StartAutoRaid()
         end
     end)
 end
-
 
 local function StartFarmNearest()
     local generation = workerGeneration
@@ -4651,16 +4641,16 @@ task.spawn(function()
                             lastCakeCheck = os.clock()
                             if commF then
                                 pcall(function()
-                                    local res = commF:InvokeServer("CakePrinceSpawner", true)
-                                    if type(res) == "string" then
-                                        local left = string.match(res, "We still need to defeat <Color=Yellow>(%d+)<Color=/>")
-                                        if left then
-                                            lastCakeStatus = "❌ " .. left .. " left"
-                                        elseif string.find(string.lower(res), "portal is already open") or string.find(string.lower(res), "behind the house") then
-                                            lastCakeStatus = "✅ Spawned"
-                                        else
-                                            lastCakeStatus = "Unknown"
-                                        end
+                                    local status = getDripMamaStatus()
+                                    if status == "ready" then
+                                        lastCakeStatus = "✅ Ready"
+                                    elseif status == "spawned" then
+                                        lastCakeStatus = "✅ Spawned"
+                                    elseif status == "unknown" then
+                                        lastCakeStatus = "Unknown"
+                                    else
+                                        local left = tonumber(string.match(status, "(%d+) left"))
+                                        lastCakeStatus = tostring(left) .. " left"
                                     end
                                 end)
                             end
