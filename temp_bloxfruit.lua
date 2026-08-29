@@ -30,6 +30,13 @@ local ScriptContext = {
 	Running = true,
 }
 
+local activeTween = nil
+local isTweeningToPlayer = false
+local isAutoTorch = false
+local syn = getgenv and getgenv().syn or nil
+local FarmToggle = nil
+local GetSafePosition = nil -- Forward declaration
+
 function ScriptContext:AddConnection(conn)
 	table.insert(self.Connections, conn)
 	return conn
@@ -175,7 +182,6 @@ local isAutoNextIsland = false
 local currentRaidIsland = 1
 local isAutoBone = false
 local isAutoSpinBones = false
-local isAutoCocoa = false
 
 -- State Variables
 local enabled = false
@@ -352,7 +358,7 @@ local SEA3 = {
 	{ Min = 2150, Max = 2199, Quest = "IceCreamIslandQuest", Stage = 2, Name = "Ice Cream Commanders", Mob = "Ice Cream Commander", Count = 8, NPC = Vector3.new(-820, 66, -10966), MobPos = Vector3.new(-610.750732, 208.282623, -11254.516602) },
 	{ Min = 2200, Max = 2224, Quest = "CakeQuest1", Stage = 1, Name = "Cookie Crafters", Mob = "Cookie Crafter", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-2288.005371, 37.860714, -12088.270508) },
 	{ Min = 2225, Max = 2249, Quest = "CakeQuest1", Stage = 2, Name = "Cake Guards", Mob = "Cake Guard", Count = 8, NPC = Vector3.new(-2021, 38, -12028), MobPos = Vector3.new(-1577.599976, 46.978756, -12365.185547) },
-	{ Min = 2250, Max = 2274, Quest = "CakeQuest2", Stage = 1, Name = "Baking Staff", Mob = "Baking Staff", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-1883.478638, 37.860714, -12885.438477) },
+	{ Min = 2250, Max = 2274, Quest = "CakeQuest2", Stage = 1, Name = "Baking Staff", Mob = "Baking Staff", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-1887, 78, -12998) },
 	{ Min = 2275, Max = 2299, Quest = "CakeQuest2", Stage = 2, Name = "Head Bakers", Mob = "Head Baker", Count = 8, NPC = Vector3.new(-1927, 38, -12842), MobPos = Vector3.new(-2207.034424, 53.564850, -12857.274414) },
 	{ Min = 2300, Max = 2324, Quest = "ChocQuest1", Stage = 1, Name = "Cocoa Warriors", Mob = "Cocoa Warrior", Count = 8, NPC = Vector3.new(233, 30, -12201), MobPos = Vector3.new(31.493752, 24.796925, -12246.680664) },
 	{ Min = 2325, Max = 2349, Quest = "ChocQuest1", Stage = 2, Name = "Chocolate Bar Battlers", Mob = "Chocolate Bar Battler", Count = 8, NPC = Vector3.new(233, 30, -12201), MobPos = Vector3.new(683.419617, 24.796822, -12576.225586) },
@@ -373,6 +379,7 @@ local SEA3 = {
 	{ Min = 2675, Max = 2699, Quest = "SubmergedQuest3", Stage = 1, Name = "High Disciple", Mob = "High Disciple", Count = 8, NPC = Vector3.new(9637.719727, -1992.420532, 9614.042969), MobPos = Vector3.new(9830.585938, -1941.134888, 9698.757812), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
 	{ Min = 2700, Max = 2800, Quest = "SubmergedQuest3", Stage = 2, Name = "Grand Devotee", Mob = "Grand Devotee", Count = 8, NPC = Vector3.new(9637.719727, -1992.420532, 9614.042969), MobPos = Vector3.new(9655.575195, -1937.794800, 10078.261719), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
 }
+
 selectedBossName = BOSSES[1] and BOSSES[1].Name or nil
 
 --==================================================
@@ -411,6 +418,8 @@ end
 -- Centralized function for handling teleportation to/from Submerged NPC
 local lastSubmergedTeleportAt = 0
 local function HandleSubmerged(targetPos)
+    if game.PlaceId ~= 7449423635 then return false end -- HANYA SEA 3
+
     local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
 
@@ -511,15 +520,7 @@ local function TweenTo(targetCFrame)
 
     local distance = (hrp.Position - targetPos).Magnitude
 
-    if distance <= 280 then
-        if activeTween then activeTween:Cancel(); activeTween = nil end
-        hrp.CFrame = targetCFrame
-        lastTargetPos = targetPos
-        return
-    end
-
-    -- Anti-Stutter & Spam Prevention for Tween (Long distance)
-    if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 30 then
+    if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 2 then
         if activeTween then
             return
         end
@@ -537,6 +538,7 @@ local function TweenTo(targetCFrame)
     end)
 
     if activeTween then activeTween:Cancel() end
+
     activeTween = TweenService:Create(
         hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = targetCFrame}
     )
@@ -557,7 +559,6 @@ local function SafeTouch(targetPart, hrp, overrideDistance)
             return true
         end
     else
-        -- Fallback: Fisik menyentuh
         if dist > 8 then
             TweenTo(CFrame.new(targetPart.Position))
         else
@@ -570,10 +571,26 @@ local function SafeTouch(targetPart, hrp, overrideDistance)
     return false
 end
 
-local function SafeProximity(promptPart)
-    local prompt = promptPart:FindFirstChildOfClass("ProximityPrompt")
+local function SafeProximity(prompt)
+    local proximityPrompt = nil
+    if prompt:IsA("ProximityPrompt") then
+        proximityPrompt = prompt
+    elseif prompt:IsA("BasePart") or prompt:IsA("Model") then
+        local child = prompt:FindFirstChildOfClass("ProximityPrompt")
+        if child then proximityPrompt = child
+        else
+            local children = prompt:GetChildren()
+            for _, v in ipairs(children) do
+                if v:IsA("ProximityPrompt") then
+                    proximityPrompt = v
+                    break
+                end
+            end
+        end
+    end
+
     if hasProximity then
-        if prompt then fireproximityprompt(prompt, prompt.HoldDuration) end
+        if proximityPrompt then fireproximityprompt(proximityPrompt) end
     else
         local key = prompt.KeyboardKeyCode ~= Enum.KeyCode.Unknown and prompt.KeyboardKeyCode or Enum.KeyCode.E
         VirtualInputManager:SendKeyEvent(true, key, false, game)
@@ -936,9 +953,9 @@ local function ServerHop()
 
     if #servers > 0 then
         local randomServer = servers[math.random(1, #servers)]
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, LocalPlayer)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
     else
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        TeleportService:Teleport(game.PlaceId, player)
     end
 end
 
@@ -1205,10 +1222,47 @@ local function GetSafePosition(obj)
         return obj.Position
     end
     -- Fallback for extremely weird objects
-    pcall(function()
-        if obj.Position then return obj.Position end
+    local success, pos = pcall(function()
+        if obj.Position then
+            return obj.Position
+        end
+        return Vector3.zero
     end)
+    if success and pos and pos ~= Vector3.zero then return pos end
     return Vector3.zero
+end
+
+
+-- ==========================================
+-- [ GLOBAL STOP & CLEANUP ]
+-- ==========================================
+local function StopAllActivities()
+    if activeTween then
+        activeTween:Cancel()
+        activeTween = nil
+    end
+
+    local c = GetCharacter()
+    if c then
+        local hrp = c:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local bv = hrp:FindFirstChild("AutofarmBv")
+            if bv then bv:Destroy() end
+            local bg = hrp:FindFirstChild("AutofarmBg")
+            if bg then bg:Destroy() end
+
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
+        local hum = c:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.PlatformStand = false
+        end
+    end
+
+    isReadyToAttack = false
+    currentTargetInstance = nil
+    lastTargetPos = nil
 end
 
 local function GetHitPart(model)
@@ -1267,6 +1321,52 @@ local function IsEnemyVulnerable(targetChar, targetMobName)
 	local hum = targetChar:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return false end
 	return (targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Head")) ~= nil
+end
+
+local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if not enemiesFolder or not gatherPos then return end
+
+    local gatherCFrame = CFrame.new(gatherPos.X, gatherPos.Y, gatherPos.Z)
+    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+        if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
+            if enemy.Name ~= "PropHitboxPlaceholder" then
+                local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+                local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                if eHrp and eHum and eHum.Health > 0 then
+                    local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
+                    if distToPlayer <= (cfg.BringRadius * 2) then
+                        eHrp.CFrame = gatherCFrame
+                        if eHrp.CanCollide then eHrp.CanCollide = false end
+                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function UniversalEvasionTween(myHrp, targetPos, now)
+    ToggleFloat(true)
+    local targetDistance = (targetPos - myHrp.Position).Magnitude
+    UniversalEvasionTween(myHrp, targetPos, now)
+end
+
+local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
+    isReadyToAttack = false
+    currentTargetInstance = nil
+    ToggleFloat(true)
+    local distToNpc = (myHrp.Position - npcPos).Magnitude
+    if distToNpc > 15 then
+        TweenTo(CFrame.new(npcPos))
+        return false -- Still traveling
+    end
+    if activeTween then activeTween:Cancel(); activeTween = nil end
+    local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+    if CommF_ then
+        pcall(function() CommF_:InvokeServer("StartQuest", profileQuest, profileStage or 1) end)
+    end
+    return true -- Quest claimed, waiting for UI sync
 end
 
 local function GetTargetEnemy(mobName)
@@ -1328,6 +1428,14 @@ local function GetSpawnedBoss(targetBossName)
 	return nil, bossProfile
 end
 
+local function IsToolMatching(tool, wantedCategory)
+	if not tool or not tool:IsA("Tool") or tool.Name == "Tool" then return false end
+	local expectedToolTip = wantedCategory
+	if wantedCategory == "Fruit" or wantedCategory == "Blox Fruit" or wantedCategory == "Demon Fruit" then expectedToolTip = "Blox Fruit" end
+	if tool.ToolTip == expectedToolTip then return true end
+	return wantedCategory == "Melee" and meleeNames[tool.Name] == true
+end
+
 local function getDripMamaStatus()
     local res = CommF_:InvokeServer("CakePrinceSpawner", true)
     if type(res) == "string" then
@@ -1342,15 +1450,9 @@ local function getDripMamaStatus()
             return "unknown"
         end
     end
+    return "unknown"
 end
 
-local function IsToolMatching(tool, wantedCategory)
-	if not tool or not tool:IsA("Tool") or tool.Name == "Tool" then return false end
-	local expectedToolTip = wantedCategory
-	if wantedCategory == "Fruit" or wantedCategory == "Blox Fruit" or wantedCategory == "Demon Fruit" then expectedToolTip = "Blox Fruit" end
-	if tool.ToolTip == expectedToolTip then return true end
-	return wantedCategory == "Melee" and meleeNames[tool.Name] == true
-end
 
 local function EquipWeapon(overrideCategory)
 	local c = GetCharacter()
@@ -1433,15 +1535,26 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
         weapon = cachedWeapon
         if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
             weapon = EquipWeapon(targetCategory)
+            if not weapon then 
+                -- Fallback force equip via character
+                local bag = player:FindFirstChildOfClass("Backpack")
+                if bag then
+                    for _, t in ipairs(bag:GetChildren()) do
+                        if IsToolMatching(t, targetCategory) then
+                            GetHumanoid():EquipTool(t)
+                            weapon = t
+                            break
+                        end
+                    end
+                end
+            end
         end
     end
 
     if weapon then
-        -- Anti-Cheat Bypass: Server menolak serangan jika karakter memiliki part yang ter-Anchor.
-        for _, v in ipairs(myChar:GetDescendants()) do
-            if v:IsA("BasePart") and v.Anchored then
-                v.Anchored = false
-            end
+        -- Anti-Cheat Bypass: Server menolak serangan jika HRP ter-Anchor. (Jangan loop semua part!)
+        if myHrp.Anchored then
+            myHrp.Anchored = false
         end
 
         local isPhysical = IsToolMatching(weapon, "Melee") or IsToolMatching(weapon, "Sword")
@@ -1451,11 +1564,13 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
             if enemiesFolder then
                 local hitTargets = {}
                 for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                    if IsEnemyVulnerable(enemy, targetMobName) then
+                    -- Kill Aura: Attack EVERYTHING vulnerable in HitRadius, ignore specific target name
+                    if IsEnemyVulnerable(enemy, nil) then
                         local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                         if eHrp then
                             local dist = (GetSafePosition(eHrp) - GetSafePosition(myHrp)).Magnitude
                             local isTarget = (currentTargetInstance and enemy == currentTargetInstance)
+                            -- Extra tolerance for our primary target in case they get knocked back
                             local allowedDist = isTarget and (cfg.HitRadius + 40) or cfg.HitRadius
 
                             if dist <= allowedDist then
@@ -1500,22 +1615,13 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
                             end)
                         end
                     end)
-                    if cfg.AutoMastery then
-                        for i = 1, #skillKeys do
-                            TriggerSkills(skillKeys[i])
-                        end
-                    end
-                end
-            end
-        else
-            if cfg.AutoMastery then
-                for i = 1, #skillKeys do
-                    TriggerSkills(skillKeys[i])
                 end
             end
         end
     end
-end
+
+    -- FAST GUN M1 Logic (Universal Injection)
+    end
 
 local function AttackThread(generation)
     task.spawn(function()
@@ -1523,14 +1629,51 @@ local function AttackThread(generation)
             if enabled then
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
+                local myChar = GetCharacter()
+                local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
                 if now - lastAttackAt >= interval then
-                    local myChar = GetCharacter()
-                    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
                     if myHrp then
                         local tName = currentTargetInstance and currentTargetInstance.Name or nil
                         ExecuteAttack(myChar, myHrp, false, tName)
                         lastAttackAt = now
+                    end
+                end
+
+                if getgenv().isFastGun and currentTargetInstance then
+                    local myChar = GetCharacter()
+                    if myChar then
+                        local weapon = myChar:FindFirstChildOfClass("Tool")
+                        if weapon and (weapon.ToolTip == "Gun") then
+                            local remote = weapon:FindFirstChild("RemoteEvent") or weapon:FindFirstChild("RemoteFunction") or weapon:FindFirstChild("ShootEvent")
+                            if remote then
+                                local targetHrp = currentTargetInstance:FindFirstChild("HumanoidRootPart") or currentTargetInstance:FindFirstChildWhichIsA("BasePart", true)
+                                if targetHrp then
+                                    if not getgenv().lastGunShot then getgenv().lastGunShot = 0 end
+                                    local gunInterval = (attackSpeedMode == "Super Fast Attack") and 0.05 or 0.1
+
+                                    if os.clock() - getgenv().lastGunShot >= gunInterval then
+                                        getgenv().lastGunShot = os.clock()
+                                        local tPos = GetSafePosition(targetHrp)
+
+                                        -- Mengatur orientasi wajah karakter menuju musuh (penting untuk verifikasi Server arah Gun)
+                                        if myHrp then
+                                            myHrp.CFrame = CFrame.lookAt(myHrp.Position, Vector3.new(tPos.X, myHrp.Position.Y, tPos.Z))
+                                        end
+
+                                        if remote:IsA("RemoteEvent") then
+                                            pcall(function() remote:FireServer(tPos) end)
+                                            pcall(function() remote:FireServer("TAP", tPos) end)
+                                        elseif remote:IsA("RemoteFunction") then
+                                            task.spawn(function()
+                                                pcall(function() remote:InvokeServer(tPos) end)
+                                                pcall(function() remote:InvokeServer("TAP", tPos) end)
+                                            end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -1584,25 +1727,163 @@ local function GetBestHauntedMob()
     return nil
 end
 
-local function GetBestCocoaMob()
-    local cocoaMobs = {
-        { Name = "Cocoa Warriors", Mob = "Cocoa Warrior" },
-        { Name = "Chocolate Bar Battlers", Mob = "Chocolate Bar Battler" }
-    }
+local isAutoMaterial = false
+local selectedMaterialTarget = "None"
 
-    for _, info in ipairs(cocoaMobs) do
-        local profile = GetMobProfileByName(info.Mob)
-        if profile then info.MobPos = profile.MobPos end
+local function TeleportToSea(seaNumber)
+    local canTravel = true
+    local failReason = ""
+    
+    -- Validasi Level dan Kunci Puzzle
+    local myLevel = GetPlayerLevel()
+    
+    if seaNumber == 2 then
+        if myLevel < 700 then
+            canTravel = false
+            failReason = "Level < 700"
+        end
+    elseif seaNumber == 3 then
+        if myLevel < 1500 then
+            canTravel = false
+            failReason = "Level < 1500"
+        else
+            pcall(function()
+                local CommF_ = game:GetService("ReplicatedStorage").Remotes.CommF_
+                local unlocks = CommF_:InvokeServer("GetUnlockables")
+                if unlocks then
+                    if type(unlocks) == "table" and not unlocks["DefeatedIndraTrueForm"] then
+                        canTravel = false
+                        failReason = "Rip_Indra puzzle not finished"
+                    end
+                end
+            end)
+        end
+    end
+
+    if not canTravel then
+        if getgenv().LonumObject then
+            getgenv().LonumObject:Notify({
+                Title = "Travel Failed",
+                Content = "Cannot travel to Sea " .. tostring(seaNumber) .. " (" .. failReason .. ")",
+                Duration = 5
+            })
+        end
+        isAutoMaterial = false -- Matikan loop farm
+        return false
+    end
+
+    if getgenv().LonumObject then
+        getgenv().LonumObject:Notify({
+            Title = "Auto Travel",
+            Content = "Teleporting to Sea " .. tostring(seaNumber) .. " for material farming...",
+            Duration = 5
+        })
+    end
+    task.spawn(function()
+        if seaNumber == 1 then
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("TravelMain")
+        elseif seaNumber == 2 then
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("TravelDressrosa")
+        elseif seaNumber == 3 then
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("TravelZou")
+        end
+    end)
+    task.wait(5)
+    return true
+end
+
+local function GetBestMaterialMob()
+    local mobTargets = {}
+    local requiredSea = 0
+    
+    local currentSea = 1
+    if game.PlaceId == 4442272183 or game.PlaceId == 79091703265657 then
+        currentSea = 2
+    elseif game.PlaceId == 7449423635 then
+        currentSea = 3
+    end
+    
+    if selectedMaterialTarget == "Conjured Cocoa" then
+        requiredSea = 3
+        if currentSea == 3 then
+            mobTargets = {
+                { Name = "Cocoa Warriors", Mob = "Cocoa Warrior", MobPos = Vector3.new(31.5, 24.8, -12246.7) },
+                { Name = "Chocolate Bar Battlers", Mob = "Chocolate Bar Battler", MobPos = Vector3.new(683.4, 24.8, -12576.2) }
+            }
+        end
+    elseif selectedMaterialTarget == "Dragon Scale" then
+        requiredSea = 3
+        if currentSea == 3 then
+            mobTargets = {
+                { Name = "Dragon Crew Warriors", Mob = "Dragon Crew Warrior", MobPos = Vector3.new(6834.7, 192.7, -829.1) },
+                { Name = "Dragon Crew Archers", Mob = "Dragon Crew Archer", MobPos = Vector3.new(6713.1, 716.1, 631.1) }
+            }
+        end
+    elseif selectedMaterialTarget == "Mystic Droplet" then
+        requiredSea = 2
+        if currentSea == 2 then
+            mobTargets = {
+                { Name = "Sea Soldiers", Mob = "Sea Soldier", MobPos = Vector3.new(-3028, 65, -9775) },
+                { Name = "Water Fighters", Mob = "Water Fighter", MobPos = Vector3.new(-3262, 298, -10553) }
+            }
+        end
+    elseif selectedMaterialTarget == "Fish Tail" then
+        -- Recommendation: Sea 1 > Sea 3 (Lower HP)
+        if currentSea == 1 then
+            requiredSea = 1
+            mobTargets = {
+                { Name = "Fishman Warriors", Mob = "Fishman Warrior", MobPos = Vector3.new(60878, 19, 1543) },
+                { Name = "Fishman Commandos", Mob = "Fishman Commando", MobPos = Vector3.new(61891, 19, 1470) },
+                { Name = "Fishman Lord", Mob = "Fishman Lord", MobPos = Vector3.new(6112, 19, 1567) }
+            }
+        elseif currentSea == 3 then
+            requiredSea = 3
+            mobTargets = {
+                { Name = "Fishman Raiders", Mob = "Fishman Raider", MobPos = Vector3.new(-10407, 332, -8368) },
+                { Name = "Fishman Captains", Mob = "Fishman Captain", MobPos = Vector3.new(-10993, 352, -9003) }
+            }
+        else
+            requiredSea = 1 -- If in Sea 2, prioritize Sea 1
+        end
+    elseif selectedMaterialTarget == "Magma Orb" then
+        -- Recommendation: Sea 1 > Sea 2 (Lower HP)
+        if currentSea == 1 then
+            requiredSea = 1
+            mobTargets = {
+                { Name = "Military Soldiers", Mob = "Military Soldier", MobPos = Vector3.new(-5411, 11, 8454) },
+                { Name = "Military Spies", Mob = "Military Spy", MobPos = Vector3.new(-5802, 86, 8829) },
+                { Name = "Magma Admiral", Mob = "Magma Admiral", MobPos = Vector3.new(-5701, 17, 8722) }
+            }
+        elseif currentSea == 2 then
+            requiredSea = 2
+            mobTargets = {
+                { Name = "Magma Ninjas", Mob = "Magma Ninja", MobPos = Vector3.new(-5461, 130, -5836) },
+                { Name = "Lava Pirates", Mob = "Lava Pirate", MobPos = Vector3.new(-5251, 55, -4774) }
+            }
+        else
+            requiredSea = 1 -- If in Sea 3, prioritize Sea 1
+        end
+    else
+        return nil
+    end
+
+    -- Travel Execution if not in the correct sea
+    if requiredSea ~= 0 and currentSea ~= requiredSea then
+        -- We return a dummy target table to prevent the main loop from breaking while waiting to teleport
+        if not TeleportToSea(requiredSea) then
+            return nil
+        end
+        return { Mob = "Teleporting_Dummy", MobPos = Vector3.zero }
     end
 
     local enemies = workspace:FindFirstChild("Enemies")
-    if not enemies then return cocoaMobs[math.random(1, #cocoaMobs)] end
+    if not enemies then return mobTargets[math.random(1, #mobTargets)] end
 
     local availableMobTypes = {}
     local seenMobTypes = {}
 
     for _, enemy in ipairs(enemies:GetChildren()) do
-        for _, mobInfo in ipairs(cocoaMobs) do
+        for _, mobInfo in ipairs(mobTargets) do
             if enemy.Name == mobInfo.Mob and IsEnemyVulnerable(enemy, mobInfo.Mob) then
                 if not seenMobTypes[mobInfo.Mob] then
                     seenMobTypes[mobInfo.Mob] = true
@@ -1617,7 +1898,7 @@ local function GetBestCocoaMob()
         return availableMobTypes[randomIndex]
     end
 
-    return nil
+    return mobTargets[math.random(1, #mobTargets)]
 end
 
 local function GetBestCakeMob()
@@ -1694,7 +1975,7 @@ local function StartAutoBone()
                 if enemiesFolder then
                     local targetMobInfo = activeHauntedMobInfo or GetBestHauntedMob()
                     local targetMobName = targetMobInfo.Mob
-                    local magnetPos = targetMobInfo.MobPos or tHrp.Position or tHrp.Position
+                    local magnetPos = targetMobInfo.MobPos or tHrp.Position
 
 					if magnetPos then
                         -- Use absolute spawn/mob position, don't link to myHrp.CFrame (evasion) to avoid rubber-banding.
@@ -1707,11 +1988,9 @@ local function StartAutoBone()
                                     local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                                     local eHum = enemy:FindFirstChildOfClass("Humanoid")
                                     if eHrp and eHum and eHum.Health > 0 then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
+                                        local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
                                         if dist <= cfg.BringRadius then
                                             eHrp.CFrame = gatherCFrame
-                                            eHrp.AssemblyLinearVelocity = Vector3.zero
-                                            eHrp.AssemblyAngularVelocity = Vector3.zero
                                             if eHrp.CanCollide then eHrp.CanCollide = false end
                                             if eHum.PlatformStand == false then eHum.PlatformStand = true end
                                         end
@@ -1737,6 +2016,7 @@ local function StartAutoBone()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 if not activeHauntedMobInfo then
@@ -1798,18 +2078,13 @@ local function StartAutoBone()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Attack can start when character is close enough to MobPos center OR actual enemy
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        -- Set ReadyToAttack EARLY so Magnet can pull them!
+                        isReadyToAttack = targetDistance <= cfg.BringRadius
                     end
                 else
                     currentTargetInstance = nil
@@ -1818,10 +2093,7 @@ local function StartAutoBone()
                     if distToSpawn > 80 then
                         TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
                     else
-                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                            lastEvasionMoveAt = now
-                            TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
-                        end
+                        TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
                     end
                 end
             end)
@@ -1830,20 +2102,19 @@ local function StartAutoBone()
     end)
 end
 
-local function StartAutoCocoa()
+local function StartAutoMaterialFarm()
     local generation = workerGeneration
     ToggleFloat(true)
 
-    local defaultCocoaFallback = { Name = "Cocoa Warriors", Mob = "Cocoa Warrior", MobPos = Vector3.new(-21, 80, -12352) }
-    local activeCocoaMobInfo = GetBestCocoaMob() or defaultCocoaFallback
+    local activeMaterialMobInfo = GetBestMaterialMob()
 
     task.spawn(function()
-        while isAutoCocoa and ScriptContext.Running and generation == workerGeneration do
+        while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
             local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
             local myChar = GetCharacter()
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if myHrp then
-                local tName = currentTargetInstance and currentTargetInstance.Name or activeCocoaMobInfo.Mob
+                local tName = currentTargetInstance and currentTargetInstance.Name or (activeMaterialMobInfo and activeMaterialMobInfo.Mob or nil)
                 ExecuteAttack(myChar, myHrp, false, tName)
             end
 
@@ -1851,10 +2122,10 @@ local function StartAutoCocoa()
         end
     end)
 
-    local cocoaBringConn
-    cocoaBringConn = RunService.Heartbeat:Connect(function()
-        if not isAutoCocoa or not ScriptContext.Running or generation ~= workerGeneration then
-            if cocoaBringConn then cocoaBringConn:Disconnect() end
+    local materialBringConn
+    materialBringConn = RunService.Heartbeat:Connect(function()
+        if not isAutoMaterial or not ScriptContext.Running or generation ~= workerGeneration then
+            if materialBringConn then materialBringConn:Disconnect() end
             return
         end
         if isReadyToAttack then
@@ -1864,56 +2135,45 @@ local function StartAutoCocoa()
             if myHrp and tHrp then
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
                 if enemiesFolder then
-                    local targetMobInfo = activeCocoaMobInfo or GetBestCocoaMob()
+                    local targetMobInfo = activeMaterialMobInfo or GetBestMaterialMob()
+                    if not targetMobInfo then return end
                     local targetMobName = targetMobInfo.Mob
                     local magnetPos = targetMobInfo.MobPos or tHrp.Position
 
 					if magnetPos then
-					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
-
-                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                            if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
-                                if enemy.Name ~= "PropHitboxPlaceholder" then
-                                    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-                                    local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                                    if eHrp and eHum and eHum.Health > 0 then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
-                                        if dist <= cfg.BringRadius then
-                                            eHrp.CFrame = gatherCFrame
-                                            eHrp.AssemblyLinearVelocity = Vector3.zero
-                                            eHrp.AssemblyAngularVelocity = Vector3.zero
-                                            if eHrp.CanCollide then eHrp.CanCollide = false end
-                                            if eHum.PlatformStand == false then eHum.PlatformStand = true end
-                                        end
-                                    end
-                                end
-                            end
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
                         end
-                    end
                 end
             end
         end
     end)
-    ScriptContext:AddConnection(cocoaBringConn)
+    ScriptContext:AddConnection(materialBringConn)
 
     task.spawn(function()
-        while isAutoCocoa and ScriptContext.Running and generation == workerGeneration do
+        while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
             local ok, err = pcall(function()
                 local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
                 if not myHrp then return end
+
+                if not activeMaterialMobInfo or selectedMaterialTarget == "None" then
+                    activeMaterialMobInfo = GetBestMaterialMob()
+                    if not activeMaterialMobInfo then
+                        ToggleFloat(false)
+                        isReadyToAttack = false
+                        currentTargetInstance = nil
+                        return
+                    end
+                end
 
                 local now = os.clock()
                 if now - lastEvasionTime >= cfg.EvasionTick then
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
-                if not activeCocoaMobInfo then
-                    activeCocoaMobInfo = GetBestCocoaMob() or defaultCocoaFallback
-                end
-
-                local targetMobInfo = activeCocoaMobInfo
+                local targetMobInfo = activeMaterialMobInfo
                 local targetMobName = targetMobInfo.Mob
                 local targetEnemy = currentTargetInstance
 
@@ -1940,12 +2200,12 @@ local function StartAutoCocoa()
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
                     targetEnemy = GetTargetEnemy(targetMobName)
-                    -- If still nil, this mob species is WIPED OUT! Try switching to another active species.
+                    -- If Wiped out, cycle to another mob type for this material
                     if not targetEnemy then
-                        local checkNewMob = GetBestCocoaMob()
+                        local checkNewMob = GetBestMaterialMob()
                         if checkNewMob then
-                            activeCocoaMobInfo = checkNewMob
-                            targetMobInfo = activeCocoaMobInfo
+                            activeMaterialMobInfo = checkNewMob
+                            targetMobInfo = activeMaterialMobInfo
                             targetMobName = targetMobInfo.Mob
                             targetEnemy = GetTargetEnemy(targetMobName)
                         end
@@ -1963,37 +2223,20 @@ local function StartAutoCocoa()
                     local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
                     if tHrp then
                         local mobProfile = GetMobProfileByName(targetEnemy.Name)
-                        local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+                        local centerPos = mobProfile and mobProfile.MobPos or GetSafePosition(tHrp)
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
-                        if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
-                        else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
-                        end
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        UniversalEvasionTween(myHrp, centerPos, now)
                     end
                 else
                     currentTargetInstance = nil
                     isReadyToAttack = false
                     local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
-                    if distToSpawn > 80 then
-                        TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
-                    else
-                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                            lastEvasionMoveAt = now
-                            TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
-                        end
-                    end
+                    UniversalEvasionTween(myHrp, targetMobInfo.MobPos, now)
                 end
             end)
-            task.wait()
+            if not ok then warn("[Lonum Material Error]: " .. tostring(err)); currentTargetInstance = nil; isReadyToAttack = false end
+            task.wait(0.05)
         end
     end)
 end
@@ -2016,8 +2259,17 @@ local function StartAutoCakePrince()
 
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
+                -- Special override for boss
                 local mapFolder = workspace:FindFirstChild("Map")
-                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
+                if not cakeDimension and mapFolder then
+                    for _, child in ipairs(mapFolder:GetChildren()) do
+                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
+                            cakeDimension = child
+                            break
+                        end
+                    end
+                end
 
                 if cakeDimension then tName = "Cake Prince" end
                 ExecuteAttack(myChar, myHrp, false, tName)
@@ -2044,26 +2296,8 @@ local function StartAutoCakePrince()
 
                 local magnetPos = activeCakeMobInfo.MobPos or tHrp.Position
                 if magnetPos then
-                    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
-                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                        if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
-                            if enemy.Name ~= "PropHitboxPlaceholder" then
-                                local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-                                local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                                if eHrp and eHum and eHum.Health > 0 then
-                                    local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
-                                    if dist <= cfg.BringRadius then
-                                        eHrp.CFrame = gatherCFrame
-                                        eHrp.AssemblyLinearVelocity = Vector3.zero
-                                        eHrp.AssemblyAngularVelocity = Vector3.zero
-                                        if eHrp.CanCollide then eHrp.CanCollide = false end
-                                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
-                                    end
-                                end
-                            end
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
                         end
-                    end
-                end
             end
         end
     end)
@@ -2080,6 +2314,7 @@ local function StartAutoCakePrince()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 local status = getDripMamaStatus()
@@ -2158,15 +2393,10 @@ local function StartAutoCakePrince()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
                         isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
                     end
@@ -2184,10 +2414,7 @@ local function StartAutoCakePrince()
                                 TweenTo(CFrame.new(dimPos + Vector3.new(0, cfg.TweenHeight, 0), dimPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
-                            end
+                            TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
                         end
                     else
                         local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
@@ -2197,10 +2424,7 @@ local function StartAutoCakePrince()
                                 TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
                             end
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
-                            end
+                            TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
                         end
                     end
                 end
@@ -2227,7 +2451,13 @@ local function StartAutoFarm()
 				local profile = GetQuestProfile()
 				if not profile then return end
 
-				-- Boss Hunter Check
+				local now = os.clock()
+				if now - lastEvasionTime >= cfg.EvasionTick then
+					lastEvasionTime = now
+					local radius = math.max(0, math.floor(cfg.EvasionRadius))
+					currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+				end
+
 				if isBossHunterEnabled and selectedBossName then
 					local spawnedBoss, bossProfile = GetSpawnedBoss(selectedBossName)
 					if not bossProfile then return end
@@ -2239,37 +2469,17 @@ local function StartAutoFarm()
 						if not hasBossQuest then
 							isReadyToAttack = false
 							currentTargetInstance = nil
-							if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
-								local now = os.clock()
-								if now - lastEvasionMoveAt >= cfg.EvasionTick then
-									lastEvasionMoveAt = now
-									TweenTo(CFrame.new(bossProfile.NPC))
+								if ClaimQuestHandler(myHrp, bossProfile.Quest, bossProfile.Stage, bossProfile.NPC) then
+								    task.wait(0.5)
 								end
-							else
-								if activeTween then activeTween:Cancel(); activeTween = nil end
-								if CommF_ then
-									if HasActiveQuest() then CommF_:InvokeServer("AbandonQuest") end
-									CommF_:InvokeServer("StartQuest", bossProfile.Quest, bossProfile.Stage or 1)
-									task.wait(0.5)
-								end
-							end
 						else
 							local bHrp = spawnedBoss:FindFirstChild("HumanoidRootPart")
 							if bHrp then
 								local targetDistance = (bHrp.Position - myHrp.Position).Magnitude
-								local now = os.clock()
-
-								if now - lastEvasionTime >= cfg.EvasionTick then
-									lastEvasionTime = now
-									local radius = math.max(0, math.floor(cfg.EvasionRadius))
-									currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-								end
-
-									if targetDistance > 80 then
-										if now - lastEvasionMoveAt >= cfg.EvasionTick then
-											lastEvasionMoveAt = now
-											TweenTo(CFrame.new(bHrp.Position + currentEvasionOffset, bHrp.Position))
-										end
+								
+								if targetDistance > 80 then
+									TweenTo(CFrame.new(bHrp.Position + Vector3.new(0, cfg.TweenHeight, 0), bHrp.Position))
+									lastEvasionMoveAt = now
 								else
 									if now - lastEvasionMoveAt >= cfg.EvasionTick then
 										lastEvasionMoveAt = now
@@ -2277,16 +2487,13 @@ local function StartAutoFarm()
 									end
 								end
 
-								isReadyToAttack = targetDistance <= cfg.HitRadius
+								isReadyToAttack = targetDistance <= cfg.BringRadius
 								currentTargetInstance = spawnedBoss
 							end
 						end
-							if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
-								if now - lastEvasionMoveAt >= cfg.EvasionTick then
-									lastEvasionMoveAt = now
-									TweenTo(CFrame.new(bossProfile.NPC))
-								end
+					else
 						currentTargetInstance = nil
+						isReadyToAttack = false
 						if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
 							TweenTo(CFrame.new(bossProfile.NPC))
 						else
@@ -2296,9 +2503,7 @@ local function StartAutoFarm()
 					return
 				end
 
-				-- Normal Auto Farm Flow
 				local questStatus = GetQuestStatus(profile.Mob)
-				local hasQuestUI = questStatus.Active
 				local isCorrectQuestOnUI = questStatus.Correct
 				local isFinished = IsQuestFinished(profile)
 
@@ -2339,122 +2544,96 @@ local function StartAutoFarm()
 					pcall(function() CommF_:InvokeServer("StartQuest", profile.Quest, profile.Stage) end)
 					lastStartedQuestKey = GetQuestProfileKey(profile)
 					lastStartedQuestAt = os.clock()
+					task.wait(0.5)
 					return
 				end
 
-					local now = os.clock()
-					if now - lastEvasionTime >= cfg.EvasionTick then
-						lastEvasionTime = now
-						local radius = math.max(0, math.floor(cfg.EvasionRadius))
-						currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+				local targetEnemy = currentTargetInstance
+				if not targetEnemy or not IsEnemyVulnerable(targetEnemy, profile.Mob) then
+					targetEnemy = GetTargetEnemy(profile.Mob)
+					currentTargetInstance = targetEnemy
+					lastTargetRefreshAt = now
+					if targetEnemy then
+						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+						lastTargetHealth = h and h.Health or -1
+						lastTargetHealthChangeAt = now
 					end
+				end
 
-					local targetEnemy = currentTargetInstance
-					if not targetEnemy or not IsEnemyVulnerable(targetEnemy, profile.Mob) then
-						targetEnemy = GetTargetEnemy(profile.Mob)
-						currentTargetInstance = targetEnemy
-						lastTargetRefreshAt = now
-						if targetEnemy then
-						    local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-                            lastTargetHealth = h and h.Health or -1
-                            lastTargetHealthChangeAt = now
+				if targetEnemy then
+					local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+					if h then
+						if h.Health ~= lastTargetHealth then
+							lastTargetHealth = h.Health
+							lastTargetHealthChangeAt = now
+						end
+						
+						if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
+							if not IsBossEntity(targetEnemy) then
+								enemyBlacklist[targetEnemy] = now + 3
+								currentTargetInstance = nil
+								isReadyToAttack = false
+								return
+							else
+								lastTargetHealthChangeAt = now
+							end
 						end
 					end
+					local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
+					if tHrp then
+						ToggleFloat(true)
+						local centerPos = GetSafePosition(tHrp)
+						local targetDistance = (centerPos - myHrp.Position).Magnitude
+						
+						UniversalEvasionTween(myHrp, centerPos, now)
+					end
+				else
+					currentTargetInstance = nil
+					isReadyToAttack = false
+					ToggleFloat(true)
+					local distToSpawn = (myHrp.Position - profile.MobPos).Magnitude
+					UniversalEvasionTween(myHrp, profile.MobPos, now)
+				end
+			end)
 
-					if targetEnemy then
-                            local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-                            if h then
-                                if h.Health ~= lastTargetHealth then
-                                    lastTargetHealth = h.Health
-                                    lastTargetHealthChangeAt = now
-                                end
-                                
-                                if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
-                                    if not IsBossEntity(targetEnemy) then
-                                        enemyBlacklist[targetEnemy] = now + 3
-                                        currentTargetInstance = nil
-                                        isReadyToAttack = false
-                                        return
-                                    else
-                                        lastTargetHealthChangeAt = now
-                                    end
-                                end
-                            end
-                            local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
-                            if tHrp then
-                                ToggleFloat(true)
-                                -- Actively chase enemy. StuckTimeout will handle if enemy is bugged/out of bounds.
-                                local centerPos = GetSafePosition(tHrp)
-                                local targetDistance = (centerPos - myHrp.Position).Magnitude
-                                if targetDistance > 80 then
-                                    TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                                else
-                                    if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                        lastEvasionMoveAt = now
-                                        TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                                    end
-                                end
-                                isReadyToAttack = targetDistance <= cfg.HitRadius
-                            end
-                        else
-                            currentTargetInstance = nil
-                            isReadyToAttack = false
-                            ToggleFloat(true)
-                            local distToSpawn = (myHrp.Position - profile.MobPos).Magnitude
-                            if distToSpawn > 80 then
-                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                    lastEvasionMoveAt = now
-                                    TweenTo(CFrame.new(profile.MobPos + Vector3.new(0, cfg.TweenHeight, 0), profile.MobPos))
-                                end
-                            else
-                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                    lastEvasionMoveAt = now
-                                    TweenTo(CFrame.new(profile.MobPos + currentEvasionOffset, profile.MobPos))
-                                end
-                            end
-                        end
-                    end
-                end)
-
-                if not ok then warn("[Lonum Error]: " .. tostring(err))
-                    currentTargetInstance = nil
-                    isReadyToAttack = false
-                end
+			if not ok then warn("[Lonum Error]: " .. tostring(err))
+				currentTargetInstance = nil
+				isReadyToAttack = false
+			end
 			task.wait()
 		end
 	end)
 end
 
 local function StopAutoFarm()
-	enabled = false
-	isReadyToAttack = false
-	ToggleFloat(false)
-	lastTargetPos = nil
-	currentTargetInstance = nil
-	cachedWeapon = nil
-	cachedWeaponCategory = nil
-	cachedEnemiesFolder = nil
-	lastAttackAt = 0
-	lastTargetRefreshAt = 0
-	lastEvasionMoveAt = 0
-	lastStartedQuestKey = nil
-	lastStartedQuestAt = 0
-	lastTargetHealth = -1
-	lastTargetHealthChangeAt = 0
-
-	if activeTween then activeTween:Cancel(); activeTween = nil end
+    enabled = false
+    isReadyToAttack = false
+    StopAllActivities()
+    cachedWeapon = nil
+    cachedWeaponCategory = nil
+    cachedEnemiesFolder = nil
+    lastAttackAt = 0
+    lastTargetRefreshAt = 0
+    lastEvasionMoveAt = 0
+    lastStartedQuestKey = nil
+    lastStartedQuestAt = 0
+    lastTargetHealth = -1
+    lastTargetHealthChangeAt = 0
 end
 
 ScriptContext:AddConnection(RunService.Stepped:Connect(function()
     if ScriptContext.Running then
         local c = player.Character
         if c then
-			local hrp = c:FindFirstChild("HumanoidRootPart")
-            -- Ensure tween is actively playing, not just a leftover finished variable
+            local hrp = c:FindFirstChild("HumanoidRootPart")
             local hasFloat = hrp and hrp:FindFirstChild("AutofarmBv") ~= nil
-            if activeTween or hasFloat or isTweeningToPlayer or isAutoTorch or enabled or isAutoRaidKill or isAutoBone or isAutoCocoa or isAutoDungeon or farmNearestEnabled or autoKillVolcano then
-                for _, v in ipairs(c:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+            if activeTween or hasFloat or isTweeningToPlayer or isAutoTorch or enabled or isAutoRaidKill or isAutoBone or isAutoMaterial or isAutoDungeon or farmNearestEnabled or autoKillVolcano or isAutoCakePrince then
+                local parts = {"HumanoidRootPart", "Head", "UpperTorso", "LowerTorso", "Torso"}
+                for _, partName in ipairs(parts) do
+                    local p = c:FindFirstChild(partName)
+                    if p and p:IsA("BasePart") and p.CanCollide then
+                        p.CanCollide = false
+                    end
                 end
             end
         end
@@ -2555,10 +2734,11 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 
 		if myHrp and tHrp then
 			local targetMobName = nil
+				local profile = nil
 			if isBossHunterEnabled and selectedBossName then
 				targetMobName = selectedBossName
 			else
-				local profile = GetQuestProfile()
+				profile = GetQuestProfile()
 				if profile then targetMobName = profile.Mob end
 			end
 
@@ -2587,8 +2767,8 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 								    if dist <= (cfg.BringRadius * 2) then
 								        -- Bring & Stun
 									    eHrp.CFrame = gatherCFrame
-									    eHrp.AssemblyLinearVelocity = Vector3.zero
-									    eHrp.AssemblyAngularVelocity = Vector3.zero
+									    
+									    
 									    
 									    if eHrp.CanCollide then eHrp.CanCollide = false end
 									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
@@ -2710,8 +2890,8 @@ local function GetTargetRaidIsland()
                 local iPos = island:IsA("Model") and island:GetBoundingBox().Position or island.Position
                 local dist = (myHrp.Position - iPos).Magnitude
 
-                -- Ambil yang paling dekat dari semua pulau lanjutan yang tersedia
-                if dist < shortestDistToNext then
+                -- Ambil yang paling dekat dari semua pulau lanjutan yang tersedia (Max 3500 studs to prevent cross-team flight)
+                if dist < shortestDistToNext and dist <= 3500 then
                     shortestDistToNext = dist
                     targetIsland = island
                     targetIslandNum = islandNum
@@ -2767,35 +2947,24 @@ local function StartAutoRaid()
             return
         end
 
+        local myChar = GetCharacter()
+        local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not currentTargetInstance or not currentTargetInstance.Parent or not currentTargetInstance:FindFirstChildOfClass("Humanoid") or currentTargetInstance:FindFirstChildOfClass("Humanoid").Health <= 0 then
+            currentTargetInstance = GetTargetEnemy(nil)
+        end
+        isReadyToAttack = (currentTargetInstance ~= nil)
+
         if isReadyToAttack and isAutoRaidBring then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
             if myHrp and tHrp then
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
                 if enemiesFolder then
+                    local targetMobName = target.Name
                     local magnetPos = tHrp.Position
 					if magnetPos then
-					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
-                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                            if IsEnemyVulnerable(enemy) then
-                                if enemy.Name ~= "PropHitboxPlaceholder" then
-                                    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-                                    local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                                    if eHrp and eHum and eHum.Health > 0 then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
-                                        if dist <= cfg.BringRadius then
-                                            eHrp.CFrame = gatherCFrame
-                                            eHrp.AssemblyLinearVelocity = Vector3.zero
-                                            eHrp.AssemblyAngularVelocity = Vector3.zero
-                                            if eHrp.CanCollide then eHrp.CanCollide = false end
-                                            if eHum.PlatformStand == false then eHum.PlatformStand = true end
-                                        end
-                                    end
-                                end
-                            end
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
                         end
-                    end
                 end
             end
         end
@@ -2815,6 +2984,7 @@ local function StartAutoRaid()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -2838,7 +3008,7 @@ local function StartAutoRaid()
                                 if IsEnemyVulnerable(enemy) then
                                     local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                                     if eHrp then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
+                                        local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
                                         if dist < shortestDist then
                                             shortestDist = dist
                                             closest = enemy
@@ -2888,17 +3058,13 @@ local function StartAutoRaid()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        -- Set ReadyToAttack EARLY so Magnet can pull them!
+                        isReadyToAttack = targetDistance <= cfg.BringRadius
                     end
                 else
                     isReadyToAttack = false
@@ -2909,10 +3075,10 @@ local function StartAutoRaid()
                     if isAutoRaidNextIsland and (now - raidEmptyTimer >= 2.5) then
                         local activeIsland, activeIslandNum = GetTargetRaidIsland()
                         if activeIsland then
-                            local iPos = activeIsland:IsA("Model") and activeIsland:GetBoundingBox().Position or activeIsland.Position
-                            
+                            local iPos = GetSafePosition(activeIsland)
+                            local dist = (myHrp.Position - iPos).Magnitude
+
                             if activeIslandNum >= 5 then
-                                local dist = (myHrp.Position - iPos).Magnitude
                                 if dist > 80 then
                                     TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
                                 else
@@ -2921,14 +3087,11 @@ local function StartAutoRaid()
                                 return
                             end
 
-                            local dist = (myHrp.Position - iPos).Magnitude
                             if dist > 80 then
                                 TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
                             else
-                                if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                    lastEvasionMoveAt = now
-                                    TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
-                                end
+                                -- Already at highest available island, wait for spawns while doing relaxed evasion
+                                TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
                             end
                         end
                     else
@@ -2941,6 +3104,7 @@ local function StartAutoRaid()
         end
     end)
 end
+
 
 local function StartFarmNearest()
     local generation = workerGeneration
@@ -2979,27 +3143,8 @@ local function StartFarmNearest()
                     local magnetPos = mobProfile and mobProfile.MobPos or tHrp.Position
 
 					if magnetPos then
-					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
-                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                            -- ONLY Bring exact same-species enemies to avoid out-of-bounds limits
-                            if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
-                                if enemy.Name ~= "PropHitboxPlaceholder" then
-                                    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-                                    local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                                    if eHrp and eHum and eHum.Health > 0 then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
-                                        if dist <= cfg.BringRadius then
-                                            eHrp.CFrame = gatherCFrame
-                                            eHrp.AssemblyLinearVelocity = Vector3.zero
-                                            eHrp.AssemblyAngularVelocity = Vector3.zero
-                                            if eHrp.CanCollide then eHrp.CanCollide = false end
-                                            if eHum.PlatformStand == false then eHum.PlatformStand = true end
-                                        end
-                                    end
-                                end
-                            end
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
                         end
-                    end
                 end
             end
         end
@@ -3017,6 +3162,7 @@ local function StartFarmNearest()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 local targetEnemy = currentTargetInstance
@@ -3060,18 +3206,13 @@ local function StartFarmNearest()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Attack can start when character is close enough to MobPos center OR actual enemy
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        -- Set ReadyToAttack EARLY so Magnet can pull them!
+                        isReadyToAttack = targetDistance <= cfg.BringRadius
                     end
                 else
                     currentTargetInstance = nil
@@ -3155,28 +3296,11 @@ local function StartAutoDungeon()
             if myHrp and tHrp then
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
                 if enemiesFolder then
+                    local targetMobName = target.Name
                     local magnetPos = tHrp.Position
 					if magnetPos then
-					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
-                        for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                            if IsEnemyVulnerable(enemy) then
-                                if enemy.Name ~= "PropHitboxPlaceholder" then
-                                    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-                                    local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                                    if eHrp and eHum and eHum.Health > 0 then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
-                                        if dist <= cfg.BringRadius then
-                                            eHrp.CFrame = gatherCFrame
-                                            eHrp.AssemblyLinearVelocity = Vector3.zero
-                                            eHrp.AssemblyAngularVelocity = Vector3.zero
-                                            if eHrp.CanCollide then eHrp.CanCollide = false end
-                                            if eHum.PlatformStand == false then eHum.PlatformStand = true end
-                                        end
-                                    end
-                                end
-                            end
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
                         end
-                    end
                 end
             end
         end
@@ -3202,6 +3326,7 @@ local function StartAutoDungeon()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -3250,7 +3375,7 @@ local function StartAutoDungeon()
                                 if enemy.Parent == enemiesFolder and IsEnemyVulnerable(enemy) then
                                     local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                                     if eHrp then
-                                        local dist = (GetSafePosition(eHrp) - gatherCFrame.Position).Magnitude
+                                        local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
                                         if dist < shortestDist then
                                             shortestDist = dist
                                             closest = enemy
@@ -3284,15 +3409,10 @@ local function StartAutoDungeon()
                         end
 
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
                         isReadyToAttack = targetDistance <= cfg.HitRadius
                     end
@@ -3303,6 +3423,8 @@ local function StartAutoDungeon()
                     if isAutoDungeonNext then
                         local exitPos = GetNearestDungeonExit()
                         if exitPos then
+                            local myHrpPos = myHrp.Position
+                            local dist = (myHrpPos - exitPos).Magnitude
                             if dist > 15 then
                                 if now - lastEvasionMoveAt >= cfg.EvasionTick then
                                     lastEvasionMoveAt = now
@@ -3403,6 +3525,7 @@ local function StartAutoKillVolcano()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
                 end
 
                 local targetEnemy = currentTargetInstance
@@ -3444,15 +3567,10 @@ local function StartAutoKillVolcano()
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
                         if targetDistance > 80 then
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
                         else
-                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                                lastEvasionMoveAt = now
-                                TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                            end
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
 
                         isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
@@ -3468,36 +3586,6 @@ local function StartAutoKillVolcano()
     end)
 end
 
-local function GetNearestDungeonExit()
-    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-    local dungeonFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Dungeon")
-    if not myHrp or not dungeonFolder then return nil end
-
-    local nearestExitPos = nil
-    local shortestDist = math.huge
-
-    for _, dung in ipairs(dungeonFolder:GetChildren()) do
-        local exitEntrance = dung:FindFirstChild("ExitEntrance") or dung:FindFirstChild("ExitTeleporter")
-        if exitEntrance then
-            local targetPos = nil
-            if exitEntrance:IsA("Model") and exitEntrance.PrimaryPart then
-                targetPos = exitEntrance.PrimaryPart.Position
-            elseif exitEntrance:IsA("BasePart") then
-                targetPos = exitEntrance.Position
-            end
-
-            if targetPos then
-                local dist = (myHrp.Position - targetPos).Magnitude
-                if dist < shortestDist and dist < 2500 then
-                    shortestDist = dist
-                    nearestExitPos = targetPos
-                end
-            end
-        end
-    end
-
-    return nearestExitPos
-end
 
 local isAutoTorch = false
 local autoTorchWorker = 0
@@ -3552,8 +3640,7 @@ local function StartAutoTorch()
 
                 if not foundUnlit then
                     isAutoTorch = false
-                    if activeTween then activeTween:Cancel(); activeTween = nil end
-                    ToggleFloat(false)
+                    StopAllActivities()
                 end
             end
             task.wait()
@@ -3593,11 +3680,12 @@ local function StartAutoFactory()
                     ToggleFloat(true)
 
                     local now = os.clock()
-                    if now - lastEvasionTime >= cfg.EvasionTick then
-                        lastEvasionTime = now
-                        local radius = math.max(0, math.floor(cfg.EvasionRadius))
-                        currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    end
+                if now - lastEvasionTime >= cfg.EvasionTick then
+                    lastEvasionTime = now
+                    local radius = math.max(0, math.floor(cfg.EvasionRadius))
+                    currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                end
 
                     local centerPos = tHrp.Position
                     local dist = (hrp.Position - centerPos).Magnitude
@@ -3605,10 +3693,7 @@ local function StartAutoFactory()
                     if dist > 80 then
                         TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
                     else
-                        if now - lastEvasionMoveAt >= cfg.EvasionTick then
-                            lastEvasionMoveAt = now
-                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-                        end
+                        TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                     end
 
                     if dist <= cfg.HitRadius then
@@ -3623,8 +3708,7 @@ local function StartAutoFactory()
                     end
                 end
             else
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
 
             if targetCore and attackSpeedMode == "Super Fast Attack" then
@@ -3716,8 +3800,7 @@ task.spawn(function()
             else
                 isAutoTorch = false
                 autoTorchWorker = autoTorchWorker + 1
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
         end,
     })
@@ -3739,8 +3822,7 @@ task.spawn(function()
             else
                 isAutoFactory = false
                 autoFactoryWorker = autoFactoryWorker + 1
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
         end,
     })
@@ -3805,8 +3887,7 @@ task.spawn(function()
                 StartFarmNearest()
             else
                 workerGeneration = workerGeneration + 1
-                ToggleFloat(false)
-                if activeTween then activeTween:Cancel(); activeTween = nil end
+                StopAllActivities()
             end
         end,
     })
@@ -3869,7 +3950,7 @@ task.spawn(function()
                 -- Disable Auto Farm normal
                 enabled = false
                 FarmToggle:Set(false)
-                isAutoCocoa = false
+                isAutoMaterial = false
 
                 workerGeneration = workerGeneration + 1
 
@@ -3880,35 +3961,11 @@ task.spawn(function()
                 StartAutoBone()
             else
                 workerGeneration = workerGeneration + 1
-                ToggleFloat(false)
-                if activeTween then activeTween:Cancel(); activeTween = nil end
+                StopAllActivities()
             end
         end,
     })
 
-    Tabs.Sea3:CreateToggle({
-        Name = "Auto Farm Cocoa (Sea 3)", CurrentValue = false, Flag = "ToggleAutoCocoa",
-        Callback = function(Value)
-            isAutoCocoa = Value
-            if Value then
-                enabled = false
-                isAutoBone = false
-                FarmToggle:Set(false)
-
-                workerGeneration = workerGeneration + 1
-
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                isReadyToAttack = false
-                currentTargetInstance = nil
-                lastTargetPos = nil
-                StartAutoCocoa()
-            else
-                workerGeneration = workerGeneration + 1
-                ToggleFloat(false)
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-            end
-        end,
-    })
 
     Tabs.Sea3:CreateToggle({
         Name = "Auto Cake Prince (Sea 3)", CurrentValue = false, Flag = "ToggleAutoCakePrince",
@@ -3917,7 +3974,7 @@ task.spawn(function()
             if Value then
                 enabled = false
                 isAutoBone = false
-                isAutoCocoa = false
+                isAutoMaterial = false
                 if FarmToggle then FarmToggle:Set(false) end
 
                 cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
@@ -3929,8 +3986,7 @@ task.spawn(function()
                 StartAutoCakePrince()
             else
                 cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
-                ToggleFloat(false)
-                if activeTween then activeTween:Cancel(); activeTween = nil end
+                StopAllActivities()
             end
         end,
     })
@@ -3952,8 +4008,7 @@ task.spawn(function()
                 StartAutoRaid()
             else
                 raidWorkerGeneration = raidWorkerGeneration + 1
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
         end,
     })
@@ -3973,9 +4028,40 @@ task.spawn(function()
         Callback = function(Value) isAutoRaidNextIsland = Value end,
     })
 
+    Tabs.Main:CreateSection("Material Farming")
+    Tabs.Main:CreateDropdown({
+        Name = "Select Material", Options = {"None", "Conjured Cocoa", "Dragon Scale", "Fish Tail", "Mystic Droplet", "Magma Orb"}, CurrentOption = {"None"},
+        MultipleOptions = false, Flag = "MaterialTargetDrop",
+        Callback = function(Option)
+            selectedMaterialTarget = Option[1]
+            isReadyToAttack = false
+            currentTargetInstance = nil
+        end,
+    })
+
+    Tabs.Main:CreateToggle({
+        Name = "Enable Auto Material Farm", CurrentValue = false, Flag = "ToggleAutoMaterial",
+        Callback = function(Value)
+            isAutoMaterial = Value
+            if Value then
+                enabled = false
+                isAutoBone = false
+                if FarmToggle then FarmToggle:Set(false) end
+                workerGeneration = workerGeneration + 1
+
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+                isReadyToAttack = false
+                currentTargetInstance = nil
+                lastTargetPos = nil
+                StartAutoMaterialFarm()
+            else
+                workerGeneration = workerGeneration + 1
+                StopAllActivities()
+            end
+        end,
+    })
+
     Tabs.Main:CreateSection("Boss & Targeting")
-
-
     Tabs.Main:CreateDropdown({
         Name = "Boss Target", Options = bossNames, CurrentOption = {bossNames[1] or ""},
         MultipleOptions = false, Flag = "BossTargetDrop",
@@ -3989,6 +4075,11 @@ task.spawn(function()
         Name = "Attack Speed", Options = {"Fast Attack", "Super Fast Attack"}, CurrentOption = {"Fast Attack"},
         MultipleOptions = false, Flag = "AtkSpeedDrop",
         Callback = function(Option) attackSpeedMode = Option[1] end,
+    })
+
+    Tabs.Main:CreateToggle({
+        Name = "Fast Gun M1", CurrentValue = false, Flag = "FastGunM1Tog",
+        Callback = function(Value) getgenv().isFastGun = Value end,
     })
 
     Tabs.Main:CreateToggle({
@@ -4015,8 +4106,7 @@ task.spawn(function()
         Callback = function(Value)
             cfg.autoBoat = Value
             if not Value then
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
                 -- Force unstuck
                 local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
                 if hrp then hrp.Velocity = Vector3.zero end
@@ -4120,8 +4210,7 @@ task.spawn(function()
                 StartAutoKillVolcano()
             else
                 workerGeneration = workerGeneration + 1
-                ToggleFloat(false)
-                if activeTween then activeTween:Cancel(); activeTween = nil end
+                StopAllActivities()
             end
         end,
     })
@@ -4160,8 +4249,8 @@ task.spawn(function()
                         TweenTo(CFrame.new(volcanoRockPos))
 
                         local currentFruit = game:GetService("Players").LocalPlayer.Data.DevilFruit
-                        function IsCooldown(skillName)
-                            local playerGui = localPlayer:FindFirstChild("PlayerGui")
+                        local function IsCooldown(skillName)
+                            local playerGui = player:FindFirstChild("PlayerGui")
                             local mainUI = playerGui and playerGui:FindFirstChild("Main")
                             local skillsUI = mainUI and mainUI:FindFirstChild("Skills")
                             
@@ -4197,8 +4286,7 @@ task.spawn(function()
         Callback = function(Value)
             cfg.autoSail = Value
             if not Value then
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
                 local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
                 if hrp then hrp.Velocity = Vector3.zero end
             end
@@ -4327,8 +4415,7 @@ task.spawn(function()
                 StartAutoDungeon()
             else
                 dungeonWorkerGeneration = dungeonWorkerGeneration + 1
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
         end,
     })
@@ -4398,8 +4485,7 @@ task.spawn(function()
             if not Value then
                 isTeleportingToIsland = false
                 teleportIslandWorker = teleportIslandWorker + 1
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
                 return
             end
 
@@ -4417,7 +4503,7 @@ task.spawn(function()
 
             enabled = false
             isAutoBone = false
-            isAutoCocoa = false
+            isAutoMaterial = false
             workerGeneration = workerGeneration + 1
             if FarmToggle then FarmToggle:Set(false) end
 
@@ -4453,8 +4539,7 @@ task.spawn(function()
                             else
                                 -- Sudah sampai di pulau tujuan
                                 isTeleportingToIsland = false
-                                if activeTween then activeTween:Cancel(); activeTween = nil end
-                                ToggleFloat(false)
+                                StopAllActivities()
                             end
                         end
                         task.wait(0.5)
@@ -4532,8 +4617,7 @@ task.spawn(function()
                 ScriptContext:AddConnection(tweenPlayerConn)
             else
                 if tweenPlayerConn then tweenPlayerConn:Disconnect(); tweenPlayerConn = nil end
-                if activeTween then activeTween:Cancel(); activeTween = nil end
-                ToggleFloat(false)
+                StopAllActivities()
             end
         end,
     })
