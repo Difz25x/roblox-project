@@ -2236,7 +2236,7 @@ local function StartAutoMaterialFarm()
                 end
             end)
             if not ok then warn("[Lonum Material Error]: " .. tostring(err)); currentTargetInstance = nil; isReadyToAttack = false end
-            task.wait(0.05)
+            task.wait()
         end
     end)
 end
@@ -2544,7 +2544,7 @@ local function StartAutoFarm()
 					pcall(function() CommF_:InvokeServer("StartQuest", profile.Quest, profile.Stage) end)
 					lastStartedQuestKey = GetQuestProfileKey(profile)
 					lastStartedQuestAt = os.clock()
-					task.wait(0.5)
+					task.wait()
 					return
 				end
 
@@ -2828,7 +2828,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait() do
         if not ScriptContext.Running then break end
         if isAutoKenEnabled then
             local c = GetCharacter()
