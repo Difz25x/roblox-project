@@ -254,7 +254,7 @@ end)
 
 local BOSSES = {
 	{ Sea = 1, Min = 20, Name = "Gorilla King", Quest = "JungleQuest", Stage = 3, NPC = Vector3.new(-1598, 36, 153) },
-	{ Sea = 1, Min = 55, Name = "Chef", Quest = "BuggyQuest1", Stage = 3, NPC = Vector3.new(-1141, 13, 3827) },
+	{ Sea = 1, Min = 55, Name = "Chef", Quest = "BuggyQuest1", Stage = 3, NPC = Vector3.new(-1140.469360, 4.811524, 3830.148438) },
 	{ Sea = 1, Min = 105, Name = "Yeti", Quest = "SnowQuest", Stage = 3, NPC = Vector3.new(1389, 87, -1298) },
 	{ Sea = 1, Min = 130, Name = "Vice Admiral", Quest = "MarineQuest2", Stage = 2, NPC = Vector3.new(-5035, 20, 4324) },
 	{ Sea = 1, Min = 220, Name = "Warden", Quest = "ImpelQuest", Stage = 1, NPC = Vector3.new(3873, 14, -1940) },
@@ -283,8 +283,8 @@ local SEA1 = {
 	{ Min = 1, Max = 9, Quest = "BanditQuest1", Stage = 1, Name = "Bandits", Mob = "Bandit", Count = 5, NPC = Vector3.new(1059, 13, 1552), MobPos = Vector3.new(1145, 17, 1634) },
 	{ Min = 10, Max = 14, Quest = "JungleQuest", Stage = 1, Name = "Monkeys", Mob = "Monkey", Count = 6, NPC = Vector3.new(-1602, 37, 153), MobPos = Vector3.new(-1448, 50, 64) },
 	{ Min = 15, Max = 29, Quest = "JungleQuest", Stage = 2, Name = "Gorillas", Mob = "Gorilla", Count = 8, NPC = Vector3.new(-1602, 37, 153), MobPos = Vector3.new(-1237, 7, -486) },
-	{ Min = 30, Max = 39, Quest = "BuggyQuest1", Stage = 1, Name = "Pirates", Mob = "Pirate", Count = 8, NPC = Vector3.new(-1140, 5, 3828), MobPos = Vector3.new(-1115, 14, 3938) },
-	{ Min = 40, Max = 59, Quest = "BuggyQuest1", Stage = 2, Name = "Brute", Mob = "Brute", Count = 8, NPC = Vector3.new(-1140, 5, 3828), MobPos = Vector3.new(-1145, 15, 4350) },
+	{ Min = 30, Max = 39, Quest = "BuggyQuest1", Stage = 1, Name = "Pirates", Mob = "Pirate", Count = 8, NPC = Vector3.new(-1140.469360, 4.811524, 3830.148438), MobPos = Vector3.new(-1115, 14, 3938) },
+	{ Min = 40, Max = 59, Quest = "BuggyQuest1", Stage = 2, Name = "Brute", Mob = "Brute", Count = 8, NPC = Vector3.new(-1140.469360, 4.811524, 3830.148438), MobPos = Vector3.new(-1145, 15, 4350) },
 	{ Min = 60, Max = 74, Quest = "DesertQuest", Stage = 1, Name = "Desert Bandits", Mob = "Desert Bandit", Count = 8, NPC = Vector3.new(897, 7, 4389), MobPos = Vector3.new(932, 7, 4484) },
 	{ Min = 75, Max = 89, Quest = "DesertQuest", Stage = 2, Name = "Desert Officers", Mob = "Desert Officer", Count = 6, NPC = Vector3.new(897, 7, 4389), MobPos = Vector3.new(1572, 11, 4386) },
 	{ Min = 90, Max = 99, Quest = "SnowQuest", Stage = 1, Name = "Snow Bandits", Mob = "Snow Bandit", Count = 7, NPC = Vector3.new(1386, 87, -1297), MobPos = Vector3.new(1354, 105, -1328) },
@@ -402,13 +402,58 @@ local function GetMobProfileByName(mobName)
     return nil
 end
 
-local function GetCharacter() return player.Character end
-local function GetHumanoid() return GetCharacter() and GetCharacter():FindFirstChildOfClass("Humanoid") end
+local cachedCharacter = player.Character
+local cachedHrp = cachedCharacter and cachedCharacter:FindFirstChild("HumanoidRootPart")
+local cachedHum = cachedCharacter and cachedCharacter:FindFirstChildOfClass("Humanoid")
+
+player.CharacterAdded:Connect(function(char)
+    cachedCharacter = char
+    task.spawn(function()
+        cachedHrp = char:WaitForChild("HumanoidRootPart", 5)
+        cachedHum = char:WaitForChild("Humanoid", 5)
+    end)
+end)
+player.CharacterRemoving:Connect(function()
+    cachedCharacter = nil
+    cachedHrp = nil
+    isBvCreated = false
+    cachedHum = nil
+end)
+
+
+
 
 local function GetPlayerLevel()
 	local data = player:FindFirstChild("Data")
 	local levelObj = data and data:FindFirstChild("Level")
 	return levelObj and levelObj.Value or 1
+end
+
+
+--==================================================
+-- [ BRING MOB BYPASS ]
+--==================================================
+local function BringMob(eHrp, eHum, gatherCFrame)
+    if not eHrp or not eHum then return end
+    
+    -- Teleport musuh ke titik kumpul
+    eHrp.CFrame = gatherCFrame
+    
+    -- Hentikan pergerakan agar tidak fling
+    eHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    eHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    
+    -- Matikan Collision agar tidak ngedorong player
+    if eHrp.CanCollide then eHrp.CanCollide = false end
+    
+    -- Paksa jatuh/rebahan
+    if not eHum.PlatformStand then eHum.PlatformStand = true end
+    
+    -- BUKA HITBOX MUSUH SANGAT BESAR! 
+    if eHrp.Size.X < 50 then
+        eHrp.Size = Vector3.new(60, 60, 60)
+        eHrp.Transparency = 1 
+    end
 end
 
 --==================================================
@@ -420,7 +465,7 @@ local lastSubmergedTeleportAt = 0
 local function HandleSubmerged(targetPos)
     if game.PlaceId ~= 7449423635 then return false end -- HANYA SEA 3
 
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     if not hrp then return false end
 
     local isCurrentlySubmerged = (hrp.Position.Y < -1000)
@@ -466,33 +511,68 @@ end
 
 
 
-local function ToggleFloat(state)
-	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	local bv = hrp:FindFirstChild("AutofarmBv")
+local cachedBv = nil
+local cachedBg = nil
+local isBvCreated = false
 
+local function ToggleFloat(state)
+	local hrp = cachedHrp
+	if not hrp then return end
+	
 	if state then
-		if not bv then
-			bv = Instance.new("BodyVelocity")
-			bv.Name = "AutofarmBv"
-			bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-			bv.Velocity = Vector3.zero
-			bv.Parent = hrp
+		if not isBvCreated then
+            local existingBv = hrp:FindFirstChild("AutofarmBv")
+            if existingBv then
+                cachedBv = existingBv
+                isBvCreated = true
+            else
+			    cachedBv = Instance.new("BodyVelocity")
+			    cachedBv.Name = "AutofarmBv"
+			    cachedBv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+			    cachedBv.Velocity = Vector3.zero
+			    cachedBv.Parent = hrp
+                isBvCreated = true
+            end
 		end
+        
+        -- Prevent Falling Bug
+        local hum = cachedHum
+        if hum then
+            if hum.Sit then hum.Sit = false end
+        end
+        hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
 	else
-		if bv then bv:Destroy() end
-		local bg = hrp:FindFirstChild("AutofarmBg")
-		if bg then bg:Destroy() end
+        if isBvCreated then
+		    if cachedBv then 
+                cachedBv:Destroy() 
+                cachedBv = nil
+            end
+		    local existingBv = hrp:FindFirstChild("AutofarmBv")
+            if existingBv then existingBv:Destroy() end
+            
+		    if cachedBg then
+                cachedBg:Destroy()
+                cachedBg = nil
+            end
+            local existingBg = hrp:FindFirstChild("AutofarmBg")
+            if existingBg then existingBg:Destroy() end
+            
+            isBvCreated = false
+        end
 	end
 end
 
 local function TweenTo(targetCFrame)
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     if not hrp then return end
 
     local targetPos = targetCFrame.Position
 
-    if targetPos.Y > -500 and targetPos.Y < 25 then
+    -- [WATER GUARD BYPASS] Hanya menaikkan tinggi jika masih jauh dari target (mencegah tenggelam di laut)
+    -- Begitu mendekati tujuan (< 30 stud), izinkan menukik turun ke NPC yang ada di pinggir pantai (Y < 25)
+    local horizontalDist = Vector2.new(hrp.Position.X - targetPos.X, hrp.Position.Z - targetPos.Z).Magnitude
+    if targetPos.Y > -500 and targetPos.Y < 25 and horizontalDist > 30 then
         local waterObj = workspace:FindFirstChild("Water")
         if waterObj and waterObj:IsA("BasePart") then
             local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
@@ -530,9 +610,12 @@ local function TweenTo(targetCFrame)
     local duration = math.max(distance / cfg.TweenSpeed, 0.05)
 
     if activeTween then activeTween:Cancel() end
+    
+    local horizontalLookPos = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+    local flatCFrame = CFrame.new(targetPos, horizontalLookPos)
 
     activeTween = TweenService:Create(
-        hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = targetCFrame}
+        hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = flatCFrame}
     )
 
     activeTween:Play()
@@ -620,7 +703,7 @@ local function GetNearestIsland()
     end
     local nearestIsland = nil
     local shortestDistance = math.huge
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     if hrp then
         for _, island in pairs(islands) do
             local pos = nil
@@ -642,7 +725,7 @@ end
 local function GetBoat()
     if not workspace:FindFirstChild("Boats") then return nil end
 
-    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local myHrp = cachedHrp
     if not myHrp then return nil end
 
     local myBoat = nil
@@ -676,7 +759,7 @@ local function GetBoat()
 end
 
 local function GetNearestBoatDealer()
-    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local myHrp = cachedHrp
     if not myHrp then return nil end
 
     local npcsFolder = workspace:FindFirstChild("NPCs")
@@ -724,8 +807,8 @@ local function BuyBoat()
 end
 
 local function BoardBoat(boat)
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-    local hum = GetHumanoid()
+    local hrp = cachedHrp
+    local hum = cachedHum
     if boat and boat:FindFirstChild("VehicleSeat") and hrp and hum then
         local seat = boat.VehicleSeat
         local distance = (hrp.Position - seat.Position).Magnitude
@@ -746,7 +829,7 @@ local function BoardBoat(boat)
 end
 
 local function DodgeAttack()
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     if not hrp then return end
     if os.clock() - lastDodgeTime < cfg.dodgeCooldown then return end
 
@@ -766,7 +849,7 @@ end
 
 local function ScanForFruits()
     fruitWaypoints = {}
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     if hrp then
         for _, obj in pairs(Workspace:GetChildren()) do
             if obj.Name:find("Fruit") and obj:FindFirstChild("Handle") then
@@ -781,7 +864,7 @@ end
 
 local function ScanForChests()
     chestWaypoints = {}
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = cachedHrp
     local chestModels = Workspace:FindFirstChild("ChestModels")
     if hrp and chestModels then
         for _, chest in ipairs(chestModels:GetChildren()) do
@@ -797,8 +880,8 @@ local function CollectNearestFruit()
     if #fruitWaypoints == 0 then return false end
     local nearestFruit = nil
     local shortestDistance = math.huge
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-    local hum = GetHumanoid()
+    local hrp = cachedHrp
+    local hum = cachedHum
     if hrp and hum then
         for _, fruit in pairs(fruitWaypoints) do
             local distance = (hrp.Position - fruit.Position).Magnitude
@@ -820,8 +903,8 @@ end
 local currentIslandIndex = 1
 local function CollectNearestChest()
     ScanForChests()
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-    local hum = GetHumanoid()
+    local hrp = cachedHrp
+    local hum = cachedHum
     if not hrp or not hum then return false end
 
     if #chestWaypoints == 0 then
@@ -1234,7 +1317,7 @@ local function StopAllActivities()
         activeTween = nil
     end
 
-    local c = GetCharacter()
+    local c = cachedCharacter
     if c then
         local hrp = c:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -1328,9 +1411,7 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
                 if eHrp and eHum and eHum.Health > 0 then
                     local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
                     if distToPlayer <= (cfg.BringRadius * 2) then
-                        eHrp.CFrame = gatherCFrame
-                        if eHrp.CanCollide then eHrp.CanCollide = false end
-                        if eHum.PlatformStand == false then eHum.PlatformStand = true end
+                        BringMob(eHrp, eHum, gatherCFrame)
                     end
                 end
             end
@@ -1341,7 +1422,14 @@ end
 local function UniversalEvasionTween(myHrp, targetPos, now)
     ToggleFloat(true)
     local targetDistance = (targetPos - myHrp.Position).Magnitude
-    UniversalEvasionTween(myHrp, targetPos, now)
+    if targetDistance > 80 then
+        TweenTo(CFrame.new(targetPos + Vector3.new(0, cfg.TweenHeight, 0), targetPos))
+    else
+        if now - lastEvasionMoveAt > 0.1 then
+            lastEvasionMoveAt = now
+            TweenTo(CFrame.new(targetPos + currentEvasionOffset, targetPos))
+        end
+    end
 end
 
 local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
@@ -1354,48 +1442,33 @@ local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
         return false -- Still traveling
     end
     if activeTween then activeTween:Cancel(); activeTween = nil end
-    local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
-    if CommF_ then
-        pcall(function() CommF_:InvokeServer("StartQuest", profileQuest, profileStage or 1) end)
-    end
+    CommF_:InvokeServer("StartQuest", profileQuest, profileStage or 1)
     return true -- Quest claimed, waiting for UI sync
 end
 
 local function GetTargetEnemy(mobName)
 	local closest, shortestDist = nil, math.huge
 	local enemiesFolder = workspace:FindFirstChild("Enemies")
-	local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+	local myHrp = cachedHrp
 
-	if enemiesFolder and myHrp then
-	    -- PRIORITY OVERRIDE: Cek jika ada PropHitboxPlaceholder
+	if enemiesFolder and myHrp and mobName then
 	    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-	        if enemy.Parent == enemiesFolder and enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy, nil) then
+	        if enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy, nil) then
 	            return enemy
 	        end
 	    end
 
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-		    if enemy.Parent == enemiesFolder then
-		        local isValid = false
-		        if farmNearestEnabled then
-		            isValid = IsEnemyVulnerable(enemy, nil)
-		        else
-		            isValid = mobName and (string.lower(enemy.Name) == string.lower(mobName)) and IsEnemyVulnerable(enemy, mobName)
-		        end
-
-			    if isValid then
-				    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
-				    if eHrp then
-					    local dist = (eHrp.Position - myHrp.Position).Magnitude
-					    if dist < shortestDist then
-					        if not farmNearestEnabled or dist <= farmNearestRadius then
-						        shortestDist = dist
-						        closest = enemy
-					        end
-					    end
-				    end
-			    end
-		    end
+			if string.lower(enemy.Name) == string.lower(mobName) and IsEnemyVulnerable(enemy, mobName) then
+				local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+				if eHrp then
+					local dist = (eHrp.Position - myHrp.Position).Magnitude
+					if dist < shortestDist then
+						shortestDist = dist
+						closest = enemy
+					end
+				end
+			end
 		end
 	end
 	return closest
@@ -1447,8 +1520,8 @@ end
 
 
 local function EquipWeapon(overrideCategory)
-	local c = GetCharacter()
-	local h = GetHumanoid()
+	local c = cachedCharacter
+	local h = cachedHum
 	if not c or not h then return nil end
 
 	local wantedCategory = overrideCategory or (cfg.AutoMastery and cfg.MasteryCategory or cfg.WeaponCategory)
@@ -1466,7 +1539,15 @@ local function EquipWeapon(overrideCategory)
 
 	for _, tool in ipairs(bag:GetChildren()) do
 		if IsToolMatching(tool, wantedCategory) then
-			pcall(function() h:EquipTool(tool) end)
+			pcall(function() 
+                -- Blox Fruits membutuhkan event Equip dipanggil secara murni
+                -- Kita matikan PlatformStand sebentar jika perlu, agar equip berhasil
+                local oldStand = h.PlatformStand
+                h.PlatformStand = false
+                h:EquipTool(tool)
+                -- Kembalikan state
+                if oldStand then h.PlatformStand = true end
+            end)
 			cachedWeapon = tool
 			cachedWeaponCategory = wantedCategory
 			return tool
@@ -1476,7 +1557,7 @@ local function EquipWeapon(overrideCategory)
 end
 
 local function EnableBuso()
-	local c = GetCharacter()
+	local c = cachedCharacter
 	if c and not c:GetAttribute("BusoEnabled") then pcall(function() CommF_:InvokeServer("Buso") end) end
 end
 
@@ -1524,16 +1605,27 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
     if forceNoEquip then
         if not weapon then return end
     else
-        weapon = cachedWeapon
-        if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
+        -- Jika senjata yang kita butuhkan SUDAH DIPEGGANG, gunakan itu.
+        if weapon and IsToolMatching(weapon, targetCategory) then
+            cachedWeapon = weapon
+        else
+            -- Jika tidak memegang, atau salah pegang, panggil Equip
             weapon = EquipWeapon(targetCategory)
             if not weapon then 
-                -- Fallback force equip via character
+                -- Fallback
                 local bag = player:FindFirstChildOfClass("Backpack")
                 if bag then
                     for _, t in ipairs(bag:GetChildren()) do
                         if IsToolMatching(t, targetCategory) then
-                            GetHumanoid():EquipTool(t)
+                            local h = cachedHum
+                            if h then
+                                pcall(function() 
+                                    local oldStand = h.PlatformStand
+                                    h.PlatformStand = false
+                                    h:EquipTool(t)
+                                    if oldStand then h.PlatformStand = true end
+                                end)
+                            end
                             weapon = t
                             break
                         end
@@ -1629,7 +1721,7 @@ local function AttackThread(generation)
             if enabled then
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-                local myChar = GetCharacter()
+                local myChar = cachedCharacter
                 local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
                 if now - lastAttackAt >= interval then
@@ -1641,7 +1733,7 @@ local function AttackThread(generation)
                 end
 
                 if getgenv().isFastGun and currentTargetInstance then
-                    local myChar = GetCharacter()
+                    local myChar = cachedCharacter
                     if myChar then
                         local weapon = myChar:FindFirstChildOfClass("Tool")
                         if weapon and (weapon.ToolTip == "Gun") then
@@ -1949,7 +2041,7 @@ local function StartAutoBone()
     task.spawn(function()
         while isAutoBone and ScriptContext.Running and generation == workerGeneration do
             local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-            local myChar = GetCharacter()
+            local myChar = cachedCharacter
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeHauntedMobInfo.Mob
@@ -1967,7 +2059,7 @@ local function StartAutoBone()
             return
         end
         if isReadyToAttack then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
             if myHrp and tHrp then
@@ -1990,9 +2082,7 @@ local function StartAutoBone()
                                     if eHrp and eHum and eHum.Health > 0 then
                                         local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
                                         if dist <= cfg.BringRadius then
-                                            eHrp.CFrame = gatherCFrame
-                                            if eHrp.CanCollide then eHrp.CanCollide = false end
-                                            if eHum.PlatformStand == false then eHum.PlatformStand = true end
+                                            BringMob(eHrp, eHum, gatherCFrame)
                                         end
                                     end
                                 end
@@ -2008,7 +2098,7 @@ local function StartAutoBone()
     task.spawn(function()
         while isAutoBone and ScriptContext.Running and generation == workerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local now = os.clock()
@@ -2085,6 +2175,27 @@ local function StartAutoBone()
                         end
                         -- Set ReadyToAttack EARLY so Magnet can pull them!
                         isReadyToAttack = targetDistance <= cfg.BringRadius
+                        
+                        -- [ MAGNET / BRING MOB LOGIC UNTUK FARM NEAREST ]
+                        if isReadyToAttack then
+                            local gatherCFrame = CFrame.new(centerPos.X, centerPos.Y, centerPos.Z)
+                            local enemiesFolder = workspace:FindFirstChild("Enemies")
+                            if enemiesFolder then
+                                for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                                    -- Sama dengan target terdekat (namanya)
+                                    if enemy.Name == targetEnemy.Name and IsEnemyVulnerable(enemy, nil) then
+                                        local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+                                        local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                        if eHrp and eHum and eHum.Health > 0 then
+                                            local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+                                            if dist <= cfg.BringRadius then
+                                                BringMob(eHrp, eHum, gatherCFrame)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 else
                     currentTargetInstance = nil
@@ -2111,7 +2222,7 @@ local function StartAutoMaterialFarm()
     task.spawn(function()
         while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
             local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-            local myChar = GetCharacter()
+            local myChar = cachedCharacter
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or (activeMaterialMobInfo and activeMaterialMobInfo.Mob or nil)
@@ -2129,7 +2240,7 @@ local function StartAutoMaterialFarm()
             return
         end
         if isReadyToAttack then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
             if myHrp and tHrp then
@@ -2152,7 +2263,7 @@ local function StartAutoMaterialFarm()
     task.spawn(function()
         while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 if not activeMaterialMobInfo or selectedMaterialTarget == "None" then
@@ -2254,7 +2365,7 @@ local function StartAutoCakePrince()
     task.spawn(function()
         while isAutoCakePrince and ScriptContext.Running and generation == cakePrinceWorkerGeneration do
             local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-            local myChar = GetCharacter()
+            local myChar = cachedCharacter
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
             if myHrp then
@@ -2285,7 +2396,7 @@ local function StartAutoCakePrince()
             if cakeBringConn then cakeBringConn:Disconnect() end
             return
         end
-        local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+        local myHrp = cachedHrp
         local target = currentTargetInstance
         local tHrp = target and target:FindFirstChild("HumanoidRootPart")
         if myHrp and tHrp then
@@ -2306,7 +2417,7 @@ local function StartAutoCakePrince()
     task.spawn(function()
         while isAutoCakePrince and ScriptContext.Running and generation == cakePrinceWorkerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local now = os.clock()
@@ -2444,7 +2555,7 @@ local function StartAutoFarm()
 	task.spawn(function()
 		while enabled and ScriptContext.Running and generation == workerGeneration do
 			local ok, err = pcall(function()
-				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+				local myHrp = cachedHrp
 				if not myHrp then return end
 
 				local hasQuestUI = HasActiveQuest()
@@ -2536,15 +2647,9 @@ local function StartAutoFarm()
 				if not hasQuestUI then
 					isReadyToAttack = false
 					currentTargetInstance = nil
-					if (myHrp.Position - profile.NPC).Magnitude > 8 then
-						TweenTo(CFrame.new(profile.NPC))
-						return
-					end
-					if activeTween then activeTween:Cancel(); activeTween = nil end
-					pcall(function() CommF_:InvokeServer("StartQuest", profile.Quest, profile.Stage) end)
+					ClaimQuestHandler(myHrp, profile.Quest, profile.Stage, profile.NPC)
 					lastStartedQuestKey = GetQuestProfileKey(profile)
 					lastStartedQuestAt = os.clock()
-					task.wait()
 					return
 				end
 
@@ -2655,7 +2760,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
             -- Cari Dealer Terdekat
             local dealer = GetNearestBoatDealer()
             if dealer then
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if myHrp then
                     local dealerPos = GetSafePosition(dealer)
                     local dist = (myHrp.Position - dealerPos).Magnitude
@@ -2728,7 +2833,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
     if cfg.dodgeEnabled then DodgeAttack() end
 
 	if enabled and isReadyToAttack then
-		local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+		local myHrp = cachedHrp
 		local target = currentTargetInstance
 		local tHrp = target and target:FindFirstChild("HumanoidRootPart")
 
@@ -2766,12 +2871,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 								    local dist = (eHrp.Position - myHrp.Position).Magnitude
 								    if dist <= (cfg.BringRadius * 2) then
 								        -- Bring & Stun
-									    eHrp.CFrame = gatherCFrame
-									    
-									    
-									    
-									    if eHrp.CanCollide then eHrp.CanCollide = false end
-									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
+									    BringMob(eHrp, eHum, gatherCFrame)
 									    
 									    -- Do not change size to 60x60x60 to prevent anti-cheat from glitching the enemies
 									    if eHrp.Size.X > 10 then
@@ -2831,8 +2931,8 @@ task.spawn(function()
     while task.wait() do
         if not ScriptContext.Running then break end
         if isAutoKenEnabled then
-            local c = GetCharacter()
-            local h = GetHumanoid()
+            local c = cachedCharacter
+            local h = cachedHum
             if c and h and h.Health > 0 then
                 if not c:FindFirstChild("KenDisabled") then
                     pcall(function()
@@ -2854,7 +2954,7 @@ end)
 local raidWorkerGeneration = 0
 
 local function GetTargetRaidIsland()
-    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local myHrp = cachedHrp
     local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
     if not myHrp or not raidMap then return nil, 0 end
 
@@ -2920,7 +3020,7 @@ local function StartAutoRaid()
         while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
             if isReadyToAttack and isAutoRaidAttack then
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-                local myChar = GetCharacter()
+                local myChar = cachedCharacter
                 local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
                 if myHrp then
                     local tName = currentTargetInstance and currentTargetInstance.Name or nil
@@ -2941,7 +3041,7 @@ local function StartAutoRaid()
             return
         end
 
-        local myChar = GetCharacter()
+        local myChar = cachedCharacter
         local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not currentTargetInstance or not currentTargetInstance.Parent or not currentTargetInstance:FindFirstChildOfClass("Humanoid") or currentTargetInstance:FindFirstChildOfClass("Humanoid").Health <= 0 then
             currentTargetInstance = GetTargetEnemy(nil)
@@ -2970,7 +3070,7 @@ local function StartAutoRaid()
     task.spawn(function()
         while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local now = os.clock()
@@ -3059,6 +3159,27 @@ local function StartAutoRaid()
                         end
                         -- Set ReadyToAttack EARLY so Magnet can pull them!
                         isReadyToAttack = targetDistance <= cfg.BringRadius
+                        
+                        -- [ MAGNET / BRING MOB LOGIC UNTUK FARM NEAREST ]
+                        if isReadyToAttack then
+                            local gatherCFrame = CFrame.new(centerPos.X, centerPos.Y, centerPos.Z)
+                            local enemiesFolder = workspace:FindFirstChild("Enemies")
+                            if enemiesFolder then
+                                for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                                    -- Sama dengan target terdekat (namanya)
+                                    if enemy.Name == targetEnemy.Name and IsEnemyVulnerable(enemy, nil) then
+                                        local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+                                        local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                        if eHrp and eHum and eHum.Health > 0 then
+                                            local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+                                            if dist <= cfg.BringRadius then
+                                                BringMob(eHrp, eHum, gatherCFrame)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 else
                     isReadyToAttack = false
@@ -3107,7 +3228,7 @@ local function StartFarmNearest()
     task.spawn(function()
         while farmNearestEnabled and ScriptContext.Running and generation == workerGeneration do
             local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-            local myChar = GetCharacter()
+            local myChar = cachedCharacter
             local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or nil
@@ -3125,7 +3246,7 @@ local function StartFarmNearest()
             return
         end
         if isReadyToAttack then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
             if myHrp and tHrp then
@@ -3148,7 +3269,7 @@ local function StartFarmNearest()
     task.spawn(function()
         while farmNearestEnabled and ScriptContext.Running and generation == workerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local now = os.clock()
@@ -3207,6 +3328,27 @@ local function StartFarmNearest()
                         end
                         -- Set ReadyToAttack EARLY so Magnet can pull them!
                         isReadyToAttack = targetDistance <= cfg.BringRadius
+                        
+                        -- [ MAGNET / BRING MOB LOGIC UNTUK FARM NEAREST ]
+                        if isReadyToAttack then
+                            local gatherCFrame = CFrame.new(centerPos.X, centerPos.Y, centerPos.Z)
+                            local enemiesFolder = workspace:FindFirstChild("Enemies")
+                            if enemiesFolder then
+                                for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                                    -- Sama dengan target terdekat (namanya)
+                                    if enemy.Name == targetEnemy.Name and IsEnemyVulnerable(enemy, nil) then
+                                        local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+                                        local eHum = enemy:FindFirstChildOfClass("Humanoid")
+                                        if eHrp and eHum and eHum.Health > 0 then
+                                            local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+                                            if dist <= cfg.BringRadius then
+                                                BringMob(eHrp, eHum, gatherCFrame)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 else
                     currentTargetInstance = nil
@@ -3220,7 +3362,7 @@ local function StartFarmNearest()
 end
 
 local function GetNearestDungeonExit()
-    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+    local myHrp = cachedHrp
     local dungeonFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Dungeon")
     if not myHrp or not dungeonFolder then return nil end
 
@@ -3262,7 +3404,7 @@ local function StartAutoDungeon()
                 local now = os.clock()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
                 if now - lastAttackAt >= interval then
-                    local myChar = GetCharacter()
+                    local myChar = cachedCharacter
                     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
                     if myHrp then
                         ExecuteAttack(myChar, myHrp)
@@ -3284,7 +3426,7 @@ local function StartAutoDungeon()
         end
 
         if isReadyToAttack and isAutoDungeonBring then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
             if myHrp and tHrp then
@@ -3304,7 +3446,7 @@ local function StartAutoDungeon()
     task.spawn(function()
         while isAutoDungeon and ScriptContext.Running and generation == dungeonWorkerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local isDungeon = workspace:GetAttribute("IsDungeonInstance")
@@ -3465,7 +3607,7 @@ local function StartAutoKillVolcano()
         while autoKillVolcano and ScriptContext.Running and generation == workerGeneration do
             if isReadyToAttack then
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
-                local myChar = GetCharacter()
+                local myChar = cachedCharacter
                 local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
                 if myHrp then
                     local tName = currentTargetInstance and currentTargetInstance.Name or nil
@@ -3490,7 +3632,7 @@ local function StartAutoKillVolcano()
         end
 
         if isReadyToAttack then
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             local target = currentTargetInstance
             local tHrp = target and target:FindFirstChild("HumanoidRootPart")
 
@@ -3508,11 +3650,7 @@ local function StartAutoKillVolcano()
                             if eHrp and eHum and eHum.Health > 0 then
                                 local dist = (eHrp.Position - myHrp.Position).Magnitude
                                 if dist <= (cfg.BringRadius * 2) then
-                                    eHrp.CFrame = gatherCFrame
-                                    eHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                                    eHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                                    if eHrp.CanCollide then eHrp.CanCollide = false end
-                                    if not eHum.PlatformStand then eHum.PlatformStand = true end
+                                    BringMob(eHrp, eHum, gatherCFrame)
                                 end
                             end
                         end
@@ -3526,7 +3664,7 @@ local function StartAutoKillVolcano()
     task.spawn(function()
         while autoKillVolcano and ScriptContext.Running and generation == workerGeneration do
             local ok, err = pcall(function()
-                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local myHrp = cachedHrp
                 if not myHrp then return end
 
                 local now = os.clock()
@@ -3610,7 +3748,7 @@ local function StartAutoTorch()
 
     task.spawn(function()
         while isAutoTorch and ScriptContext.Running and gen == autoTorchWorker do
-            local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local hrp = cachedHrp
             if not hrp then task.wait(1); continue end
 
             local turtle = workspace.Map:FindFirstChild("Turtle")
@@ -3668,7 +3806,7 @@ local function StartAutoFactory()
 
     task.spawn(function()
         while isAutoFactory and ScriptContext.Running and gen == autoFactoryWorker do
-            local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local hrp = cachedHrp
             if not hrp then task.wait(1); continue end
 
             local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -3706,7 +3844,7 @@ local function StartAutoFactory()
                     end
 
                     if dist <= cfg.HitRadius then
-                        local myChar = GetCharacter()
+                        local myChar = cachedCharacter
                         local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
                         local timeSinceLastAtk = os.clock() - lastAttackAt
 
@@ -3737,7 +3875,7 @@ local function StartStandaloneAutoAttackThread()
                 local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
 
                 if now - lastAttackAt >= interval then
-                    local myChar = GetCharacter()
+                    local myChar = cachedCharacter
                     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
                     if myHrp then
@@ -3834,6 +3972,47 @@ task.spawn(function()
                 StopAllActivities()
             end
         end,
+    })
+
+    Tabs.Settings:CreateSection("Auto Redeem Codes")
+    Tabs.Settings:CreateButton({
+        Name = "Redeem All Codes",
+        Callback = function()
+            local codes = {
+                "EASTEREXP", "fudd10", "fudd10_V2", "Chandler", "BIGNEWS",
+                "KITT_RESET", "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1",
+                "Sub2Fer999", "Enyu_is_Pro", "JCWK", "StarcodeHEO", "MagicBUS",
+                "KittGaming", "Sub2CaptainMaui", "Sub2OfficialNoobie",
+                "TheGreatAce", "Sub2NoobMaster123", "Sub2Daigrock", "Axiore",
+                "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUB2GAMERROBOT_EXP1"
+            }
+            task.spawn(function()
+                local redeemEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Redeem")
+                if redeemEvent then
+                    getgenv().LonumObject:Notify({
+                        Title = "Redeem Codes",
+                        Content = "Starting to redeem " .. tostring(#codes) .. " codes...",
+                        Duration = 3
+                    })
+                    for _, code in ipairs(codes) do
+                        pcall(function()
+                            redeemEvent:InvokeServer(code)
+                        end)
+                    end
+                    getgenv().LonumObject:Notify({
+                        Title = "Redeem Finished",
+                        Content = "Finished trying to redeem all codes.",
+                        Duration = 5
+                    })
+                else
+                    getgenv().LonumObject:Notify({
+                        Title = "Error",
+                        Content = "Redeem remote event not found!",
+                        Duration = 3
+                    })
+                end
+            end)
+        end
     })
 
     Tabs.Settings:CreateSection("UI Configuration")
@@ -4117,7 +4296,7 @@ task.spawn(function()
             if not Value then
                 StopAllActivities()
                 -- Force unstuck
-                local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local hrp = cachedHrp
                 if hrp then hrp.Velocity = Vector3.zero end
             end
         end,
@@ -4144,7 +4323,7 @@ task.spawn(function()
             if Value then
                 task.spawn(function()
                     while AutoEmber do
-                        local char = GetCharacter()
+                        local char = cachedCharacter
                         local myHrp = char and char:FindFirstChild("HumanoidRootPart")
 
                         if myHrp then
@@ -4175,7 +4354,7 @@ task.spawn(function()
 
             local prehistoricIsland = nil
             local nearestDistance = math.huge
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             if not myHrp or not workspace:FindFirstChild("Map") then return end
 
             for _, datamodel in ipairs(workspace.Map:GetChildren()) do
@@ -4232,7 +4411,7 @@ task.spawn(function()
 
             local prehistoricIsland = nil
             local nearestDistance = math.huge
-            local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+            local myHrp = cachedHrp
             if not myHrp or not workspace:FindFirstChild("Map") then return end
 
             for _, datamodel in ipairs(workspace.Map:GetChildren()) do
@@ -4253,7 +4432,7 @@ task.spawn(function()
             for _, rock in ipairs(Rocks:GetChildren()) do
                 for _, volcanoRock in ipairs(rock:GetChildren()) do
                     if volcanoRock.Name == "volcanorock" then
-                        local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                        local myHrp = cachedHrp
                         local volcanoRockPos = GetSafePosition(volcanoRock)
                         TweenTo(CFrame.new(volcanoRockPos))
 
@@ -4296,7 +4475,7 @@ task.spawn(function()
             cfg.autoSail = Value
             if not Value then
                 StopAllActivities()
-                local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                local hrp = cachedHrp
                 if hrp then hrp.Velocity = Vector3.zero end
             end
         end,
@@ -4539,7 +4718,7 @@ task.spawn(function()
 
                 task.spawn(function()
                     while isTeleportingToIsland and ScriptContext.Running and gen == teleportIslandWorker do
-                        local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                        local hrp = cachedHrp
                         if hrp then
                             ToggleFloat(true)
                             local dist = (hrp.Position - safeCFrame.Position).Magnitude
@@ -4658,7 +4837,7 @@ task.spawn(function()
                     end
                 end
             else
-                local myChar = GetCharacter()
+                local myChar = cachedCharacter
                 if myChar and myChar:FindFirstChild("Humanoid") then
                     cam.CameraSubject = myChar.Humanoid
                 end
@@ -4681,7 +4860,7 @@ task.spawn(function()
                         return
                     end
 
-                    local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                    local myHrp = cachedHrp
                     local targetPlayer = Players:FindFirstChild(selectedPlayerToHunt)
 
                     if myHrp and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
