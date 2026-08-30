@@ -590,6 +590,8 @@ function Lonum:CreateWindow(options)
             lbl.Font = Lonum.Theme.Font
             lbl.TextSize = 12
             lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.TextWrapped = true
+            lbl.AutomaticSize = Enum.AutomaticSize.Y
             lbl.Parent = TabPage
 
             local LabelObj = {}
@@ -648,6 +650,7 @@ function Lonum:CreateWindow(options)
             tFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
             tFrame.Text = ""
             tFrame.AutoButtonColor = false
+            tFrame.AutomaticSize = Enum.AutomaticSize.Y
             tFrame.Parent = TabPage
 
             local tCorner = Instance.new("UICorner")
@@ -660,7 +663,7 @@ function Lonum:CreateWindow(options)
             tStroke.Parent = tFrame
 
             local tLabel = Instance.new("TextLabel")
-            tLabel.Size = UDim2.new(1, -60, 1, 0)
+            tLabel.Size = UDim2.new(1, -60, 0, 42)
             tLabel.Position = UDim2.new(0, 15, 0, 0)
             tLabel.BackgroundTransparency = 1
             tLabel.Text = options.Name or "Toggle"
@@ -668,6 +671,8 @@ function Lonum:CreateWindow(options)
             tLabel.Font = Lonum.Theme.Font
             tLabel.TextSize = 13
             tLabel.TextXAlignment = Enum.TextXAlignment.Left
+            tLabel.TextWrapped = true
+            tLabel.AutomaticSize = Enum.AutomaticSize.Y
             tLabel.Parent = tFrame
 
             local tBox = Instance.new("Frame")
@@ -743,6 +748,7 @@ function Lonum:CreateWindow(options)
             local sFrame = Instance.new("Frame")
             sFrame.Size = UDim2.new(1, 0, 0, 55)
             sFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
+            sFrame.AutomaticSize = Enum.AutomaticSize.Y
             sFrame.Parent = TabPage
 
             local sCorner = Instance.new("UICorner")
@@ -755,7 +761,7 @@ function Lonum:CreateWindow(options)
             sStroke.Parent = sFrame
 
             local sLabel = Instance.new("TextLabel")
-            sLabel.Size = UDim2.new(1, -20, 0, 20)
+            sLabel.Size = UDim2.new(1, -60, 0, 20)
             sLabel.Position = UDim2.new(0, 15, 0, 10)
             sLabel.BackgroundTransparency = 1
             sLabel.Text = options.Name or "Slider"
@@ -763,6 +769,8 @@ function Lonum:CreateWindow(options)
             sLabel.Font = Lonum.Theme.Font
             sLabel.TextSize = 13
             sLabel.TextXAlignment = Enum.TextXAlignment.Left
+            sLabel.TextWrapped = true
+            sLabel.AutomaticSize = Enum.AutomaticSize.Y
             sLabel.Parent = sFrame
 
             local sValLabel = Instance.new("TextLabel")
@@ -860,6 +868,7 @@ function Lonum:CreateWindow(options)
             dropFrame.Size = UDim2.new(1, 0, 0, 42)
             dropFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
             dropFrame.ClipsDescendants = true
+            dropFrame.AutomaticSize = Enum.AutomaticSize.Y
             dropFrame.Parent = TabPage
 
             local dropCorner = Instance.new("UICorner")
@@ -876,10 +885,11 @@ function Lonum:CreateWindow(options)
             dropBtn.BackgroundTransparency = 1
             dropBtn.Text = ""
             dropBtn.AutoButtonColor = false
+            dropBtn.AutomaticSize = Enum.AutomaticSize.Y
             dropBtn.Parent = dropFrame
 
             local dTitle = Instance.new("TextLabel")
-            dTitle.Size = UDim2.new(0.5, 0, 1, 0)
+            dTitle.Size = UDim2.new(0.5, -5, 0, 42)
             dTitle.Position = UDim2.new(0, 15, 0, 0)
             dTitle.BackgroundTransparency = 1
             dTitle.Text = options.Name or "Dropdown"
@@ -887,17 +897,21 @@ function Lonum:CreateWindow(options)
             dTitle.Font = Lonum.Theme.Font
             dTitle.TextSize = 13
             dTitle.TextXAlignment = Enum.TextXAlignment.Left
+            dTitle.TextWrapped = true
+            dTitle.AutomaticSize = Enum.AutomaticSize.Y
             dTitle.Parent = dropBtn
 
             local dValue = Instance.new("TextLabel")
-            dValue.Size = UDim2.new(0.5, -30, 1, 0)
-            dValue.Position = UDim2.new(0.5, 10, 0, 0)
+            dValue.Size = UDim2.new(0.5, -20, 0, 42)
+            dValue.Position = UDim2.new(0.5, 0, 0, 0)
             dValue.BackgroundTransparency = 1
             dValue.Text = (options.CurrentOption[1] or "") .. " ▾"
             dValue.TextColor3 = Lonum.Theme.TextDim
             dValue.Font = Lonum.Theme.Font
             dValue.TextSize = 12
             dValue.TextXAlignment = Enum.TextXAlignment.Right
+            dValue.TextWrapped = true
+            dValue.AutomaticSize = Enum.AutomaticSize.Y
             dValue.Parent = dropBtn
 
             local isOpen = false
@@ -1015,6 +1029,7 @@ function Lonum:CreateWindow(options)
             local kFrame = Instance.new("Frame")
             kFrame.Size = UDim2.new(1, 0, 0, 42)
             kFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
+            kFrame.AutomaticSize = Enum.AutomaticSize.Y
             kFrame.Parent = TabPage
 
             local kCorner = Instance.new("UICorner")
@@ -1027,7 +1042,7 @@ function Lonum:CreateWindow(options)
             kStroke.Parent = kFrame
 
             local kLabel = Instance.new("TextLabel")
-            kLabel.Size = UDim2.new(1, -100, 1, 0)
+            kLabel.Size = UDim2.new(1, -100, 0, 42)
             kLabel.Position = UDim2.new(0, 15, 0, 0)
             kLabel.BackgroundTransparency = 1
             kLabel.Text = options.Name or "Keybind"
@@ -1035,6 +1050,8 @@ function Lonum:CreateWindow(options)
             kLabel.Font = Lonum.Theme.Font
             kLabel.TextSize = 13
             kLabel.TextXAlignment = Enum.TextXAlignment.Left
+            kLabel.TextWrapped = true
+            kLabel.AutomaticSize = Enum.AutomaticSize.Y
             kLabel.Parent = kFrame
 
             local kBtn = Instance.new("TextButton")
