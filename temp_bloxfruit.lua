@@ -529,14 +529,6 @@ local function TweenTo(targetCFrame)
 
     local duration = math.max(distance / cfg.TweenSpeed, 0.05)
 
-    pcall(function()
-        local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-        if remote then
-            local req = remote:FindFirstChild("RequestStreamAroundAsync")
-            if req then req:FireServer(targetPos) end
-        end
-    end)
-
     if activeTween then activeTween:Cancel() end
 
     activeTween = TweenService:Create(
@@ -903,7 +895,7 @@ local function CollectNearestChest()
             end)
 
             local dist = (hrp.Position - targetPart.Position).Magnitude
-            if dist > 300 then
+            if dist > 280 then
                 TweenTo(targetPart.CFrame)
             else
                 if not isCollectingChest then
@@ -1597,20 +1589,28 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
 
                             pcall(function()
                                 if RegisterAttackEvent then
-                                    RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
+                                    task.spawn(function()
+                                        RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
+                                    end)
                                 end
                                 if RegisterHitEvent then
-                                    RegisterHitEvent:FireServer(primaryPart, additionalHits, nil, sessionSecret)
+                                    task.spawn(function()
+                                        RegisterHitEvent:FireServer(primaryPart, additionalHits, nil, sessionSecret)
+                                    end)
                                 end
                             end)
                         else
                             local primaryDict = hitTargets[1]
                             pcall(function()
                                 if RegisterAttackEvent then
-                                    RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
+                                    task.spawn(function()
+                                        RegisterAttackEvent:FireServer(0, Random.new():NextInteger(1, 4))
+                                    end)
                                 end
                                 if RegisterHitEvent then
-                                    RegisterHitEvent:FireServer(primaryDict.HitPart, {}, nil, sessionSecret)
+                                    task.spawn(function()
+                                        RegisterHitEvent:FireServer(primaryDict.HitPart, {}, nil, sessionSecret)
+                                    end)
                                 end
                             end)
                         end
@@ -2858,13 +2858,12 @@ local function GetTargetRaidIsland()
     local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
     if not myHrp or not raidMap then return nil, 0 end
 
-    -- 1. Cari tahu kita sedang berada di pulau stage berapa (Pulau Paling Dekat secara fisik)
     local currentIslandNum = 0
     local closestDistToAny = math.huge
 
     for _, island in ipairs(raidMap:GetChildren()) do
         if string.match(island.Name, "RaidIsland") then
-            local iPos = island:IsA("Model") and island:GetBoundingBox().Position or island.Position
+            local iPos = GetSafePosition(island)
             local dist = (myHrp.Position - iPos).Magnitude
             if dist < closestDistToAny then
                 closestDistToAny = dist
@@ -2874,8 +2873,6 @@ local function GetTargetRaidIsland()
         end
     end
 
-    -- 2. Dari pulau tempat kita berpijak, cari pulau selanjutnya (Stage lebih besar)
-    -- yang posisinya paling dekat dengan kita, agar kita tidak nyasar ke raid tim lain
     local targetIsland = nil
     local targetIslandNum = currentIslandNum
     local shortestDistToNext = math.huge
@@ -2885,12 +2882,10 @@ local function GetTargetRaidIsland()
             local numStr = string.match(island.Name, "%d+")
             local islandNum = numStr and tonumber(numStr) or 0
 
-            -- Hanya perhatikan pulau yang stage-nya Lanjut (> dari posisi sekarang)
             if islandNum > currentIslandNum then
-                local iPos = island:IsA("Model") and island:GetBoundingBox().Position or island.Position
+                local iPos = GetSafePosition(island)
                 local dist = (myHrp.Position - iPos).Magnitude
 
-                -- Ambil yang paling dekat dari semua pulau lanjutan yang tersedia (Max 3500 studs to prevent cross-team flight)
                 if dist < shortestDistToNext and dist <= 3500 then
                     shortestDistToNext = dist
                     targetIsland = island
@@ -2900,7 +2895,6 @@ local function GetTargetRaidIsland()
         end
     end
 
-    -- Jika tidak ada pulau lanjutan (misal sudah di Island 5 atau belum terbuka), bertahan di pulau saat ini
     if not targetIsland then
         for _, island in ipairs(raidMap:GetChildren()) do
             if string.match(island.Name, "RaidIsland") then
@@ -3348,6 +3342,21 @@ local function StartAutoDungeon()
                             else
                                 lastTargetHealthChangeAt = now
                             end
+                        end
+                    end
+                end
+
+                if enemiesFolder then
+                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                        if enemy.Parent == enemiesFolder and enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy) then
+                            targetEnemy = enemy
+                            currentTargetInstance = targetEnemy
+                            if targetEnemy then
+                                local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                                lastTargetHealth = h and h.Health or -1
+                                lastTargetHealthChangeAt = now
+                            end
+                            break
                         end
                     end
                 end
