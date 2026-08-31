@@ -212,6 +212,7 @@ local cachedWeaponCategory = nil
 local lastAttackAt = 0
 local lastTargetRefreshAt = 0
 local lastEvasionMoveAt = 0
+local lastSubmergedTeleportAt = 0
 local workerGeneration = 10
 
 local teleportTravelKey = nil
@@ -378,12 +379,12 @@ local SEA3 = {
 	{ Min = 2525, Max = 2549, Quest = "TikiQuest2", Stage = 2, Name = "Isle Champions", Mob = "Isle Champion", Count = 8, NPC = Vector3.new(-16539, 55, 1051), MobPos = Vector3.new(-16847, 55, 1002) },
 	{ Min = 2550, Max = 2574, Quest = "TikiQuest3", Stage = 1, Name = "Serpent Hunter", Mob = "Serpent Hunter", Count = 8, NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197), MobPos = Vector3.new(-16586.220703, 107.084724, 1341.448608) },
 	{ Min = 2575, Max = 2599, Quest = "TikiQuest3", Stage = 2, Name = "Skull Slayer", Mob = "Skull Slayer", Count = 8, NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197), MobPos = Vector3.new(-16666.9453, 176.768646, 1491.6416) },
-	{ Min = 2600, Max = 2624, Quest = "SubmergedQuest1", Stage = 1, Name = "Reef Bandit", Mob = "Reef Bandit", Count = 8, NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883), MobPos = Vector3.new(10978.163086, -2023.948853, 9181.994141), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
-	{ Min = 2625, Max = 2649, Quest = "SubmergedQuest1", Stage = 2, Name = "Coral Pirate", Mob = "Coral Pirate", Count = 8, NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883), MobPos = Vector3.new(10733.620117, -2010.045288, 9343.441406), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
-	{ Min = 2650, Max = 2674, Quest = "SubmergedQuest2", Stage = 1, Name = "Sea Chanter", Mob = "Sea Chanter", Count = 8, NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172), MobPos = Vector3.new(10623.348633, -2046.116455, 10102.416016), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
-	{ Min = 2675, Max = 2699, Quest = "SubmergedQuest2", Stage = 2, Name = "Ocean Prophet", Mob = "Ocean Prophet", Count = 8, NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172), MobPos = Vector3.new(11041.423828, -1949.248901, 10147.605469), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
-	{ Min = 2675, Max = 2699, Quest = "SubmergedQuest3", Stage = 1, Name = "High Disciple", Mob = "High Disciple", Count = 8, NPC = Vector3.new(9637.719727, -1992.420532, 9614.042969), MobPos = Vector3.new(9830.585938, -1941.134888, 9698.757812), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
-	{ Min = 2700, Max = 2800, Quest = "SubmergedQuest3", Stage = 2, Name = "Grand Devotee", Mob = "Grand Devotee", Count = 8, NPC = Vector3.new(9637.719727, -1992.420532, 9614.042969), MobPos = Vector3.new(9655.575195, -1937.794800, 10078.261719), TeleportNpc = Vector3.new(-16266.443359, 25.253195, 1374.939331) },
+	{ Min = 2600, Max = 2624, Quest = "SubmergedQuest1", Stage = 1, Name = "Reef Bandit", Mob = "Reef Bandit", Count = 8, NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883), MobPos = Vector3.new(10978.163086, -2023.948853, 9181.994141), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
+	{ Min = 2625, Max = 2649, Quest = "SubmergedQuest1", Stage = 2, Name = "Coral Pirate", Mob = "Coral Pirate", Count = 8, NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883), MobPos = Vector3.new(10733.620117, -2010.045288, 9343.441406), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
+	{ Min = 2650, Max = 2674, Quest = "SubmergedQuest2", Stage = 1, Name = "Sea Chanter", Mob = "Sea Chanter", Count = 8, NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172), MobPos = Vector3.new(10623.348633, -2046.116455, 10102.416016), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
+	{ Min = 2675, Max = 2699, Quest = "SubmergedQuest2", Stage = 2, Name = "Ocean Prophet", Mob = "Ocean Prophet", Count = 8, NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172), MobPos = Vector3.new(11041.423828, -1949.248901, 10147.605469), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
+	{ Min = 2675, Max = 2699, Quest = "SubmergedQuest3", Stage = 1, Name = "High Disciple", Mob = "High Disciple", Count = 8, NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055), MobPos = Vector3.new(9830.585938, -1941.134888, 9698.757812), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
+	{ Min = 2700, Max = 2800, Quest = "SubmergedQuest3", Stage = 2, Name = "Grand Devotee", Mob = "Grand Devotee", Count = 8, NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055), MobPos = Vector3.new(9615.085938, -1993.446533, 9928.485352), TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926) },
 }
 
 local ELITE_HUNTER_SPAWNS = {
@@ -409,6 +410,19 @@ local ELITE_HUNTER_SPAWNS = {
         Vector3.new(6062.551270, 184.355728, -2058.017334),
         Vector3.new(5846.037109, 63.953339, 2312.996338)
     }
+}
+
+local IslandProximity = {
+    ["Port Town"] = "Hydra Island",
+    ["Great Tree"] = "Floating Turtle",
+    ["Castle on the Sea"] = "Hydra Island",
+    ["Haunted Castle"] = "Floating Turtle",
+    ["Sea of Treats"] = "Tiki Outpost",
+    ["Submerged Island"] = "Tiki Outpost"
+}
+
+local FightingStyleNPC = {
+    ["Godhuman"] = Vector3.new(-13774.933594, 334.685089, -9878.292969)
 }
 
 selectedBossName = BOSSES[1] and BOSSES[1].Name or nil
@@ -446,55 +460,6 @@ end
 -- [ SUBMERGED & MOVEMENT SYSTEM ]
 --==================================================
 
--- Centralized function for handling teleportation to/from Submerged NPC
-local lastSubmergedTeleportAt = 0
-local function HandleSubmerged(targetPos)
-    if game.PlaceId ~= 7449423635 then return false end -- HANYA SEA 3
-
-    local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    local isCurrentlySubmerged = (hrp.Position.Y < -1000)
-    local isTargetSubmerged = (targetPos.Y < -1000)
-
-    if isCurrentlySubmerged and not isTargetSubmerged then
-        local subWorkerSubmerged = Vector3.new(10480.9, -2091, 9363)
-        local dist = (hrp.Position - subWorkerSubmerged).Magnitude
-        if dist > 35 then
-            return "TRAVEL", subWorkerSubmerged
-        else
-            if os.clock() - lastSubmergedTeleportAt > 5 then
-                lastSubmergedTeleportAt = os.clock()
-                task.spawn(function()
-                    pcall(function()
-                        local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-                        net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToTikiOutpost")
-                    end)
-                end)
-            end
-            return true
-        end
-    elseif not isCurrentlySubmerged and isTargetSubmerged then
-        local subWorkerTiki = Vector3.new(-16266.4, 25.3, 1374.9)
-        local dist = (hrp.Position - subWorkerTiki).Magnitude
-        if dist > 35 then
-            return "TRAVEL", subWorkerTiki
-        else
-            if os.clock() - lastSubmergedTeleportAt > 5 then
-                lastSubmergedTeleportAt = os.clock()
-                task.spawn(function()
-                    pcall(function()
-                        local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-                        net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToSubmergedIsland")
-                    end)
-                end)
-            end
-            return true
-        end
-    end
-    return false
-end
-
 
 
 local function ToggleFloat(state)
@@ -523,33 +488,25 @@ local function TweenTo(targetCFrame)
 
     local targetPos = targetCFrame.Position
 
-    if targetPos.Y > -500 and targetPos.Y < 25 then
+    local distance = (hrp.Position - targetPos).Magnitude
+
+    if targetPos.Y > -500 and targetPos.Y < 50 then
         local waterObj = workspace:FindFirstChild("Water")
         if waterObj and waterObj:IsA("BasePart") then
             local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
-            if targetPos.Y <= waterTop + 5 then
-                targetPos = Vector3.new(targetPos.X, waterTop + 25, targetPos.Z)
+            if targetPos.Y <= waterTop + 20 then
+                targetPos = Vector3.new(targetPos.X, waterTop + 45, targetPos.Z)
                 targetCFrame = CFrame.new(targetPos)
             end
         else
-            if targetPos.Y < 20 then
-                targetPos = Vector3.new(targetPos.X, 25, targetPos.Z)
+            if targetPos.Y < 40 then
+                targetPos = Vector3.new(targetPos.X, 45, targetPos.Z)
                 targetCFrame = CFrame.new(targetPos)
             end
         end
     end
-    local subState, subPos = HandleSubmerged(targetPos)
-    if subState == true then
-        if activeTween then activeTween:Cancel(); activeTween = nil end
-        return
-    elseif subState == "TRAVEL" then
-        targetPos = subPos
-        targetCFrame = CFrame.new(targetPos)
-    end
 
     ToggleFloat(true)
-
-    local distance = (hrp.Position - targetPos).Magnitude
 
     if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 2 then
         if activeTween then
@@ -839,8 +796,6 @@ local function CollectNearestFruit()
             end
         end
         if nearestFruit then
-            if HandleSubmerged(nearestFruit.Position) then return false end
-
             SafeTouch(nearestFruit, hrp, 50)
             return true
         end
@@ -915,8 +870,6 @@ local function CollectNearestChest()
     if nearestChest then
         local targetPart = nearestChest:IsA("Model") and (nearestChest.PrimaryPart or nearestChest:FindFirstChildWhichIsA("BasePart")) or nearestChest
         if targetPart then
-            if HandleSubmerged(targetPart.Position) then return false end
-
             pcall(function()
                 local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
                 if remote then
@@ -2299,13 +2252,7 @@ local function StartAutoCakePrince()
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
                 -- Special override for boss
                 local mapFolder = workspace:FindFirstChild("Map")
-                local cakeDimension = mapFolder and mapFolder:FindFirstChild("Cake Prince Dimension") or nil
-                if not cakeDimension then
-                    local locations = workspace:FindFirstChild("_WorldOrigin") and workspace._WorldOrigin:FindFirstChild("Locations")
-                    if locations and locations:FindFirstChild("Cake Prince Dimension") then
-                        cakeDimension = locations["Cake Prince Dimension"]
-                    end
-                end
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
 
                 if not cakeDimension and mapFolder then
                     for _, child in ipairs(mapFolder:GetChildren()) do
@@ -2319,7 +2266,6 @@ local function StartAutoCakePrince()
                 local hasDoughKing = false
                 local enemies = workspace:FindFirstChild("Enemies")
                 if enemies then
-                    if enemies:FindFirstChild("Dough King") then hasDoughKing = true; tName = "Dough King" end
                     if enemies:FindFirstChild("Cake Prince") then tName = "Cake Prince" end
                 end
 
@@ -2487,6 +2433,207 @@ local function StartAutoCakePrince()
     end)
 end
 
+local isAutodoughKing = false
+local doughKingWorkerGeneration = 0
+
+local function StartAutoDoughKing()
+    local generation = doughKingWorkerGeneration
+    ToggleFloat(true)
+
+    local defaultCakeFallback = { Name = "Cookie Crafters", Mob = "Cookie Crafter", MobPos = Vector3.new(-2374, 38, -12125) }
+    local activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
+
+    task.spawn(function()
+        while isAutodoughKing and ScriptContext.Running and generation == doughKingWorkerGeneration do
+            local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper or cfg.AttackIntervalFast
+            local myChar = GetCharacter()
+            local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+            if myHrp then
+                local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
+                -- Special override for boss
+                local mapFolder = workspace:FindFirstChild("Map")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
+
+                if not cakeDimension and mapFolder then
+                    for _, child in ipairs(mapFolder:GetChildren()) do
+                        if string.find(string.lower(child.Name), "dimension") and string.find(string.lower(child.Name), "cake") then
+                            cakeDimension = child
+                            break
+                        end
+                    end
+                end
+
+                local hasDoughKing = false
+                local enemies = workspace:FindFirstChild("Enemies")
+                if enemies then
+                    if enemies:FindFirstChild("Dough King") then hasDoughKing = true; tName = "Dough King" end
+                end
+
+                if cakeDimension and not hasDoughKing and tName ~= "Dough King" then tName = "Dough King" end
+                ExecuteAttack(myChar, myHrp, false, tName)
+            end
+
+            if interval <= 0 then task.wait() else task.wait(interval) end
+        end
+    end)
+
+    local doughBringConn
+    doughBringConn = RunService.Heartbeat:Connect(function()
+        if not isAutoDoughKing or not ScriptContext.Running or generation ~= doughKingWorkerGeneration then
+            if doughBringConn then doughBringConn:Disconnect() end
+            return
+        end
+        local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+        local target = currentTargetInstance
+        local tHrp = target and target:FindFirstChild("HumanoidRootPart")
+        if myHrp and tHrp then
+            local enemiesFolder = workspace:FindFirstChild("Enemies")
+            if enemiesFolder then
+                local targetMobName = target.Name
+                if targetMobName == "Dough King" then return end
+
+                local magnetPos = activeCakeMobInfo.MobPos or tHrp.Position
+                if magnetPos then
+						    UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
+                        end
+            end
+        end
+    end)
+    ScriptContext:AddConnection(doughBringConn)
+
+    task.spawn(function()
+        while isAutoDoughKing and ScriptContext.Running and generation == doughKingWorkerGeneration do
+            local ok, err = pcall(function()
+                local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+                if not myHrp then return end
+
+                local now = os.clock()
+                if now - lastEvasionTime >= cfg.EvasionTick then
+                    lastEvasionTime = now
+                    local radius = math.max(0, math.floor(cfg.EvasionRadius))
+                    currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                end
+
+                local status = getDripMamaStatus()
+
+                if status == "ready" then
+                    CommF_:InvokeServer("CakePrinceSpawner")
+                end
+
+                local mapFolder = workspace:FindFirstChild("Map")
+                local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
+
+                local targetMobInfo = activeCakeMobInfo
+                local targetMobName = targetMobInfo.Mob
+
+                if cakeDimension then
+                    targetMobName = "Dough King"
+                else
+                    if not activeCakeMobInfo then
+                        activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
+                    end
+                    targetMobInfo = activeCakeMobInfo
+                    targetMobName = targetMobInfo.Mob
+                end
+
+                local targetEnemy = currentTargetInstance
+
+                if targetEnemy then
+                    local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                    if h then
+                        if h.Health ~= lastTargetHealth then
+                            lastTargetHealth = h.Health
+                            lastTargetHealthChangeAt = now
+                        end
+
+                        if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
+                            if not IsBossEntity(targetEnemy) and targetEnemy.Name ~= "Cake Prince" and targetEnemy.Name ~= "Dough King" then
+                                enemyBlacklist[targetEnemy] = now + 3
+                                currentTargetInstance = nil
+                                isReadyToAttack = false
+                                return
+                            else
+                                lastTargetHealthChangeAt = now
+                            end
+                        end
+                    end
+                end
+
+                if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
+                    targetEnemy = GetTargetEnemy(targetMobName)
+                    if not targetEnemy and not cakeDimension then
+                        local checkNewMob = GetBestCakeMob()
+                        if checkNewMob then
+                            activeCakeMobInfo = checkNewMob
+                            targetMobInfo = activeCakeMobInfo
+                            targetMobName = targetMobInfo.Mob
+                            targetEnemy = GetTargetEnemy(targetMobName)
+                        end
+                    end
+
+                    currentTargetInstance = targetEnemy
+                    if targetEnemy then
+                        local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+                        lastTargetHealth = h and h.Health or -1
+                        lastTargetHealthChangeAt = now
+                    end
+                end
+
+                if targetEnemy then
+                    local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
+                    if tHrp then
+                        ToggleFloat(true)
+                        local mobProfile = GetMobProfileByName(targetEnemy.Name)
+                        local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+
+                        if cakeDimension then centerPos = tHrp.Position end
+
+                        local targetDistance = (centerPos - myHrp.Position).Magnitude
+                        if targetDistance > 80 then
+                            TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+                            lastEvasionMoveAt = now
+                        else
+                            TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+                        end
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
+                    end
+                else
+                    currentTargetInstance = nil
+                    isReadyToAttack = false
+                    ToggleFloat(true)
+
+                    if cakeDimension then
+                        local dimPos = GetSafePosition(cakeDimension)
+                        local distToDim = (myHrp.Position - dimPos).Magnitude
+                        if distToDim > 80 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(dimPos + Vector3.new(0, cfg.TweenHeight, 0), dimPos))
+                            end
+                        else
+                            TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
+                        end
+                    else
+                        local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
+                        if distToSpawn > 80 then
+                            if now - lastEvasionMoveAt >= cfg.EvasionTick then
+                                lastEvasionMoveAt = now
+                                TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos))
+                            end
+                        else
+                            TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
+                        end
+                    end
+                end
+            end)
+            if not ok then warn("[Lonum Error]: " .. tostring(err)); currentTargetInstance = nil; isReadyToAttack = false end
+            task.wait()
+        end
+    end)
+end
+
 local function StartAutoFarm()
 	local generation = workerGeneration
 
@@ -2496,12 +2643,37 @@ local function StartAutoFarm()
 	task.spawn(function()
 		while enabled and ScriptContext.Running and generation == workerGeneration do
 			local ok, err = pcall(function()
-				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+				local char = GetCharacter()
+                local myHrp = char and char:FindFirstChild("HumanoidRootPart")
+
 				if not myHrp then return end
 
 				local hasQuestUI = HasActiveQuest()
 				local profile = GetQuestProfile()
 				if not profile then return end
+
+				if profile.TeleportNpc then
+					local isCurrentlySubmerged = player:GetAttribute("ExactLocation") == "Submerged Island"
+
+					if not isCurrentlySubmerged then
+                        local targetPos = typeof(profile.TeleportNpc) == "Vector3" and profile.TeleportNpc or profile.TeleportNpc.Position
+						local dist = (myHrp.Position - targetPos).Magnitude
+						if dist > 35 then
+							TweenTo(CFrame.new(profile.TeleportNpc))
+							return
+						else
+							if os.clock() - lastSubmergedTeleportAt > 5 then
+								lastSubmergedTeleportAt = os.clock()
+								task.spawn(function()
+									pcall(function()
+										game:GetService("ReplicatedStorage").Modules.Net:WaitForChild("RF/SubmarineWorkerSpeak"):InvokeServer("TravelToSubmergedIsland")
+									end)
+								end)
+							end
+							return
+						end
+					end
+				end
 
 				local now = os.clock()
 				if now - lastEvasionTime >= cfg.EvasionTick then
@@ -3749,7 +3921,7 @@ local function StartAutoFactory()
         while isAutoFactory and ScriptContext.Running and gen == autoFactoryWorker do
             local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
             if not hrp then
-                task.wait(1)
+                task.wait()
             else
 
             local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -4323,6 +4495,31 @@ task.spawn(function()
                 StartAutoCakePrince()
             else
                 cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
+                StopAllActivities()
+            end
+        end,
+    })
+
+
+    Tabs.Sea3:CreateToggle({
+        Name = "Auto Dough King", CurrentValue = false, Flag = "ToggleAutoDoughKing",
+        Callback = function(Value)
+            isAutoDoughKing = Value
+            if Value then
+                enabled = false
+                isAutoBone = false
+                isAutoMaterial = false
+                if FarmToggle then FarmToggle:Set(false) end
+
+                doughKingorkerGeneration = doughKingWorkerGeneration + 1
+
+                if activeTween then activeTween:Cancel(); activeTween = nil end
+                isReadyToAttack = false
+                currentTargetInstance = nil
+                lastTargetPos = nil
+                StartAutoDoughKing()
+            else
+                doughKingWorkerGeneration = doughKingWorkerGeneration + 1
                 StopAllActivities()
             end
         end,
