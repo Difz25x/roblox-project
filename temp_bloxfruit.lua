@@ -2851,7 +2851,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    while task.wait(3) do -- Interval 3 detik agar aman dari limit server
+    while task.wait(0.2) do -- Interval 3 detik agar aman dari limit server
         if not ScriptContext.Running then break end
         if isAutoSpinBones then
             pcall(function()
@@ -2984,7 +2984,7 @@ local function StartAutoRaid()
 
                 if interval <= 0 then task.wait() else task.wait(interval) end
             else
-                task.wait(cfg.ThreadSleep)
+                task.wait()
             end
         end
     end)
@@ -3121,7 +3121,7 @@ local function StartAutoRaid()
 
                     if raidEmptyTimer == 0 then raidEmptyTimer = now end
 
-                    if isAutoRaidNextIsland and (now - raidEmptyTimer >= 2.5) then
+                    if isAutoRaidNextIsland and (now - raidEmptyTimer >= 1) then
                         local activeIsland, activeIslandNum = GetTargetRaidIsland()
                         if activeIsland then
                             local iPos = GetSafePosition(activeIsland)
@@ -4135,6 +4135,48 @@ task.spawn(function()
                     Duration = 2
                 })
             end
+        end
+    })
+
+    Tabs.Settings:CreateSection("Auto Redeem Codes")
+    Tabs.Settings:CreateButton({
+        Name = "Redeem All Codes",
+        Callback = function()
+            local codes = {
+                "EASTEREXP", "fudd10", "fudd10_V2", "Chandler", "BIGNEWS",
+                "KITT_RESET", "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1",
+                "Sub2Fer999", "Enyu_is_Pro", "JCWK", "StarcodeHEO", "MagicBUS",
+                "KittGaming", "Sub2CaptainMaui", "Sub2OfficialNoobie",
+                "TheGreatAce", "Sub2NoobMaster123", "Sub2Daigrock", "Axiore",
+                "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUB2GAMERROBOT_EXP1"
+            }
+            task.spawn(function()
+                local redeemEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Redeem")
+                if redeemEvent then
+                    getgenv().LonumObject:Notify({
+                        Title = "Redeem Codes",
+                        Content = "Starting to redeem " .. tostring(#codes) .. " codes...",
+                        Duration = 3
+                    })
+                    for _, code in ipairs(codes) do
+                        pcall(function()
+                            redeemEvent:InvokeServer(code)
+                        end)
+                        task.wait(1)
+                    end
+                    getgenv().LonumObject:Notify({
+                        Title = "Redeem Finished",
+                        Content = "Finished trying to redeem all codes.",
+                        Duration = 5
+                    })
+                else
+                    getgenv().LonumObject:Notify({
+                        Title = "Error",
+                        Content = "Redeem remote event not found!",
+                        Duration = 3
+                    })
+                end
+            end)
         end
     })
 
