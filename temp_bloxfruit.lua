@@ -80,6 +80,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local Lighting = game:GetService("Lighting")
 
 local hasFireTouch = type(firetouchinterest) == "function"
 local hasProximity = type(fireproximityprompt) == "function"
@@ -1357,8 +1358,10 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
                 local eHum = enemy:FindFirstChildOfClass("Humanoid")
                 if eHrp and eHum and eHum.Health > 0 then
                     local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
-                    if distToPlayer <= (cfg.BringRadius * 2) then
+                    if distToPlayer <= cfg.MaxPullRange then
                         eHrp.CFrame = gatherCFrame
+                        eHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        eHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                         if eHrp.CanCollide then eHrp.CanCollide = false end
                         if eHum.PlatformStand == false then eHum.PlatformStand = true end
                     end
@@ -2118,8 +2121,8 @@ local function StartAutoBone()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Set ReadyToAttack EARLY so Magnet can pull them!
-                        isReadyToAttack = targetDistance <= cfg.BringRadius
+                        -- Set ReadyToAttack based on ACTUAL enemy position, not MobPos
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     currentTargetInstance = nil
@@ -2447,7 +2450,7 @@ local function StartAutoCakePrince()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     currentTargetInstance = nil
@@ -2536,7 +2539,7 @@ local function StartAutoFarm()
 									end
 								end
 
-								isReadyToAttack = targetDistance <= cfg.BringRadius
+								isReadyToAttack = (GetSafePosition(bHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 								currentTargetInstance = spawnedBoss
 							end
 						end
@@ -3109,8 +3112,8 @@ local function StartAutoRaid()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Set ReadyToAttack EARLY so Magnet can pull them!
-                        isReadyToAttack = targetDistance <= cfg.BringRadius
+                        -- Set ReadyToAttack based on ACTUAL enemy position, not MobPos
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     isReadyToAttack = false
@@ -3258,7 +3261,7 @@ local function StartFarmNearest()
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
                         -- Set ReadyToAttack EARLY so Magnet can pull them!
-                        isReadyToAttack = targetDistance <= cfg.BringRadius
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     currentTargetInstance = nil
@@ -3497,7 +3500,7 @@ local function StartAutoDungeon()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        isReadyToAttack = targetDistance <= cfg.HitRadius
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     isReadyToAttack = false
@@ -3656,7 +3659,7 @@ local function StartAutoKillVolcano()
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
 
-                        isReadyToAttack = (tHrp.Position - myHrp.Position).Magnitude <= cfg.HitRadius or targetDistance <= cfg.HitRadius
+                        isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
                     currentTargetInstance = nil
@@ -4006,7 +4009,7 @@ local function StartAutoEliteHunter()
                             else
                                 TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                             end
-                            isReadyToAttack = targetDistance <= cfg.HitRadius
+                            isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                         end
                 else
                     currentTargetInstance = nil
@@ -4438,6 +4441,86 @@ task.spawn(function()
     Tabs.SeaEvents:CreateSlider({
         Name = "Boat Max Speed", Range = {50, 300}, Increment = 10, CurrentValue = 300,
         Flag = "SliderBoatMaxSpeed", Callback = function(Value) cfg.boatMaxSpeed = Value end,
+    })
+
+    Tabs.SeaEvents:CreateButton({
+        Name = "Remove Rocks",
+        Callback = function()
+            local Rocks = Workspace:WaitForChild("Rocks")
+
+            if Rocks then
+                Rocks:Destroy()
+            end
+        end,
+    })
+
+    Tabs.SeaEvents:CreateButton({
+        Name = "Remove Dark (Danger 6)",
+        Callback = function()
+            local Layers = Lighting:FindFirstChild("LightingLayers")
+            if not Layers then return end
+
+            local Fog = Layers:FindFirstChild("DarkFog")
+            if not Fog then return end
+
+            Fog:SetAttribute("ZIndex", 0)
+            Fog.Density = 0
+            Fog.Offset = 0
+
+            local Intensity = Fog:FindFirstChild("Intensity")
+            if Intensity then
+                Intensity.Value = 0
+            end
+        end,
+    })
+
+    Tabs.SeaEvents:CreateSection("Mirage Island")
+    Tabs.SeaEvents:CreateToggle({
+        Name = "Auto Mirage Chests",
+        CurrentValue = false,
+        Callback = function(state)
+            autoChest = state
+            
+            if not state then
+                if activeTween then
+                    activeTween:Cancel()
+                    activeTween = nil
+                end
+                return
+            end
+
+            task.spawn(function()
+                while autoChest do
+                    local mysticIsland = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MysticIsland")
+                    local chestsFolder = mysticIsland and mysticIsland:FindFirstChild("Chests")
+                    
+                    if chestsFolder then
+                        local chests = chestsFolder:GetChildren()
+                        local foundChest = false
+                        
+                        for _, chest in ipairs(chests) do
+                            if not autoChest then break end
+                            
+                            if chest:IsA("BasePart") and chest.Parent == chestsFolder then
+                                foundChest = true
+                                
+                                ToggleFloat(true)
+                                TweenTo(chest.CFrame * CFrame.new(0, 3, 0))
+                            end
+                        end
+                        
+                        if not foundChest then
+                            task.wait()
+                        end
+                    else
+                        ToggleFloat(false)
+                        task.wait()
+                    end
+                    
+                    task.wait()
+                end
+            end)
+        end,
     })
 
     Tabs.SeaEvents:CreateSection("Kitsune Island")
@@ -5055,14 +5138,13 @@ task.spawn(function()
                     local commF = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
 
                     while isDebugActive and ScriptContext.Running and gen == debugWorker do
-                        local lighting = game:GetService("Lighting")
-                        local phaseNum = lighting:GetAttribute("MoonPhase") or 0
-                        local isBlueMoon = lighting:GetAttribute("IsBlueMoon") or false
+                        local phaseNum = Lighting:GetAttribute("MoonPhase") or 0
+                        local isBlueMoon = Lighting:GetAttribute("IsBlueMoon") or false
 
                         local phaseName = MoonPhases[phaseNum] or (tostring(phaseNum) .. " (Unknown)")
                         local blueMoonStatus = isBlueMoon and "✅ Active" or "❌ Inactive"
 
-                        if os.clock() - lastCakeCheck > 5 then
+                        if os.clock() - lastCakeCheck > 1 then
                             lastCakeCheck = os.clock()
                             if commF then
                                 pcall(function()
