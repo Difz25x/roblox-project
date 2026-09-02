@@ -603,6 +603,140 @@ function Lonum:CreateWindow(options)
             return self:CreateLabel(options.Content or "")
         end
 
+        function TabObj:CreateSplitView(options)
+            local columns = math.clamp(options.Columns or 2, 1, 4)
+            local spacing = options.Spacing or 8
+
+            local SplitContainer = Instance.new("Frame")
+            SplitContainer.Size = UDim2.new(1, 0, 0, 0)
+            SplitContainer.BackgroundTransparency = 1
+            SplitContainer.AutomaticSize = Enum.AutomaticSize.Y
+            SplitContainer.Parent = TabPage
+
+            local SplitLayout = Instance.new("UIListLayout")
+            SplitLayout.FillDirection = Enum.FillDirection.Horizontal
+            SplitLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            SplitLayout.Padding = UDim.new(0, spacing)
+            SplitLayout.Parent = SplitContainer
+
+            local Cols = {}
+            for i = 1, columns do
+                local ColFrame = Instance.new("Frame")
+                local colWidth = (1 / columns)
+                local offsetDeduction = (spacing * (columns - 1)) / columns
+                ColFrame.Size = UDim2.new(colWidth, -offsetDeduction, 0, 0)
+                ColFrame.BackgroundTransparency = 1
+                ColFrame.AutomaticSize = Enum.AutomaticSize.Y
+                ColFrame.Parent = SplitContainer
+
+                local ColLayout = Instance.new("UIListLayout")
+                ColLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                ColLayout.Padding = UDim.new(0, 8)
+                ColLayout.Parent = ColFrame
+
+                -- Dummy builder functions inside each column
+                local ColObj = { Frame = ColFrame }
+
+                function ColObj:CreateSection(name)
+                    local SecLabel = Instance.new("TextLabel")
+                    SecLabel.Size = UDim2.new(1, 0, 0, 30)
+                    SecLabel.BackgroundTransparency = 1
+                    SecLabel.Text = string.upper(name)
+                    SecLabel.TextColor3 = Lonum.Theme.Accent
+                    SecLabel.Font = Lonum.Theme.FontBold
+                    SecLabel.TextSize = 13
+                    SecLabel.TextXAlignment = Enum.TextXAlignment.Left
+                    SecLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+                    SecLabel.Parent = ColFrame
+                end
+
+                function ColObj:CreateLabel(text)
+                    local lbl = Instance.new("TextLabel")
+                    lbl.Size = UDim2.new(1, 0, 0, 20)
+                    lbl.BackgroundTransparency = 1
+                    lbl.Text = text
+                    lbl.TextColor3 = Lonum.Theme.TextDim
+                    lbl.Font = Lonum.Theme.Font
+                    lbl.TextSize = 12
+                    lbl.TextXAlignment = Enum.TextXAlignment.Left
+                    lbl.TextWrapped = true
+                    lbl.AutomaticSize = Enum.AutomaticSize.Y
+                    lbl.Parent = ColFrame
+
+                    local LabelObj = {}
+                    function LabelObj:Set(newText) lbl.Text = newText end
+                    return LabelObj
+                end
+
+                function ColObj:CreateCard(options)
+                    local CardFrame = Instance.new("Frame")
+                    CardFrame.Size = UDim2.new(1, 0, 0, 0)
+                    CardFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
+                    CardFrame.AutomaticSize = Enum.AutomaticSize.Y
+                    CardFrame.Parent = ColFrame
+
+                    local CardCorner = Instance.new("UICorner")
+                    CardCorner.CornerRadius = Lonum.Theme.CornerRadius
+                    CardCorner.Parent = CardFrame
+
+                    local CardStroke = Instance.new("UIStroke")
+                    CardStroke.Color = Color3.fromRGB(255, 255, 255)
+                    CardStroke.Transparency = 0.95
+                    CardStroke.Parent = CardFrame
+
+                    local CPad = Instance.new("UIPadding")
+                    CPad.PaddingTop = UDim.new(0, 10)
+                    CPad.PaddingBottom = UDim.new(0, 10)
+                    CPad.PaddingLeft = UDim.new(0, 10)
+                    CPad.PaddingRight = UDim.new(0, 10)
+                    CPad.Parent = CardFrame
+
+                    local CLayout = Instance.new("UIListLayout")
+                    CLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                    CLayout.Padding = UDim.new(0, 4)
+                    CLayout.Parent = CardFrame
+
+                    local titleLbl = Instance.new("TextLabel")
+                    titleLbl.Size = UDim2.new(1, 0, 0, 16)
+                    titleLbl.BackgroundTransparency = 1
+                    titleLbl.Text = options.Title or ""
+                    titleLbl.TextColor3 = Lonum.Theme.TextTitle
+                    titleLbl.Font = Lonum.Theme.FontBold
+                    titleLbl.TextSize = 13
+                    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    titleLbl.TextWrapped = true
+                    titleLbl.AutomaticSize = Enum.AutomaticSize.Y
+                    titleLbl.Parent = CardFrame
+
+                    local contentLbl = Instance.new("TextLabel")
+                    contentLbl.Size = UDim2.new(1, 0, 0, 14)
+                    contentLbl.BackgroundTransparency = 1
+                    contentLbl.Text = options.Content or ""
+                    contentLbl.TextColor3 = Lonum.Theme.TextDim
+                    contentLbl.Font = Lonum.Theme.Font
+                    contentLbl.TextSize = 11
+                    contentLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    contentLbl.TextWrapped = true
+                    contentLbl.AutomaticSize = Enum.AutomaticSize.Y
+                    contentLbl.Parent = CardFrame
+
+                    local CardObj = { Frame = CardFrame }
+                    function CardObj:SetContent(newText) contentLbl.Text = newText end
+                    function CardObj:SetTitle(newText) titleLbl.Text = newText end
+                    function CardObj:Destroy() CardFrame:Destroy() end
+                    return CardObj
+                end
+
+                table.insert(Cols, ColObj)
+            end
+
+            local SplitObj = {
+                Columns = Cols,
+                Container = SplitContainer
+            }
+            return SplitObj
+        end
+
         function TabObj:CreateButton(options)
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, 0, 0, 42)
