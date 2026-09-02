@@ -3274,6 +3274,9 @@ local function StartAutoRaid()
             return
         end
 
+        local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
+        if not raidMap then return end
+
         local myChar = GetCharacter()
         local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not currentTargetInstance or not currentTargetInstance.Parent or not currentTargetInstance:FindFirstChildOfClass("Humanoid") or currentTargetInstance:FindFirstChildOfClass("Humanoid").Health <= 0 then
@@ -3316,6 +3319,15 @@ local function StartAutoRaid()
 
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
                 local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
+
+                if not raidMap then
+                    if activeTween then activeTween:Cancel(); activeTween = nil end
+                    ToggleFloat(false)
+                    currentTargetInstance = nil
+                    isReadyToAttack = false
+                    return
+                end
+
                 local targetEnemy = currentTargetInstance
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
