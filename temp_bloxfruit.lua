@@ -4302,8 +4302,8 @@ local function StartAutoEliteHunter()
                     if spawns and #spawns > 0 then
                         if spawnIndex > #spawns then spawnIndex = 1 end
                         local targetSpawn = spawns[spawnIndex]
-                        local distToSpawn = (myHrp.Position - targetSpawn).Magnitude
-                        if distToSpawn > 100 then
+                        local flatDist = (Vector3.new(myHrp.Position.X, 0, myHrp.Position.Z) - Vector3.new(targetSpawn.X, 0, targetSpawn.Z)).Magnitude
+                        if flatDist > 50 then
                             TweenTo(CFrame.new(targetSpawn + Vector3.new(0, 100, 0), targetSpawn))
                         else
                             if not getgenv().EliteWaitStart then getgenv().EliteWaitStart = now end
