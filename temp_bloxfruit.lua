@@ -508,6 +508,7 @@ end
 
 local function GetBestRoute(startPos, targetPos)
     if not cfg.UsePortal or game.PlaceId ~= 7449423635 or not CheckPortalAccess() then return nil end
+    if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap") then return nil end
 
     local bestRoute = nil
     local shortestDist = (startPos - targetPos).Magnitude
@@ -3196,6 +3197,7 @@ local function GetTargetRaidIsland()
 
     local currentIslandNum = 0
     local closestDistToAny = math.huge
+    local currentIslandInstance = nil
 
     for _, island in ipairs(raidMap:GetChildren()) do
         if string.match(island.Name, "RaidIsland") then
@@ -3205,6 +3207,7 @@ local function GetTargetRaidIsland()
                 closestDistToAny = dist
                 local numStr = string.match(island.Name, "%d+")
                 currentIslandNum = numStr and tonumber(numStr) or 0
+                currentIslandInstance = island
             end
         end
     end
@@ -3222,7 +3225,9 @@ local function GetTargetRaidIsland()
                 local iPos = GetSafePosition(island)
                 local dist = (myHrp.Position - iPos).Magnitude
 
-                if dist < shortestDistToNext and dist <= 3500 then
+                -- Memperbesar batas aman dari 3500 ke 15000 stud agar raid island selanjutnya yang letaknya jauh tidak ter-skip,
+                -- dan tetap menjaga agar tidak ke raid island punya player lain (dimensi lain, > 50000 stud).
+                if dist < shortestDistToNext and dist <= 15000 then
                     shortestDistToNext = dist
                     targetIsland = island
                     targetIslandNum = islandNum
@@ -3232,16 +3237,8 @@ local function GetTargetRaidIsland()
     end
 
     if not targetIsland then
-        for _, island in ipairs(raidMap:GetChildren()) do
-            if string.match(island.Name, "RaidIsland") then
-                local numStr = string.match(island.Name, "%d+")
-                local islandNum = numStr and tonumber(numStr) or 0
-                if islandNum == currentIslandNum then
-                    targetIsland = island
-                    break
-                end
-            end
-        end
+        targetIsland = currentIslandInstance
+        targetIslandNum = currentIslandNum
     end
 
     return targetIsland, targetIslandNum
@@ -3409,6 +3406,13 @@ local function StartAutoRaid()
                             local dist = (myHrp.Position - iPos).Magnitude
 
                             if activeIslandNum >= 5 then
+                                -- Jika pemain sudah diteleport keluar (raid selesai) tapi map belum hilang
+                                if dist > 3000 then
+                                    if activeTween then activeTween:Cancel(); activeTween = nil end
+                                    ToggleFloat(false)
+                                    return
+                                end
+
                                 if dist > 80 then
                                     TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
                                 else
@@ -4302,8 +4306,8 @@ local function StartAutoEliteHunter()
                     if spawns and #spawns > 0 then
                         if spawnIndex > #spawns then spawnIndex = 1 end
                         local targetSpawn = spawns[spawnIndex]
-                        local flatDist = (Vector3.new(myHrp.Position.X, 0, myHrp.Position.Z) - Vector3.new(targetSpawn.X, 0, targetSpawn.Z)).Magnitude
-                        if flatDist > 50 then
+                        local distToSpawn = (myHrp.Position - targetSpawn).Magnitude
+                        if distToSpawn > 100 then
                             TweenTo(CFrame.new(targetSpawn + Vector3.new(0, 100, 0), targetSpawn))
                         else
                             if not getgenv().EliteWaitStart then getgenv().EliteWaitStart = now end
@@ -4352,11 +4356,13 @@ task.spawn(function()
 
     local Tabs = {
         Main = Window:CreateTab("Farming"),
-        Combat = Window:CreateTab("Combat & Raid"),
-        Sea2 = Window:CreateTab("Sea 2"),
-        Sea3 = Window:CreateTab("Sea 3"),
+        Raid = Window:CreateTab("Raid"),
+        Dungeon = Window:CreateTab("Dungeon"),
+        PVP = Window:CreateTab("PVP"),
         Travel = Window:CreateTab("Travel & Sea"),
         Stats = Window:CreateTab("Stats & Abilities"),
+        Sea2 = Window:CreateTab("Sea 2"),
+        Sea3 = Window:CreateTab("Sea 3"),
         Misc = Window:CreateTab("Misc"),
         Status = Window:CreateTab("Status"),
         Settings = Window:CreateTab("Settings")
@@ -4668,8 +4674,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateSection("Auto Raid")
-    Tabs.Main:CreateToggle({
+    Tabs.Raid:CreateSection("Auto Raid")
+    Tabs.Raid:CreateToggle({
         Name = "Enable Auto Raid", CurrentValue = false, Flag = "ToggleAutoRaidMaster",
         Callback = function(Value) 
             isAutoRaidKill = Value
@@ -4682,17 +4688,17 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateToggle({
+    Tabs.Raid:CreateToggle({
         Name = "Auto Raid Attack", CurrentValue = false, Flag = "ToggleRaidAttack",
         Callback = function(Value) isAutoRaidAttack = Value end,
     })
 
-    Tabs.Main:CreateToggle({
+    Tabs.Raid:CreateToggle({
         Name = "Auto Raid Bring", CurrentValue = false, Flag = "ToggleRaidBring",
         Callback = function(Value) isAutoRaidBring = Value end,
     })
 
-    Tabs.Main:CreateToggle({
+    Tabs.Raid:CreateToggle({
         Name = "Auto Next Island", CurrentValue = false, Flag = "ToggleRaidNextIsland",
         Callback = function(Value) isAutoRaidNextIsland = Value end,
     })
@@ -4825,7 +4831,7 @@ task.spawn(function()
     })
 
     Tabs.Sea3:CreateSection("Mirage Island")
-    Tabs.Travel:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Mirage Chests",
         CurrentValue = false,
         Callback = function(state)
@@ -4874,7 +4880,7 @@ task.spawn(function()
     })
 
     Tabs.Sea3:CreateSection("Kitsune Island")
-    Tabs.Travel:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Collect Ember",
         CurrentValue = false,
         Flag = "ToggleKitsuneEmber",
@@ -4908,7 +4914,7 @@ task.spawn(function()
     })
 
     Tabs.Sea3:CreateSection("Prehistoric Island")
-    Tabs.Travel:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Start Prehistoric", CurrentValue = false, Flag = "AutoPrehistoricStart",
         Callback = function(Value)
             if not Value then return end -- Abaikan jika toggle dimatikan atau sekadar inisialisasi awal false
@@ -5161,7 +5167,7 @@ task.spawn(function()
     })
 
     Tabs.Settings:CreateToggle({
-        Name = "Portal Teleport Bypass (Sea 3)", CurrentValue = cfg.UsePortal,
+        Name = "Portal Teleport Bypass", CurrentValue = cfg.UsePortal,
         Flag = "UsePortalToggle", Callback = function(Value) cfg.UsePortal = Value end,
     })
 
@@ -5180,9 +5186,9 @@ task.spawn(function()
         Flag = "StuckTimeSlider", Callback = function(Value) cfg.StuckTimeout = Value end,
     })
 
-    Tabs.Combat:CreateSection("Auto Dungeon Settings")
+    Tabs.Dungeon:CreateSection("Auto Dungeon Settings")
 
-    Tabs.Combat:CreateToggle({
+    Tabs.Dungeon:CreateToggle({
         Name = "Enable Auto Dungeon", CurrentValue = false, Flag = "ToggleAutoDungeonMaster",
         Callback = function(Value)
             isAutoDungeon = Value
@@ -5199,17 +5205,17 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Combat:CreateToggle({
+    Tabs.Dungeon:CreateToggle({
         Name = "Auto Dungeon Attack", CurrentValue = false, Flag = "ToggleDungAttack",
         Callback = function(Value) isAutoDungeonAttack = Value end,
     })
 
-    Tabs.Combat:CreateToggle({
+    Tabs.Dungeon:CreateToggle({
         Name = "Auto Dungeon Bring", CurrentValue = false, Flag = "ToggleDungBring",
         Callback = function(Value) isAutoDungeonBring = Value end,
     })
 
-    Tabs.Combat:CreateToggle({
+    Tabs.Dungeon:CreateToggle({
         Name = "Auto Next Dungeon Stage", CurrentValue = false, Flag = "ToggleDungNext",
         Callback = function(Value) isAutoDungeonNext = Value end,
     })
@@ -5331,7 +5337,7 @@ task.spawn(function()
     -- ==========================================
     -- [ COMBAT & PVP SECTION ]
     -- ==========================================
-    Tabs.Combat:CreateSection("Player Selection")
+    Tabs.PVP:CreateSection("Player Selection")
 
     local function GetPlayerList()
         local list = {}
@@ -5345,7 +5351,7 @@ task.spawn(function()
     end
 
     local selectedPlayerToHunt = ""
-    local PlayerDropdown = Tabs.Combat:CreateDropdown({
+    local PlayerDropdown = Tabs.PVP:CreateDropdown({
         Name = "Select Target Player",
         Options = GetPlayerList(),
         CurrentOption = {GetPlayerList()[1] or ""},
@@ -5356,18 +5362,18 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Combat:CreateButton({
+    Tabs.PVP:CreateButton({
         Name = "Refresh Player List",
         Callback = function()
             PlayerDropdown:Refresh(GetPlayerList())
         end,
     })
 
-    Tabs.Combat:CreateSection("PVP Toggles")
+    Tabs.PVP:CreateSection("PVP Toggles")
 
     local isTweeningToPlayer = false
     local tweenPlayerConn = nil
-    Tabs.Combat:CreateToggle({
+    Tabs.PVP:CreateToggle({
         Name = "Tween To Player",
         CurrentValue = false,
         Flag = "ToggleTweenToPlayer",
@@ -5401,7 +5407,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Combat:CreateToggle({
+    Tabs.PVP:CreateToggle({
         Name = "Spectate Player",
         CurrentValue = false,
         Flag = "ToggleSpectatePlayer",
@@ -5438,7 +5444,7 @@ task.spawn(function()
 
     local isAimbotEnabled = false
     local aimbotConn = nil
-    Tabs.Combat:CreateToggle({
+    Tabs.PVP:CreateToggle({
         Name = "Aimbot To Player (Look At)",
         CurrentValue = false,
         Flag = "ToggleAimbotPlayer",
