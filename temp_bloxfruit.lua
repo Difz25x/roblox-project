@@ -1,6 +1,5 @@
---==================================================
--- [ INIT & OVERDRIVE ]
---==================================================
+
+
 local SCRIPT_ID = "BloxFruits_MegaFarm_Overdrive"
 
 pcall(function()
@@ -35,7 +34,7 @@ local isTweeningToPlayer = false
 local isAutoTorch = false
 local syn = getgenv and getgenv().syn or nil
 local FarmToggle = nil
-local GetSafePosition = nil -- Forward declaration
+local GetSafePosition = nil
 
 local Sea3Portals = {
     Turtle = { Outer = Vector3.new(-12463.6025, 378.3270, -7566.0830), Inner = Vector3.new(-5060.4116, 318.5020, -3193.2248) },
@@ -56,7 +55,7 @@ function ScriptContext:Destroy()
 	table.clear(self.Connections)
 
 	pcall(function()
-	    -- Cancel all active tweens
+
 	    if activeTween then
 	        activeTween:Cancel()
 	        activeTween = nil
@@ -73,9 +72,6 @@ end
 
 if getgenv then getgenv()[SCRIPT_ID] = ScriptContext end
 
---==================================================
--- [ SERVICES & CONFIG ]
---==================================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -124,7 +120,6 @@ pcall(function()
 	end
 end)
 
--- Main Config (Merged)
 local cfg = {
 	WeaponCategory = "Melee",
 
@@ -192,7 +187,6 @@ local currentRaidIsland = 1
 local isAutoBone = false
 local isAutoSpinBones = false
 
--- State Variables
 local enabled = false
 local isAutoAttackEnabled = false
 local isAutoStatsEnabled = false
@@ -234,7 +228,6 @@ local selectedBossName = nil
 local farmNearestEnabled = false
 local farmNearestRadius = 5000
 
--- Sea Event Variables
 local lastDodgeTime = 0
 local currentBoat = nil
 local currentIsland = nil
@@ -243,7 +236,6 @@ local chestWaypoints = {}
 local autoKillVolcano = false
 local AutoEmber = false
 
--- Elite Hunter
 local isAutoEliteHunter = false
 local eliteHunterWorkerGen = 0
 
@@ -262,10 +254,6 @@ task.defer(function()
 	sessionSecret = tostring(player.UserId):sub(2, 4) .. tostring(coroutine.running()):sub(11, 15)
 	if RegisterHitEvent then pcall(function() RegisterHitEvent:FireServer(sessionSecret) end) end
 end)
-
---==================================================
--- [ DATABASES ]
---==================================================
 
 local BOSSES = {
 	{ Sea = 1, Min = 20, Name = "Gorilla King", Quest = "JungleQuest", Stage = 3, NPC = Vector3.new(-1598, 36, 153) },
@@ -435,10 +423,6 @@ local FightingStyleNPC = {
 
 selectedBossName = BOSSES[1] and BOSSES[1].Name or nil
 
---==================================================
--- [ UTILITIES ]
---==================================================
-
 local function GetMobProfileByName(mobName)
     if not mobName then return nil end
     local nameLower = string.lower(mobName)
@@ -463,12 +447,6 @@ local function GetPlayerLevel()
 	local levelObj = data and data:FindFirstChild("Level")
 	return levelObj and levelObj.Value or 1
 end
-
---==================================================
--- [ SUBMERGED & MOVEMENT SYSTEM ]
---==================================================
-
-
 
 local function ToggleFloat(state)
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
@@ -513,20 +491,16 @@ local function GetBestRoute(startPos, targetPos)
     local bestRoute = nil
     local shortestDist = (startPos - targetPos).Magnitude
 
-    -- Hindari portal loop: Jika jarak lurus sudah di bawah 2500 stud, tidak perlu portal.
     if shortestDist < 2500 then return nil end
 
     for locName, gates in pairs(Sea3Portals) do
-        -- Skenario 1: Teleport dan keluar di Inner (Sea Castle)
-        -- Membutuhkan tembakan Invoke ke Outer
+
         local distFromInner = (gates.Inner - targetPos).Magnitude
         if distFromInner + 1000 < shortestDist then
             shortestDist = distFromInner + 1000
             bestRoute = { TargetInvoke = gates.Outer }
         end
 
-        -- Skenario 2: Teleport dan keluar di Outer (Pulau)
-        -- Membutuhkan tembakan Invoke ke Inner
         local distFromOuter = (gates.Outer - targetPos).Magnitude
         if distFromOuter + 1000 < shortestDist then
             shortestDist = distFromOuter + 1000
@@ -567,19 +541,18 @@ local function TweenTo(targetCFrame)
 
             isTeleporting = false
         end)
-        return -- Jangan lanjutkan ke animasi Tween, biarkan teleport selesai dulu
+        return
     end
 
     local distance = (hrp.Position - targetPos).Magnitude
     local flatDistance = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
 
-    -- High Altitude Bypass untuk jarak jauh agar tidak menabrak laut/gunung saat diagonal
     if flatDistance > 150 then
         targetPos = Vector3.new(targetPos.X, math.max(targetPos.Y + 200, 350), targetPos.Z)
         targetCFrame = CFrame.new(targetPos)
         distance = (hrp.Position - targetPos).Magnitude
     else
-        -- Bypass air standar jika sudah dekat target (mencegah tenggelam di ombak)
+
         if targetPos.Y > -500 and targetPos.Y < 50 then
             local waterObj = workspace:FindFirstChild("Water")
             if waterObj and waterObj:IsA("BasePart") then
@@ -669,10 +642,6 @@ local function SafeProximity(prompt)
         VirtualInputManager:SendKeyEvent(false, key, false, game)
     end
 end
-
---==================================================
--- [ SEA EVENTS UTILITIES ]
---==================================================
 
 local function GetIslandLocations()
     local islandList = {}
@@ -765,9 +734,9 @@ local function GetNearestBoatDealer()
     local shortestDist = math.huge
 
     for _, npc in ipairs(npcsFolder:GetChildren()) do
-        -- Hanya terima nama yang EXACTLY "Boat Dealer" atau "Luxury Boat Dealer"
+
         if npc.Name == "Boat Dealer" or npc.Name == "Luxury Boat Dealer" then
-            -- Beberapa NPC memiliki part bernama "Head" atau "HumanoidRootPart"
+
             local npcPos = GetSafePosition(npc)
             if npcPos ~= Vector3.zero then
                 local dist = (myHrp.Position - npcPos).Magnitude
@@ -785,7 +754,7 @@ end
 local lastBuyAttempt = 0
 local function BuyBoat()
     local success = false
-    -- Tambahkan anti-spam agar tidak diban server (Cooldown 2 detik)
+
     if os.clock() - lastBuyAttempt < 2 then return false end
 
     pcall(function()
@@ -810,14 +779,14 @@ local function BoardBoat(boat)
         local distance = (hrp.Position - seat.Position).Magnitude
 
         if distance < 10 then
-            -- Bypass InputManager: Duduk secara terprogram
+
             if not hum.Sit then
                 hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
                 task.wait(0.1)
                 seat:Sit(hum)
             end
         else
-            -- Pastikan kita tidak terbang di atasnya (TweenHeight), tapi tepat ke arahnya
+
             TweenTo(CFrame.new(seat.Position + Vector3.new(0, 5, 0), seat.Position))
         end
     end
@@ -911,7 +880,7 @@ local function CollectNearestChest()
                 if currentIslandIndex > #islands then currentIslandIndex = 1 end
                 local targetLocation = islands[currentIslandIndex]
                 
-                -- Blacklist Filter
+
                 if targetLocation then
                     local locName = string.lower(targetLocation.Name)
                     if string.find(locName, "trial") or 
@@ -1025,10 +994,6 @@ local function ServerHop()
         TeleportService:Teleport(game.PlaceId, player)
     end
 end
-
---==================================================
--- [ QUEST SYSTEM ]
---==================================================
 
 local currentQuestPool = {}
 local currentPoolIndex = 1
@@ -1252,11 +1217,6 @@ local function IsQuestFinished(profile)
 	return status.Active and status.Correct and status.Finished
 end
 
-
---==================================================
--- [ COMBAT SYSTEM ]
---==================================================
-
 local preferredHitParts = {
     "RightUpperArm",
     "RightLowerArm",
@@ -1288,7 +1248,7 @@ local function GetSafePosition(obj)
     elseif obj:IsA("BasePart") then
         return obj.Position
     end
-    -- Fallback for extremely weird objects
+
     local success, pos = pcall(function()
         if obj.Position then
             return obj.Position
@@ -1299,10 +1259,6 @@ local function GetSafePosition(obj)
     return Vector3.zero
 end
 
-
--- ==========================================
--- [ GLOBAL STOP & CLEANUP ]
--- ==========================================
 local function StopAllActivities()
     if activeTween then
         activeTween:Cancel()
@@ -1446,7 +1402,7 @@ local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
     local distToNpc = (myHrp.Position - npcPos).Magnitude
     if distToNpc > 15 then
         TweenTo(CFrame.new(npcPos))
-        return false -- Still traveling
+        return false
     end
     if activeTween then activeTween:Cancel(); activeTween = nil end
     local now = os.clock()
@@ -1457,7 +1413,7 @@ local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
             pcall(function() CommF_:InvokeServer("StartQuest", profileQuest, profileStage or 1) end)
         end
     end
-    return true -- Quest claimed, waiting for UI sync
+    return true
 end
 
 local function GetTargetEnemy(mobName)
@@ -1466,7 +1422,7 @@ local function GetTargetEnemy(mobName)
 	local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 
 	if enemiesFolder and myHrp then
-	    -- PRIORITY OVERRIDE: Cek jika ada PropHitboxPlaceholder
+
 	    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 	        if enemy.Parent == enemiesFolder and enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy, nil) then
 	            return enemy
@@ -1544,7 +1500,6 @@ local function getDripMamaStatus()
     return "unknown"
 end
 
-
 local function EquipWeapon(overrideCategory)
 	local c = GetCharacter()
 	local h = GetHumanoid()
@@ -1599,10 +1554,6 @@ local function TriggerSkills(key)
 	end
 end
 
---==================================================
--- [ AUTO FARM BRAIN ]
---==================================================
-
 local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
     local targetCategory = cfg.WeaponCategory
     if cfg.AutoMastery and not forceNoEquip then
@@ -1627,7 +1578,7 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
         if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
             weapon = EquipWeapon(targetCategory)
             if not weapon then 
-                -- Fallback force equip via character
+
                 local bag = player:FindFirstChildOfClass("Backpack")
                 if bag then
                     for _, t in ipairs(bag:GetChildren()) do
@@ -1643,7 +1594,7 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
     end
 
     if weapon then
-        -- Anti-Cheat Bypass: Server menolak serangan jika HRP ter-Anchor. (Jangan loop semua part!)
+
         if myHrp.Anchored then
             myHrp.Anchored = false
         end
@@ -1655,13 +1606,13 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
             if enemiesFolder then
                 local hitTargets = {}
                 for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                    -- Kill Aura: Attack EVERYTHING vulnerable in HitRadius, ignore specific target name
+
                     if IsEnemyVulnerable(enemy, nil) then
                         local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                         if eHrp then
                             local dist = (GetSafePosition(eHrp) - GetSafePosition(myHrp)).Magnitude
                             local isTarget = (currentTargetInstance and enemy == currentTargetInstance)
-                            -- Extra tolerance for our primary target in case they get knocked back
+
                             local allowedDist = isTarget and (cfg.HitRadius + 40) or cfg.HitRadius
 
                             if dist <= allowedDist then
@@ -1719,7 +1670,6 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
         end
     end
 
-    -- FAST GUN M1 Logic (Universal Injection)
     end
 
 local function AttackThread(generation)
@@ -1755,7 +1705,6 @@ local function AttackThread(generation)
                                         getgenv().lastGunShot = os.clock()
                                         local tPos = GetSafePosition(targetHrp)
 
-                                        -- Mengatur orientasi wajah karakter menuju musuh (penting untuk verifikasi Server arah Gun)
                                         if myHrp then
                                             myHrp.CFrame = CFrame.lookAt(myHrp.Position, Vector3.new(tPos.X, myHrp.Position.Y, tPos.Z))
                                         end
@@ -1777,16 +1726,14 @@ local function AttackThread(generation)
                 end
             end
 
-            -- If in attack mode, reduce wait bottleneck!
             if enabled and attackSpeedMode == "Super Fast Attack" then
-                task.wait() -- No arguments (matching fastest game frame)
+                task.wait()
             else
                 task.wait(cfg.ThreadSleep)
             end
         end
     end)
 end
-
 
 local function GetBestHauntedMob()
     local hauntedMobs = {
@@ -1833,7 +1780,7 @@ local function TeleportToSea(seaNumber)
     local canTravel = true
     local failReason = ""
     
-    -- Validasi Level dan Kunci Puzzle
+
     local myLevel = GetPlayerLevel()
     
     if seaNumber == 2 then
@@ -1867,7 +1814,7 @@ local function TeleportToSea(seaNumber)
                 Duration = 5
             })
         end
-        isAutoMaterial = false -- Matikan loop farm
+        isAutoMaterial = false
         return false
     end
 
@@ -1927,7 +1874,7 @@ local function GetBestMaterialMob()
             }
         end
     elseif selectedMaterialTarget == "Fish Tail" then
-        -- Recommendation: Sea 1 > Sea 3 (Lower HP)
+
         if currentSea == 1 then
             requiredSea = 1
             mobTargets = {
@@ -1942,10 +1889,10 @@ local function GetBestMaterialMob()
                 { Name = "Fishman Captains", Mob = "Fishman Captain", MobPos = Vector3.new(-10993, 352, -9003) }
             }
         else
-            requiredSea = 1 -- If in Sea 2, prioritize Sea 1
+            requiredSea = 1
         end
     elseif selectedMaterialTarget == "Magma Orb" then
-        -- Recommendation: Sea 1 > Sea 2 (Lower HP)
+
         if currentSea == 1 then
             requiredSea = 1
             mobTargets = {
@@ -1960,15 +1907,14 @@ local function GetBestMaterialMob()
                 { Name = "Lava Pirates", Mob = "Lava Pirate", MobPos = Vector3.new(-5251, 55, -4774) }
             }
         else
-            requiredSea = 1 -- If in Sea 3, prioritize Sea 1
+            requiredSea = 1
         end
     else
         return nil
     end
 
-    -- Travel Execution if not in the correct sea
     if requiredSea ~= 0 and currentSea ~= requiredSea then
-        -- We return a dummy target table to prevent the main loop from breaking while waiting to teleport
+
         if not TeleportToSea(requiredSea) then
             return nil
         end
@@ -2077,8 +2023,7 @@ local function StartAutoBone()
                     local magnetPos = targetMobInfo.MobPos or tHrp.Position
 
 					if magnetPos then
-                        -- Use absolute spawn/mob position, don't link to myHrp.CFrame (evasion) to avoid rubber-banding.
-                        -- magnetPos already represents original/ground point.
+
 					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
 
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
@@ -2116,7 +2061,7 @@ local function StartAutoBone()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 if not activeHauntedMobInfo then
@@ -2150,7 +2095,7 @@ local function StartAutoBone()
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
                     targetEnemy = GetTargetEnemy(targetMobName)
-                    -- If still nil, this mob species is WIPED OUT! Try switching to another active species.
+
                     if not targetEnemy then
                         local checkNewMob = GetBestHauntedMob()
                         if checkNewMob then
@@ -2173,7 +2118,7 @@ local function StartAutoBone()
                     local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
                     if tHrp then
                         local mobProfile = GetMobProfileByName(targetEnemy.Name)
-                        -- Fly chasing this colony's Spawn center to be safe, don't chase escaping enemies out of bounds!
+
                         local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
@@ -2183,7 +2128,7 @@ local function StartAutoBone()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Set ReadyToAttack based on ACTUAL enemy position, not MobPos
+
                         isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
@@ -2270,7 +2215,7 @@ local function StartAutoMaterialFarm()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local targetMobInfo = activeMaterialMobInfo
@@ -2300,7 +2245,7 @@ local function StartAutoMaterialFarm()
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
                     targetEnemy = GetTargetEnemy(targetMobName)
-                    -- If Wiped out, cycle to another mob type for this material
+
                     if not targetEnemy then
                         local checkNewMob = GetBestMaterialMob()
                         if checkNewMob then
@@ -2359,7 +2304,7 @@ local function StartAutoCakePrince()
 
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
-                -- Special override for boss
+
                 local mapFolder = workspace:FindFirstChild("Map")
                 local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
 
@@ -2421,7 +2366,7 @@ local function StartAutoCakePrince()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local status = getDripMamaStatus()
@@ -2560,7 +2505,7 @@ local function StartAutoDoughKing()
 
             if myHrp then
                 local tName = currentTargetInstance and currentTargetInstance.Name or activeCakeMobInfo.Mob
-                -- Special override for boss
+
                 local mapFolder = workspace:FindFirstChild("Map")
                 local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
 
@@ -2622,7 +2567,7 @@ local function StartAutoDoughKing()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local status = getDripMamaStatus()
@@ -2976,19 +2921,13 @@ ScriptContext:AddConnection(RunService.Stepped:Connect(function()
     end
 end))
 
-
-
---==================================================
--- [ BACKGROUND TASKS (HEARTBEAT) ]
---==================================================
-
 ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 	if not ScriptContext.Running then return end
 
     if cfg.autoBoat then
         currentBoat = GetBoat()
         if not currentBoat then
-            -- Cari Dealer Terdekat
+
             local dealer = GetNearestBoatDealer()
             if dealer then
                 local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
@@ -2997,20 +2936,20 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
                     local dist = (myHrp.Position - dealerPos).Magnitude
                     
                     if dist > 20 then
-                        -- Jika jauh, Tween terbang mendekati dealer
+
                         TweenTo(CFrame.new(dealerPos + Vector3.new(0, cfg.TweenHeight, 0)))
                     else
-                        -- Jika sudah dekat (< 20 stud), hentikan tween dan eksekusi Remote Buy
+
                         if activeTween then activeTween:Cancel(); activeTween = nil end
                         BuyBoat()
                     end
                 end
             else
-                -- Failsafe: Jika NPC Boat Dealer tidak ter-render di pulau ini, batalkan Tween
+
                 if activeTween then activeTween:Cancel(); activeTween = nil end
             end
         else
-            -- Kapal sudah ada, batalkan terbang dan naiki kapal!
+
             if activeTween then activeTween:Cancel(); activeTween = nil end
             BoardBoat(currentBoat)
         end
@@ -3081,7 +3020,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 			if targetMobName then
 				if not cachedEnemiesFolder or not cachedEnemiesFolder.Parent then cachedEnemiesFolder = workspace:FindFirstChild("Enemies") end
 				if cachedEnemiesFolder then
-					-- Main gather point (Magnet)
+
 					local magnetPos = nil
 					if profile and profile.MobPos then
 					    magnetPos = profile.MobPos
@@ -3090,8 +3029,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 					end
 					
 					if magnetPos then
-                        -- STATIC MAGNET: Gather all enemies to the exact position of the locked enemy (or MobPos)
-                        -- DO NOT USE myHrp.CFrame (Evasion) to prevent server rubber-banding!
+
 					    local gatherCFrame = CFrame.new(magnetPos.X, magnetPos.Y, magnetPos.Z)
 					    
 					    for _, enemy in ipairs(cachedEnemiesFolder:GetChildren()) do
@@ -3102,7 +3040,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 							    if eHrp and eHum and eHum.Health > 0 then
 								    local dist = (eHrp.Position - myHrp.Position).Magnitude
 								    if dist <= (cfg.BringRadius * 2) then
-								        -- Bring & Stun
+
 									    eHrp.CFrame = gatherCFrame
 									    
 									    
@@ -3110,9 +3048,9 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 									    if eHrp.CanCollide then eHrp.CanCollide = false end
 									    if eHum.PlatformStand == false then eHum.PlatformStand = true end
 									    
-									    -- Do not change size to 60x60x60 to prevent anti-cheat from glitching the enemies
+
 									    if eHrp.Size.X > 10 then
-									        eHrp.Size = Vector3.new(2, 2, 1) -- Revert to normal RootPart size
+									        eHrp.Size = Vector3.new(2, 2, 1)
 									    end
 								    end
 							    end
@@ -3133,7 +3071,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    while task.wait(0.2) do -- Interval 3 detik agar aman dari limit server
+    while task.wait(0.2) do
         if not ScriptContext.Running then break end
         if isAutoSpinBones then
             pcall(function()
@@ -3195,14 +3133,11 @@ local function GetTargetRaidIsland()
     local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
     if not myHrp or not raidMap then return nil, 0 end
 
-    -- Ambil state murni menggunakan atribut pemain
     local isRaiding = player:GetAttribute("IslandRaiding") or false
-    if not isRaiding then return nil, 0 end -- Raid Mati/Selesai
+    if not isRaiding then return nil, 0 end
 
     local currLocStr = tostring(player:GetAttribute("CurrentLocation") or "")
 
-    -- METODE MATI TOTAL (Absolute Kill-Switch)
-    -- Jika CurrentLocation bukan bagian dari Island 1 s.d. 5, berarti karakter sudah diteleport keluar (mati/selesai).
     if not string.match(currLocStr, "Island%s*%d+") then
         return nil, 0
     end
@@ -3218,7 +3153,6 @@ local function GetTargetRaidIsland()
             local numStr = string.match(island.Name, "%d+")
             local islandNum = numStr and tonumber(numStr) or 0
 
-            -- Filter jarak agar 100% aman dari dimensi orang lain
             local iPos = GetSafePosition(island)
             local dist = (myHrp.Position - iPos).Magnitude
             if dist < 15000 then
@@ -3232,7 +3166,6 @@ local function GetTargetRaidIsland()
         end
     end
 
-    -- Utamakan pulau selanjutnya (jika sudah spawn), jika belum, diam di pulau sekarang
     local finalIsland = targetIsland or fallbackIsland
     if finalIsland then
         local numStr = string.match(finalIsland.Name, "%d+")
@@ -3312,7 +3245,7 @@ local function StartAutoRaid()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -3332,7 +3265,7 @@ local function StartAutoRaid()
                     local closest = nil
                     local shortestDist = 2000
                     if enemiesFolder then
-                        -- PRIORITY OVERRIDE: PropHitboxPlaceholder
+
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
                             if enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy) then
                                 closest = enemy
@@ -3390,7 +3323,7 @@ local function StartAutoRaid()
                     local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
                     if tHrp then
                         local mobProfile = GetMobProfileByName(targetEnemy.Name)
-                        -- Fly chasing this colony's Spawn center to be safe, don't chase escaping enemies out of bounds!
+
                         local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
@@ -3400,7 +3333,7 @@ local function StartAutoRaid()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Set ReadyToAttack based on ACTUAL enemy position, not MobPos
+
                         isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
@@ -3415,9 +3348,6 @@ local function StartAutoRaid()
                             local iPos = GetSafePosition(activeIsland)
                             local dist = (myHrp.Position - iPos).Magnitude
 
-                            -- Jika tiba-tiba karakter berjarak sangat ekstrim (> 10000 stud) dari pulau raid terdekat mana pun,
-                            -- itu berarti karakter telah diteleport keluar arena Raid ke lautan normal (misal Sea Castle).
-                            -- Jangan pernah terbang balik ke sana meskipun RaidMap belum sepenuhnya dihapus server.
                             if dist > 10000 then
                                 if activeTween then activeTween:Cancel(); activeTween = nil end
                                 ToggleFloat(false)
@@ -3425,9 +3355,7 @@ local function StartAutoRaid()
                             end
 
                             if activeIslandNum >= 5 and dist <= 150 then
-                                -- Musuh sudah tidak ada dan kita SUDAH SAMPAI di pulau terakhir (Island 5).
-                                -- Raid sudah dianggap SELESAI (tinggal menunggu bos spawn ATAU teleport keluar).
-                                -- Batalkan semua Tween dan biarkan karakter mendarat/berjalan bebas di tanah.
+
                                 if activeTween then activeTween:Cancel(); activeTween = nil end
                                 ToggleFloat(false)
                                 return
@@ -3436,16 +3364,16 @@ local function StartAutoRaid()
                             if dist > 80 then
                                 TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
                             else
-                                -- Already at highest available island, wait for spawns while doing relaxed evasion
+
                                 TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
                             end
                         else
-                            -- Jika activeIsland nil, berarti game mensinyalkan Raid sudah mati/Selesai
+
                             if activeTween then activeTween:Cancel(); activeTween = nil end
                             ToggleFloat(false)
                         end
                     else
-                        -- Standby ngambang di koordinat terakhir nunggu musuh spawn (jika raidEmptyTimer < 1)
+
                         ToggleFloat(true)
                     end
                 end
@@ -3454,7 +3382,6 @@ local function StartAutoRaid()
         end
     end)
 end
-
 
 local function StartFarmNearest()
     local generation = workerGeneration
@@ -3489,7 +3416,7 @@ local function StartFarmNearest()
                 if enemiesFolder then
                     local targetMobName = target.Name
                     local mobProfile = GetMobProfileByName(targetMobName)
-                    -- Use absolute MobPos from Database if available, else fallback to enemy position
+
                     local magnetPos = mobProfile and mobProfile.MobPos or tHrp.Position
 
 					if magnetPos then
@@ -3512,7 +3439,7 @@ local function StartFarmNearest()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local targetEnemy = currentTargetInstance
@@ -3538,7 +3465,7 @@ local function StartFarmNearest()
                 end
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy, nil) then
-                    targetEnemy = GetTargetEnemy(nil) -- Parameter nil agar Farm Nearest berfungsi
+                    targetEnemy = GetTargetEnemy(nil)
                     currentTargetInstance = targetEnemy
                     if targetEnemy then
                         local h = targetEnemy:FindFirstChildOfClass("Humanoid")
@@ -3551,7 +3478,7 @@ local function StartFarmNearest()
                     local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart") or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
                     if tHrp then
                         local mobProfile = GetMobProfileByName(targetEnemy.Name)
-                        -- Fly chasing this colonys Spawn center to be safe, dont chase escaping enemies out of bounds!
+
                         local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
 
                         local targetDistance = (centerPos - myHrp.Position).Magnitude
@@ -3561,7 +3488,7 @@ local function StartFarmNearest()
                         else
                             TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
                         end
-                        -- Set ReadyToAttack EARLY so Magnet can pull them!
+
                         isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
                     end
                 else
@@ -3617,8 +3544,7 @@ local function GetNearestDungeonExit()
 
             if targetPos then
                 local dist = (myHrp.Position - targetPos).Magnitude
-                -- HANYA kunci pintu exit yang berada dalam jangkauan fisik ruangan/area (Max 5000 stud)
-                -- Jika > 5000, itu berarti pintu dari dimensi/stage lain yang dipaksa server.
+
                 if dist < shortestDist and dist < 5000 then
                     shortestDist = dist
                     nearestExitPos = targetPos
@@ -3698,7 +3624,7 @@ local function StartAutoDungeon()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local enemiesFolder = workspace:FindFirstChild("Enemies")
@@ -3740,7 +3666,7 @@ local function StartAutoDungeon()
                 end
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
-                    -- HARD CANCEL TWEEN JIKA TARGET MATI/HILANG agar karakter tidak terbang ngawur ke masa lalu
+
                     if currentTargetInstance then
                         if activeTween then activeTween:Cancel(); activeTween = nil end
                         currentTargetInstance = nil
@@ -3749,7 +3675,7 @@ local function StartAutoDungeon()
                     local closest = nil
                     local shortestDist = math.huge
                     if enemiesFolder then
-                        -- PRIORITY OVERRIDE: PropHitboxPlaceholder
+
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
                             if enemy.Parent == enemiesFolder and enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy) then
                                 closest = enemy
@@ -3913,7 +3839,7 @@ local function StartAutoKillVolcano()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                 local targetEnemy = currentTargetInstance
@@ -3974,7 +3900,6 @@ local function StartAutoKillVolcano()
     end)
 end
 
-
 local isAutoTorch = false
 local autoTorchWorker = 0
 
@@ -3998,14 +3923,13 @@ local function StartAutoTorch()
 
                 if torchesFolder then
                     local foundUnlit = false
-                    -- Cek berurutan 1 sampai 5
+
                     for i = 1, 5 do
                         if not litTorches[i] then
                             local torch = torchesFolder:FindFirstChild("Torch" .. i)
                             if torch and torch:IsA("BasePart") then
                                 local dist = (hrp.Position - torch.Position).Magnitude
 
-                                -- Gunakan jarak toleransi tinggi jika punya API UNC, fisik ketat jika tidak
                                 local touchDist = hasFireTouch and 300 or 10
 
                                 if dist > touchDist then
@@ -4015,13 +3939,13 @@ local function StartAutoTorch()
                                     if touched then
                                         litTorches[i] = true
                                         if activeTween then activeTween:Cancel(); activeTween = nil end
-                                        task.wait(0.5) -- Jeda sebentar sebelum lanjut ke obor berikutnya
+                                        task.wait(0.5)
                                     end
                                 end
                                 foundUnlit = true
-                                break -- Fokus satu per satu berurutan
+                                break
                             else
-                                -- Jika part TorchN tidak ditemukan, asumsikan sudah nyala / hilang
+
                                 litTorches[i] = true
                             end
                         end
@@ -4076,7 +4000,7 @@ local function StartAutoFactory()
                     lastEvasionTime = now
                     local radius = math.max(0, math.floor(cfg.EvasionRadius))
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-                    lastEvasionMoveAt = 0 -- Reset move tick so it tweens immediately to new offset
+                    lastEvasionMoveAt = 0
                 end
 
                     local centerPos = tHrp.Position
@@ -4103,7 +4027,7 @@ local function StartAutoFactory()
                 StopAllActivities()
             end
 
-            end -- close the else block for `if not hrp`
+            end
 
             if targetCore and attackSpeedMode == "Super Fast Attack" then
                 task.wait()
@@ -4201,7 +4125,6 @@ local function StartAutoEliteHunter()
     local currentEliteLocation = nil
     local spawnIndex = 1
 
-    -- Attack Loop
     task.spawn(function()
         while isAutoEliteHunter and ScriptContext.Running and gen == eliteHunterWorkerGen do
             if isReadyToAttack then
@@ -4218,7 +4141,6 @@ local function StartAutoEliteHunter()
         end
     end)
 
-    -- Bring/Magnet Loop
     local eliteBringConn
     eliteBringConn = RunService.Heartbeat:Connect(function()
         if not isAutoEliteHunter or not ScriptContext.Running or gen ~= eliteHunterWorkerGen then
@@ -4235,7 +4157,6 @@ local function StartAutoEliteHunter()
     end)
     ScriptContext:AddConnection(eliteBringConn)
 
-    -- Navigation and Target Loop
     task.spawn(function()
         local lastEliteCheck = 0
 
@@ -4251,7 +4172,7 @@ local function StartAutoEliteHunter()
                     currentEvasionOffset = Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
                     lastEvasionMoveAt = 0
                 end
-                -- 1. Check Elite Hunter Status via Remote
+
                 if not currentTargetInstance and (now - lastEliteCheck > 10) then
                     lastEliteCheck = now
                     if CommF_ then
@@ -4317,7 +4238,7 @@ local function StartAutoEliteHunter()
                     currentTargetInstance = nil
                     isReadyToAttack = false
                     ToggleFloat(true)
-                    -- Patrol predefined spawns to force render
+
                     local spawns = ELITE_HUNTER_SPAWNS[currentEliteLocation]
                     if spawns and #spawns > 0 then
                         if spawnIndex > #spawns then spawnIndex = 1 end
@@ -4347,8 +4268,6 @@ local function StartAutoEliteHunter()
 end)
 end
 
--- [ UI CONFIGURATION & DEFER INITIALIZATION ]
---==================================================
 task.spawn(function()
     local cacheBuster = "?v=" .. tostring(os.time())
     local Lonum = loadstring(game:HttpGet('https://raw.githubusercontent.com/Difz25x/roblox-project/refs/heads/main/library2.lua' .. cacheBuster))()
@@ -4589,7 +4508,7 @@ task.spawn(function()
         Callback = function(Value)
             isAutoBone = Value
             if Value then
-                -- Disable Auto Farm normal
+
                 enabled = false
                 FarmToggle:Set(false)
                 isAutoMaterial = false
@@ -4607,7 +4526,6 @@ task.spawn(function()
             end
         end,
     })
-
 
     Tabs.Sea3:CreateToggle({
         Name = "Auto Cake Prince", CurrentValue = false, Flag = "ToggleAutoCakePrince",
@@ -4632,7 +4550,6 @@ task.spawn(function()
             end
         end,
     })
-
 
     Tabs.Sea3:CreateToggle({
         Name = "Auto Dough King", CurrentValue = false, Flag = "ToggleAutoDoughKing",
@@ -4778,7 +4695,6 @@ task.spawn(function()
         Callback = function(Value) isMultiMobDamage = Value end,
     })
 
-    -- Sea Events Tab
     Tabs.Travel:CreateSection("Boat")
 
     Tabs.Travel:CreateDropdown({
@@ -4798,7 +4714,7 @@ task.spawn(function()
             cfg.autoBoat = Value
             if not Value then
                 StopAllActivities()
-                -- Force unstuck
+
                 local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
                 if hrp then hrp.Velocity = Vector3.zero end
             end
@@ -4933,7 +4849,7 @@ task.spawn(function()
     Tabs.Sea3:CreateToggle({
         Name = "Auto Start Prehistoric", CurrentValue = false, Flag = "AutoPrehistoricStart",
         Callback = function(Value)
-            if not Value then return end -- Abaikan jika toggle dimatikan atau sekadar inisialisasi awal false
+            if not Value then return end
 
             local prehistoricIsland = nil
             local nearestDistance = math.huge
@@ -4964,7 +4880,7 @@ task.spawn(function()
                 end
             end
 
-            if not prehistoricIsland then return end -- Abaikan jika map belum di render / beda Sea
+            if not prehistoricIsland then return end
 
             local startPromptPart = prehistoricIsland:FindFirstChild("Core") and prehistoricIsland.Core:FindFirstChild("ActivationPrompt")
             if not startPromptPart then return end
@@ -4998,7 +4914,6 @@ task.spawn(function()
             end
         end,
     })
-
 
     Tabs.Travel:CreateToggle({
         Name = "Auto Fill Volcano", CurrentValue = false, Flag = "AutoFillVolcano",
@@ -5338,7 +5253,7 @@ task.spawn(function()
                             if dist > 50 then
                                 TweenTo(safeCFrame)
                             else
-                                -- Sudah sampai di pulau tujuan
+
                                 isTeleportingToIsland = false
                                 StopAllActivities()
                             end
@@ -5350,9 +5265,6 @@ task.spawn(function()
         end,
     })
 
-    -- ==========================================
-    -- [ COMBAT & PVP SECTION ]
-    -- ==========================================
     Tabs.PVP:CreateSection("Player Selection")
 
     local function GetPlayerList()
@@ -5488,13 +5400,9 @@ task.spawn(function()
         end,
     })
 
-    -- ==========================================
-    -- [ STATUS & DEBUG SECTION ]
-    -- ==========================================
     Tabs.Status:CreateSection("Debug Information")
     local isDebugActive = false
     local debugWorker = 0
-
 
     Tabs.Misc:CreateSection("Devil Fruit Stock Viewer")
 
