@@ -37,6 +37,12 @@ local syn = getgenv and getgenv().syn or nil
 local FarmToggle = nil
 local GetSafePosition = nil -- Forward declaration
 
+local Sea3Portals = {
+    Turtle = { Outer = Vector3.new(-12463.6025, 378.3270, -7566.0830), Inner = Vector3.new(-5060.4116, 318.5020, -3193.2248) },
+    Hydra  = { Outer = Vector3.new(5650.9477, 1017.2747, -350.3791), Inner = Vector3.new(-5027.0302, 318.5020, -3206.7036) },
+    Tiki   = { Outer = Vector3.new(-16799.0918, 84.3227, 291.0728), Inner = Vector3.new(-5097.1318, 318.5020, -3178.3984) }
+}
+
 function ScriptContext:AddConnection(conn)
 	table.insert(self.Connections, conn)
 	return conn
@@ -125,6 +131,8 @@ local cfg = {
 	AutoMastery = false,
 	MasteryCategory = "Melee",
 	MasteryHealth = 30,
+
+    UsePortal = true,
 
 	TweenSpeed = 300,
 	BringRadius = 350,
@@ -482,26 +490,108 @@ local function ToggleFloat(state)
 	end
 end
 
+local hasPortalAccess = nil
+local function CheckPortalAccess()
+    if hasPortalAccess ~= nil then return hasPortalAccess end
+    local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+    if CommF_ then
+        local success, result = pcall(function()
+            return CommF_:InvokeServer("GetUnlockables")
+        end)
+        if success and type(result) == "table" then
+            hasPortalAccess = result.DefeatedIndraTrueForm == true
+        end
+    end
+    if hasPortalAccess == nil then hasPortalAccess = false end
+    return hasPortalAccess
+end
+
+local function GetBestRoute(startPos, targetPos)
+    if not cfg.UsePortal or not CheckPortalAccess() then return nil end
+
+    local bestRoute = nil
+    local shortestDist = (startPos - targetPos).Magnitude
+
+    -- Hindari portal loop: Jika jarak lurus sudah di bawah 2500 stud, tidak perlu portal.
+    if shortestDist < 2500 then return nil end
+
+    for locName, gates in pairs(Sea3Portals) do
+        -- Skenario 1: Teleport dan keluar di Inner (Sea Castle)
+        -- Membutuhkan tembakan Invoke ke Outer
+        local distFromInner = (gates.Inner - targetPos).Magnitude
+        if distFromInner + 1000 < shortestDist then
+            shortestDist = distFromInner + 1000
+            bestRoute = { TargetInvoke = gates.Outer }
+        end
+
+        -- Skenario 2: Teleport dan keluar di Outer (Pulau)
+        -- Membutuhkan tembakan Invoke ke Inner
+        local distFromOuter = (gates.Outer - targetPos).Magnitude
+        if distFromOuter + 1000 < shortestDist then
+            shortestDist = distFromOuter + 1000
+            bestRoute = { TargetInvoke = gates.Inner }
+        end
+    end
+
+    return bestRoute
+end
+
+local isTeleporting = false
 local function TweenTo(targetCFrame)
+    if isTeleporting then return end
+
     local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
     local targetPos = targetCFrame.Position
+    local route = GetBestRoute(hrp.Position, targetPos)
+
+    if route then
+        task.spawn(function()
+            isTeleporting = true
+            local startLocation = player:GetAttribute("ExactLocation")
+
+            local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+            if CommF_ then
+                pcall(function()
+                    CommF_:InvokeServer("requestEntrance", route.TargetInvoke)
+                end)
+            end
+
+            local t = 0
+            while player:GetAttribute("ExactLocation") == startLocation and t < 50 do
+                t = t + 1
+                task.wait(0.1)
+            end
+
+            isTeleporting = false
+        end)
+        return -- Jangan lanjutkan ke animasi Tween, biarkan teleport selesai dulu
+    end
 
     local distance = (hrp.Position - targetPos).Magnitude
+    local flatDistance = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
 
-    if targetPos.Y > -500 and targetPos.Y < 50 then
-        local waterObj = workspace:FindFirstChild("Water")
-        if waterObj and waterObj:IsA("BasePart") then
-            local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
-            if targetPos.Y <= waterTop + 20 then
-                targetPos = Vector3.new(targetPos.X, waterTop + 45, targetPos.Z)
-                targetCFrame = CFrame.new(targetPos)
-            end
-        else
-            if targetPos.Y < 40 then
-                targetPos = Vector3.new(targetPos.X, 45, targetPos.Z)
-                targetCFrame = CFrame.new(targetPos)
+    -- High Altitude Bypass untuk jarak jauh agar tidak menabrak laut/gunung saat diagonal
+    if flatDistance > 150 then
+        targetPos = Vector3.new(targetPos.X, math.max(targetPos.Y + 200, 350), targetPos.Z)
+        targetCFrame = CFrame.new(targetPos)
+        distance = (hrp.Position - targetPos).Magnitude
+    else
+        -- Bypass air standar jika sudah dekat target (mencegah tenggelam di ombak)
+        if targetPos.Y > -500 and targetPos.Y < 50 then
+            local waterObj = workspace:FindFirstChild("Water")
+            if waterObj and waterObj:IsA("BasePart") then
+                local waterTop = waterObj.Position.Y + (waterObj.Size.Y / 2)
+                if targetPos.Y <= waterTop + 25 then
+                    targetPos = Vector3.new(targetPos.X, waterTop + 60, targetPos.Z)
+                    targetCFrame = CFrame.new(targetPos)
+                end
+            else
+                if targetPos.Y < 45 then
+                    targetPos = Vector3.new(targetPos.X, 60, targetPos.Z)
+                    targetCFrame = CFrame.new(targetPos)
+                end
             end
         end
     end
@@ -1299,6 +1389,15 @@ local function IsEnemyVulnerable(targetChar, targetMobName)
 	return (targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Head")) ~= nil
 end
 
+local spawnDelayTracker = setmetatable({}, {__mode = "k"})
+local function IsEnemyReadyToPull(enemy)
+    if not spawnDelayTracker[enemy] then
+        spawnDelayTracker[enemy] = os.clock()
+        return false
+    end
+    return (os.clock() - spawnDelayTracker[enemy]) >= 0.3
+end
+
 local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
     local enemiesFolder = workspace:FindFirstChild("Enemies")
     if not enemiesFolder or not gatherPos then return end
@@ -1309,6 +1408,7 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
             if enemy.Name ~= "PropHitboxPlaceholder" then
                 local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                 local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if not IsEnemyReadyToPull(enemy) then eHrp = nil end
                 if eHrp and eHum and eHum.Health > 0 then
                     local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
                     if distToPlayer <= cfg.MaxPullRange then
@@ -1327,7 +1427,14 @@ end
 local function UniversalEvasionTween(myHrp, targetPos, now)
     ToggleFloat(true)
     local targetDistance = (targetPos - myHrp.Position).Magnitude
-    UniversalEvasionTween(myHrp, targetPos, now)
+    if targetDistance > 80 then
+        if now - lastEvasionMoveAt >= cfg.EvasionTick then
+            lastEvasionMoveAt = now
+            TweenTo(CFrame.new(targetPos + Vector3.new(0, cfg.TweenHeight, 0), targetPos))
+        end
+    else
+        TweenTo(CFrame.new(targetPos + currentEvasionOffset, targetPos))
+    end
 end
 
 local lastQuestClaimAt = 0
@@ -1978,6 +2085,7 @@ local function StartAutoBone()
                                 if enemy.Name ~= "PropHitboxPlaceholder" then
                                     local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                                     local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if not IsEnemyReadyToPull(enemy) then eHrp = nil end
                                     if eHrp and eHum and eHum.Health > 0 then
                                         local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
                                         if dist <= cfg.BringRadius then
@@ -2653,7 +2761,7 @@ local function StartAutoFarm()
 				if not profile then return end
 
 				if profile.TeleportNpc then
-					local isCurrentlySubmerged = player:GetAttribute("ExactLocation") == "Submerged Island"
+					local isCurrentlySubmerged = (player:GetAttribute("ExactLocation") == "Submerged Island") or (myHrp.Position.Y < -500)
 
 					if not isCurrentlySubmerged then
                         local targetPos = typeof(profile.TeleportNpc) == "Vector3" and profile.TeleportNpc or profile.TeleportNpc.Position
@@ -2989,6 +3097,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 						    if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
 							    local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
 							    local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if not IsEnemyReadyToPull(enemy) then eHrp = nil end
 							    if eHrp and eHum and eHum.Health > 0 then
 								    local dist = (eHrp.Position - myHrp.Position).Magnitude
 								    if dist <= (cfg.BringRadius * 2) then
@@ -3753,6 +3862,7 @@ local function StartAutoKillVolcano()
                         if enemy.Name == targetMobName and IsEnemyVulnerable(enemy, targetMobName) then
                             local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
                             local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if not IsEnemyReadyToPull(enemy) then eHrp = nil end
 
                             if eHrp and eHum and eHum.Health > 0 then
                                 local dist = (eHrp.Position - myHrp.Position).Magnitude
@@ -4220,7 +4330,8 @@ end
 -- [ UI CONFIGURATION & DEFER INITIALIZATION ]
 --==================================================
 task.spawn(function()
-    local Lonum = loadstring(game:HttpGet('https://raw.githubusercontent.com/Difz25x/roblox-project/refs/heads/main/library2.lua'))()
+    local cacheBuster = "?v=" .. tostring(os.time())
+    local Lonum = loadstring(game:HttpGet('https://raw.githubusercontent.com/Difz25x/roblox-project/refs/heads/main/library2.lua' .. cacheBuster))()
 
     local Window = Lonum:CreateWindow({
        Name = "Blox Fruits | Lonum",
@@ -4240,19 +4351,17 @@ task.spawn(function()
     }
 
     local Tabs = {
-        Main = Window:CreateTab("Farming & Raid"),
-        Dungeon = Window:CreateTab("Dungeon Instance"),
-        Sea2 = Window:CreateTab("Sea 2"),
-        Sea3 = Window:CreateTab("Sea 3"),
-        Travel = Window:CreateTab("Travel & Collect"),
-        SeaEvents = Window:CreateTab("Sea Events"),
-        Combat = Window:CreateTab("Combat & PVP"),
+        Main = Window:CreateTab("Farming"),
+        Combat = Window:CreateTab("Combat & Raid"),
+        Travel = Window:CreateTab("Travel & Sea"),
+        Stats = Window:CreateTab("Stats & Abilities"),
+        Misc = Window:CreateTab("Misc"),
         Status = Window:CreateTab("Status"),
         Settings = Window:CreateTab("Settings")
     }
 
-    Tabs.Sea3:CreateSection("Tushita Puzzle")
-    Tabs.Sea3:CreateToggle({
+    Tabs.Misc:CreateSection("Sea 3 Puzzles")
+    Tabs.Misc:CreateToggle({
         Name = "Auto Light Torches",
         CurrentValue = false,
         Flag = "ToggleAutoTorch",
@@ -4272,8 +4381,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Sea2:CreateSection("World Events")
-    Tabs.Sea2:CreateToggle({
+    Tabs.Misc:CreateSection("World Events")
+    Tabs.Misc:CreateToggle({
         Name = "Auto Factory (Core)",
         CurrentValue = false,
         Flag = "ToggleAutoFactory",
@@ -4310,8 +4419,8 @@ task.spawn(function()
         end
     })
 
-    Tabs.Settings:CreateSection("Auto Redeem Codes")
-    Tabs.Settings:CreateButton({
+    Tabs.Misc:CreateSection("Auto Redeem Codes")
+    Tabs.Misc:CreateButton({
         Name = "Redeem All Codes",
         Callback = function()
             local codes = {
@@ -4352,18 +4461,18 @@ task.spawn(function()
         end
     })
 
-    Tabs.Settings:CreateSection("Auto Stats & Abilities")
-    Tabs.Settings:CreateToggle({
+    Tabs.Stats:CreateSection("Auto Stats & Abilities")
+    Tabs.Stats:CreateToggle({
         Name = "Enable Auto Stats", CurrentValue = false, Flag = "ToggleAutoStats",
         Callback = function(Value) isAutoStatsEnabled = Value end,
     })
 
-    Tabs.Settings:CreateToggle({
+    Tabs.Stats:CreateToggle({
         Name = "Enable Auto Ken (Haki)", CurrentValue = false, Flag = "ToggleAutoKen",
         Callback = function(Value) isAutoKenEnabled = Value end,
     })
 
-    Tabs.Settings:CreateDropdown({
+    Tabs.Stats:CreateDropdown({
         Name = "Select Stat to Upgrade", Options = {"Melee", "Defense", "Sword", "Gun", "Demon Fruit"},
         CurrentOption = {"Melee"}, MultipleOptions = false, Flag = "AutoStatsDropdown",
         Callback = function(Option) selectedStatCategory = Option[1] end,
@@ -4409,15 +4518,15 @@ task.spawn(function()
     local bossNames = {}
     for _, boss in ipairs(BOSSES) do table.insert(bossNames, boss.Name) end
 
-    Tabs.Sea3:CreateSection("Material Farming")
-    Tabs.Sea3:CreateToggle({
+    Tabs.Misc:CreateSection("Material Farming")
+    Tabs.Misc:CreateToggle({
         Name = "Auto Spin Bones", CurrentValue = false, Flag = "ToggleAutoSpinBones",
         Callback = function(Value)
             isAutoSpinBones = Value
         end,
     })
 
-    Tabs.Sea3:CreateButton({
+    Tabs.Misc:CreateButton({
         Name = "Spin Bones 1x",
         Callback = function()
             task.spawn(function()
@@ -4451,7 +4560,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Sea3:CreateToggle({
+    Tabs.Misc:CreateToggle({
         Name = "Auto Farm Bone", CurrentValue = false, Flag = "ToggleAutoBone",
         Callback = function(Value)
             isAutoBone = Value
@@ -4476,7 +4585,7 @@ task.spawn(function()
     })
 
 
-    Tabs.Sea3:CreateToggle({
+    Tabs.Main:CreateToggle({
         Name = "Auto Cake Prince", CurrentValue = false, Flag = "ToggleAutoCakePrince",
         Callback = function(Value)
             isAutoCakePrince = Value
@@ -4501,7 +4610,7 @@ task.spawn(function()
     })
 
 
-    Tabs.Sea3:CreateToggle({
+    Tabs.Main:CreateToggle({
         Name = "Auto Dough King", CurrentValue = false, Flag = "ToggleAutoDoughKing",
         Callback = function(Value)
             isAutoDoughKing = Value
@@ -4525,8 +4634,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Sea3:CreateSection("Elite Hunter")
-    Tabs.Sea3:CreateToggle({
+    Tabs.Main:CreateSection("Elite Hunter")
+    Tabs.Main:CreateToggle({
         Name = "Auto Elite Hunter", CurrentValue = false, Flag = "ToggleAutoEliteHunter",
         Callback = function(Value)
             isAutoEliteHunter = Value
@@ -4646,9 +4755,9 @@ task.spawn(function()
     })
 
     -- Sea Events Tab
-    Tabs.SeaEvents:CreateSection("Boat")
+    Tabs.Travel:CreateSection("Boat")
 
-    Tabs.SeaEvents:CreateDropdown({
+    Tabs.Travel:CreateDropdown({
         Name = "Select Boat to Buy",
         Options = {"Dinghy", "Sloop", "MarineBrigade", "MarineGrandBrigade", "Guardian"},
         CurrentOption = {"Dinghy"},
@@ -4659,7 +4768,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateToggle({
         Name = "Auto Boat", CurrentValue = false, Flag = "AutoBoatEnabled",
         Callback = function(Value)
             cfg.autoBoat = Value
@@ -4672,17 +4781,17 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateToggle({
         Name = "Enable Boat Speed Mod", CurrentValue = false, Flag = "ToggleBoatMod",
         Callback = function(Value) cfg.boatSpeedMod = Value end,
     })
 
-    Tabs.SeaEvents:CreateSlider({
+    Tabs.Travel:CreateSlider({
         Name = "Boat Max Speed", Range = {50, 300}, Increment = 10, CurrentValue = 300,
         Flag = "SliderBoatMaxSpeed", Callback = function(Value) cfg.boatMaxSpeed = Value end,
     })
 
-    Tabs.SeaEvents:CreateButton({
+    Tabs.Travel:CreateButton({
         Name = "Remove Rocks",
         Callback = function()
             local Rocks = Workspace:WaitForChild("Rocks")
@@ -4693,7 +4802,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateButton({
+    Tabs.Travel:CreateButton({
         Name = "Remove Dark (Danger 6)",
         Callback = function()
             local Layers = Lighting:FindFirstChild("LightingLayers")
@@ -4713,8 +4822,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateSection("Mirage Island")
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateSection("Mirage Island")
+    Tabs.Travel:CreateToggle({
         Name = "Auto Mirage Chests",
         CurrentValue = false,
         Callback = function(state)
@@ -4762,8 +4871,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateSection("Kitsune Island")
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateSection("Kitsune Island")
+    Tabs.Travel:CreateToggle({
         Name = "Auto Collect Ember",
         CurrentValue = false,
         Flag = "ToggleKitsuneEmber",
@@ -4796,8 +4905,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateSection("Prehistoric Island")
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateSection("Prehistoric Island")
+    Tabs.Travel:CreateToggle({
         Name = "Auto Start Prehistoric", CurrentValue = false, Flag = "AutoPrehistoricStart",
         Callback = function(Value)
             if not Value then return end -- Abaikan jika toggle dimatikan atau sekadar inisialisasi awal false
@@ -4845,7 +4954,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateToggle({
         Name = "Auto Kill Enemy", CurrentValue = false, Flag = "AutoKillEnemy",
         Callback = function(Value)
             autoKillVolcano = Value
@@ -4867,7 +4976,7 @@ task.spawn(function()
     })
 
 
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateToggle({
         Name = "Auto Fill Volcano", CurrentValue = false, Flag = "AutoFillVolcano",
         Callback = function(Value)
             if not Value then return end
@@ -4943,8 +5052,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateSection("Sea Events")
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateSection("Sea Events")
+    Tabs.Travel:CreateToggle({
         Name = "Auto Sail", CurrentValue = false, Flag = "AutoSailEnabled",
         Callback = function(Value)
             cfg.autoSail = Value
@@ -4956,7 +5065,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SeaEvents:CreateToggle({
+    Tabs.Travel:CreateToggle({
         Name = "Auto Sea Beast", CurrentValue = false, Flag = "AutoSeaBeastEnabled",
         Callback = function(Value) cfg.autoSeaBeast = Value; if Value then StartAutoSeaBeast() else isAutoSeaBeastActive = false; if activeTween then activeTween:Cancel(); activeTween = nil; ToggleFloat(false) end end end,
     })
@@ -5049,6 +5158,11 @@ task.spawn(function()
         Flag = "TweenSpdSlider", Callback = function(Value) cfg.TweenSpeed = Value end,
     })
 
+    Tabs.Settings:CreateToggle({
+        Name = "Portal Teleport Bypass", CurrentValue = cfg.UsePortal,
+        Flag = "UsePortalToggle", Callback = function(Value) cfg.UsePortal = Value end,
+    })
+
     Tabs.Settings:CreateSlider({
         Name = "Tween Height", Range = {0, 50}, Increment = 1, CurrentValue = cfg.TweenHeight,
         Flag = "TweenHeightSlider", Callback = function(Value) cfg.TweenHeight = Value end,
@@ -5064,9 +5178,9 @@ task.spawn(function()
         Flag = "StuckTimeSlider", Callback = function(Value) cfg.StuckTimeout = Value end,
     })
 
-    Tabs.Dungeon:CreateSection("Auto Dungeon Settings")
+    Tabs.Combat:CreateSection("Auto Dungeon Settings")
 
-    Tabs.Dungeon:CreateToggle({
+    Tabs.Combat:CreateToggle({
         Name = "Enable Auto Dungeon", CurrentValue = false, Flag = "ToggleAutoDungeonMaster",
         Callback = function(Value)
             isAutoDungeon = Value
@@ -5083,17 +5197,17 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Dungeon:CreateToggle({
+    Tabs.Combat:CreateToggle({
         Name = "Auto Dungeon Attack", CurrentValue = false, Flag = "ToggleDungAttack",
         Callback = function(Value) isAutoDungeonAttack = Value end,
     })
 
-    Tabs.Dungeon:CreateToggle({
+    Tabs.Combat:CreateToggle({
         Name = "Auto Dungeon Bring", CurrentValue = false, Flag = "ToggleDungBring",
         Callback = function(Value) isAutoDungeonBring = Value end,
     })
 
-    Tabs.Dungeon:CreateToggle({
+    Tabs.Combat:CreateToggle({
         Name = "Auto Next Dungeon Stage", CurrentValue = false, Flag = "ToggleDungNext",
         Callback = function(Value) isAutoDungeonNext = Value end,
     })
@@ -5357,6 +5471,76 @@ task.spawn(function()
     local isDebugActive = false
     local debugWorker = 0
 
+
+    Tabs.Misc:CreateSection("Devil Fruit Stock Viewer")
+
+    local StockSplit = Tabs.Misc:CreateSplitView({ Columns = 2, Spacing = 10 })
+    local NormalCol = StockSplit.Columns[1]
+    local AdvancedCol = StockSplit.Columns[2]
+
+    NormalCol:CreateLabel("Waiting for refresh...")
+    AdvancedCol:CreateLabel("Waiting for refresh...")
+
+    Tabs.Misc:CreateButton({
+        Name = "Refresh All Stock",
+        Callback = function()
+            local Event = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
+            if not Event then return end
+
+            local function formatPrice(n)
+                local formatted = tostring(n)
+                while true do
+                    local k
+                    formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", "%1.%2")
+                    if k == 0 then break end
+                end
+                return formatted
+            end
+
+            local function cleanFruitName(name) return string.match(name, "^([^-]+)") or name end
+
+            -- Helper to generate UI cards for a column
+            local function populateColumn(column, title, isAdvanced)
+                -- Clear previous cards and labels
+                for _, child in ipairs(column.Frame:GetChildren()) do
+                    if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+                end
+
+                local result = nil
+                pcall(function() result = Event:InvokeServer("GetFruits", isAdvanced) end)
+
+                local TitleLabel = Instance.new("TextLabel")
+                TitleLabel.Size = UDim2.new(1, 0, 0, 20)
+                TitleLabel.BackgroundTransparency = 1
+                TitleLabel.Text = title
+                TitleLabel.TextColor3 = Color3.fromRGB(85, 120, 255)
+                TitleLabel.Font = Enum.Font.GothamBold
+                TitleLabel.TextSize = 13
+                TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+                TitleLabel.Parent = column.Frame
+
+                local count = 0
+                if type(result) == "table" then
+                    for _, fruit in ipairs(result) do
+                        if fruit.OnSale == true then
+                            count = count + 1
+                            column:CreateCard({
+                                Title = cleanFruitName(fruit.Name),
+                                Content = string.format("💰 $%s\n⭐ Rarity: %s", formatPrice(fruit.Price), tostring(fruit.Rarity))
+                            })
+                        end
+                    end
+                end
+
+                if count == 0 then
+                    column:CreateLabel("No stock available.")
+                end
+            end
+
+            populateColumn(NormalCol, "NORMAL STOCK", false)
+            populateColumn(AdvancedCol, "ADVANCED STOCK", true)
+        end
+    })
     local DebugHUD = Lonum:CreateFloatingHUD({Title = "Server Live Status"})
     DebugHUD:SetVisible(false)
 
