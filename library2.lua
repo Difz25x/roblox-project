@@ -1177,7 +1177,12 @@ function Lonum:Notify(options)
     nFrame.Size = UDim2.new(1, 0, 0, 60)
     nFrame.Position = UDim2.new(1, 300, 0, 0)
     nFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
+    nFrame.AutomaticSize = Enum.AutomaticSize.Y
     nFrame.Parent = NotifContainer
+
+    local nPadFrame = Instance.new("UIPadding")
+    nPadFrame.PaddingBottom = UDim.new(0, 12)
+    nPadFrame.Parent = nFrame
 
     local nCorner = Instance.new("UICorner")
     nCorner.CornerRadius = Lonum.Theme.CornerRadius
@@ -1211,7 +1216,7 @@ function Lonum:Notify(options)
     nTitle.Parent = nFrame
 
     local nText = Instance.new("TextLabel")
-    nText.Size = UDim2.new(1, -20, 0, 20)
+    nText.Size = UDim2.new(1, -26, 0, 20)
     nText.Position = UDim2.new(0, 18, 0, 28)
     nText.BackgroundTransparency = 1
     nText.Text = Content
@@ -1219,6 +1224,9 @@ function Lonum:Notify(options)
     nText.Font = Lonum.Theme.Font
     nText.TextSize = 11
     nText.TextXAlignment = Enum.TextXAlignment.Left
+    nText.TextYAlignment = Enum.TextYAlignment.Top
+    nText.TextWrapped = true
+    nText.AutomaticSize = Enum.AutomaticSize.Y
     nText.Parent = nFrame
 
     -- Animate In
