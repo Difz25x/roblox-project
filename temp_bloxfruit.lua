@@ -3195,53 +3195,51 @@ local function GetTargetRaidIsland()
     local raidMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("RaidMap")
     if not myHrp or not raidMap then return nil, 0 end
 
-    local currentIslandNum = 0
-    local closestDistToAny = math.huge
-    local currentIslandInstance = nil
+    -- Ambil state murni menggunakan atribut pemain
+    local isRaiding = player:GetAttribute("IslandRaiding") or false
+    if not isRaiding then return nil, 0 end -- Raid Mati/Selesai
 
-    for _, island in ipairs(raidMap:GetChildren()) do
-        if string.match(island.Name, "RaidIsland") then
-            local iPos = GetSafePosition(island)
-            local dist = (myHrp.Position - iPos).Magnitude
-            if dist < closestDistToAny then
-                closestDistToAny = dist
-                local numStr = string.match(island.Name, "%d+")
-                currentIslandNum = numStr and tonumber(numStr) or 0
-                currentIslandInstance = island
-            end
-        end
+    local currLocStr = tostring(player:GetAttribute("CurrentLocation") or "")
+
+    -- METODE MATI TOTAL (Absolute Kill-Switch)
+    -- Jika CurrentLocation bukan bagian dari Island 1 s.d. 5, berarti karakter sudah diteleport keluar (mati/selesai).
+    if not string.match(currLocStr, "Island%s*%d+") then
+        return nil, 0
     end
 
+    local currentNum = tonumber(string.match(currLocStr, "%d+")) or 1
+    local nextNum = currentNum + 1
+
     local targetIsland = nil
-    local targetIslandNum = currentIslandNum
-    local shortestDistToNext = math.huge
+    local fallbackIsland = nil
 
     for _, island in ipairs(raidMap:GetChildren()) do
         if string.match(island.Name, "RaidIsland") then
             local numStr = string.match(island.Name, "%d+")
             local islandNum = numStr and tonumber(numStr) or 0
 
-            if islandNum > currentIslandNum then
-                local iPos = GetSafePosition(island)
-                local dist = (myHrp.Position - iPos).Magnitude
-
-                -- Memperbesar batas aman dari 3500 ke 15000 stud agar raid island selanjutnya yang letaknya jauh tidak ter-skip,
-                -- dan tetap menjaga agar tidak ke raid island punya player lain (dimensi lain, > 50000 stud).
-                if dist < shortestDistToNext and dist <= 15000 then
-                    shortestDistToNext = dist
+            -- Filter jarak agar 100% aman dari dimensi orang lain
+            local iPos = GetSafePosition(island)
+            local dist = (myHrp.Position - iPos).Magnitude
+            if dist < 15000 then
+                if islandNum == nextNum then
                     targetIsland = island
-                    targetIslandNum = islandNum
+                    break
+                elseif islandNum == currentNum then
+                    fallbackIsland = island
                 end
             end
         end
     end
 
-    if not targetIsland then
-        targetIsland = currentIslandInstance
-        targetIslandNum = currentIslandNum
+    -- Utamakan pulau selanjutnya (jika sudah spawn), jika belum, diam di pulau sekarang
+    local finalIsland = targetIsland or fallbackIsland
+    if finalIsland then
+        local numStr = string.match(finalIsland.Name, "%d+")
+        return finalIsland, (numStr and tonumber(numStr) or 1)
     end
 
-    return targetIsland, targetIslandNum
+    return nil, 0
 end
 
 local function StartAutoRaid()
@@ -3426,10 +3424,10 @@ local function StartAutoRaid()
                                 return
                             end
 
-                            if activeIslandNum >= 5 then
-                                -- Musuh sudah tidak ada dan kita berada di pulau terakhir (Island 5).
-                                -- Raid sudah dianggap SELESAI (tinggal menunggu teleport dari server).
-                                -- Batalkan semua Tween dan biarkan karakter mendarat/berjalan bebas.
+                            if activeIslandNum >= 5 and dist <= 150 then
+                                -- Musuh sudah tidak ada dan kita SUDAH SAMPAI di pulau terakhir (Island 5).
+                                -- Raid sudah dianggap SELESAI (tinggal menunggu bos spawn ATAU teleport keluar).
+                                -- Batalkan semua Tween dan biarkan karakter mendarat/berjalan bebas di tanah.
                                 if activeTween then activeTween:Cancel(); activeTween = nil end
                                 ToggleFloat(false)
                                 return
@@ -3441,9 +3439,13 @@ local function StartAutoRaid()
                                 -- Already at highest available island, wait for spawns while doing relaxed evasion
                                 TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
                             end
+                        else
+                            -- Jika activeIsland nil, berarti game mensinyalkan Raid sudah mati/Selesai
+                            if activeTween then activeTween:Cancel(); activeTween = nil end
+                            ToggleFloat(false)
                         end
                     else
-                        -- Standby ngambang di koordinat terakhir nunggu musuh spawn
+                        -- Standby ngambang di koordinat terakhir nunggu musuh spawn (jika raidEmptyTimer < 1)
                         ToggleFloat(true)
                     end
                 end
@@ -5519,11 +5521,40 @@ task.spawn(function()
                 return formatted
             end
 
+            local function getRarityColor(rarity)
+                local raritys = {
+                    [0] = {
+                        Name = "Common",
+                        Color = Color3.fromRGB(255, 255, 255)
+                    },
+                    [1] = {
+                        Name = "Rare",
+                        Color = Color3.fromRGB(0, 255, 255)
+                    },
+                    [2] = {
+                        Name = "Epic",
+                        Color = Color3.fromRGB(0, 140, 255)
+                    },
+                    [3] = {
+                        Name = "Legendary",
+                        Color = Color3.fromRGB(255, 140, 0)
+                    },
+                    [4] = {
+                        Name = "Mythical",
+                        Color = Color3.fromRGB(139, 0, 255)
+                    },
+                    [5] = {
+                        Name = "Premium",
+                        Color = Color3.fromRGB(255, 0, 255)
+                    }
+                }
+
+                return raritys[rarity] or "Unknown", Color3.fromRGB(255, 255, 255)
+            end
+
             local function cleanFruitName(name) return string.match(name, "^([^-]+)") or name end
 
-            -- Helper to generate UI cards for a column
             local function populateColumn(column, title, isAdvanced)
-                -- Clear previous cards and labels
                 for _, child in ipairs(column.Frame:GetChildren()) do
                     if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
                 end
@@ -5546,9 +5577,10 @@ task.spawn(function()
                     for _, fruit in ipairs(result) do
                         if fruit.OnSale == true then
                             count = count + 1
+                            local rarity = getRarityColor(fruit.Rarity)
                             column:CreateCard({
                                 Title = cleanFruitName(fruit.Name),
-                                Content = string.format("💰 $%s\n⭐ Rarity: %s", formatPrice(fruit.Price), tostring(fruit.Rarity))
+                                Content = string.format("Price: $%s\nRarity: %s", formatPrice(fruit.Price), tostring(rarity.Name))
                             })
                         end
                     end
