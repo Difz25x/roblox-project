@@ -507,7 +507,7 @@ local function CheckPortalAccess()
 end
 
 local function GetBestRoute(startPos, targetPos)
-    if not cfg.UsePortal or not CheckPortalAccess() then return nil end
+    if not cfg.UsePortal or game.PlaceId ~= 7449423635 or not CheckPortalAccess() then return nil end
 
     local bestRoute = nil
     local shortestDist = (startPos - targetPos).Magnitude
@@ -4353,6 +4353,8 @@ task.spawn(function()
     local Tabs = {
         Main = Window:CreateTab("Farming"),
         Combat = Window:CreateTab("Combat & Raid"),
+        Sea2 = Window:CreateTab("Sea 2"),
+        Sea3 = Window:CreateTab("Sea 3"),
         Travel = Window:CreateTab("Travel & Sea"),
         Stats = Window:CreateTab("Stats & Abilities"),
         Misc = Window:CreateTab("Misc"),
@@ -4360,8 +4362,8 @@ task.spawn(function()
         Settings = Window:CreateTab("Settings")
     }
 
-    Tabs.Misc:CreateSection("Sea 3 Puzzles")
-    Tabs.Misc:CreateToggle({
+    Tabs.Sea3:CreateSection("Sea 3 Puzzles")
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Light Torches",
         CurrentValue = false,
         Flag = "ToggleAutoTorch",
@@ -4381,8 +4383,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Misc:CreateSection("World Events")
-    Tabs.Misc:CreateToggle({
+    Tabs.Sea2:CreateSection("World Events")
+    Tabs.Sea2:CreateToggle({
         Name = "Auto Factory (Core)",
         CurrentValue = false,
         Flag = "ToggleAutoFactory",
@@ -4585,7 +4587,7 @@ task.spawn(function()
     })
 
 
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Cake Prince", CurrentValue = false, Flag = "ToggleAutoCakePrince",
         Callback = function(Value)
             isAutoCakePrince = Value
@@ -4610,7 +4612,7 @@ task.spawn(function()
     })
 
 
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Dough King", CurrentValue = false, Flag = "ToggleAutoDoughKing",
         Callback = function(Value)
             isAutoDoughKing = Value
@@ -4634,8 +4636,8 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Main:CreateSection("Elite Hunter")
-    Tabs.Main:CreateToggle({
+    Tabs.Sea3:CreateSection("Elite Hunter")
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Elite Hunter", CurrentValue = false, Flag = "ToggleAutoEliteHunter",
         Callback = function(Value)
             isAutoEliteHunter = Value
@@ -4822,7 +4824,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Travel:CreateSection("Mirage Island")
+    Tabs.Sea3:CreateSection("Mirage Island")
     Tabs.Travel:CreateToggle({
         Name = "Auto Mirage Chests",
         CurrentValue = false,
@@ -4871,7 +4873,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Travel:CreateSection("Kitsune Island")
+    Tabs.Sea3:CreateSection("Kitsune Island")
     Tabs.Travel:CreateToggle({
         Name = "Auto Collect Ember",
         CurrentValue = false,
@@ -4905,7 +4907,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.Travel:CreateSection("Prehistoric Island")
+    Tabs.Sea3:CreateSection("Prehistoric Island")
     Tabs.Travel:CreateToggle({
         Name = "Auto Start Prehistoric", CurrentValue = false, Flag = "AutoPrehistoricStart",
         Callback = function(Value)
@@ -5159,7 +5161,7 @@ task.spawn(function()
     })
 
     Tabs.Settings:CreateToggle({
-        Name = "Portal Teleport Bypass", CurrentValue = cfg.UsePortal,
+        Name = "Portal Teleport Bypass (Sea 3)", CurrentValue = cfg.UsePortal,
         Flag = "UsePortalToggle", Callback = function(Value) cfg.UsePortal = Value end,
     })
 
