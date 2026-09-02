@@ -3417,19 +3417,21 @@ local function StartAutoRaid()
                             local iPos = GetSafePosition(activeIsland)
                             local dist = (myHrp.Position - iPos).Magnitude
 
-                            if activeIslandNum >= 5 then
-                                -- Jika pemain sudah diteleport keluar (raid selesai) tapi map belum hilang
-                                if dist > 3000 then
-                                    if activeTween then activeTween:Cancel(); activeTween = nil end
-                                    ToggleFloat(false)
-                                    return
-                                end
+                            -- Jika tiba-tiba karakter berjarak sangat ekstrim (> 10000 stud) dari pulau raid terdekat mana pun,
+                            -- itu berarti karakter telah diteleport keluar arena Raid ke lautan normal (misal Sea Castle).
+                            -- Jangan pernah terbang balik ke sana meskipun RaidMap belum sepenuhnya dihapus server.
+                            if dist > 10000 then
+                                if activeTween then activeTween:Cancel(); activeTween = nil end
+                                ToggleFloat(false)
+                                return
+                            end
 
-                                if dist > 80 then
-                                    TweenTo(CFrame.new(iPos + Vector3.new(0, 100, 0), iPos))
-                                else
-                                    if activeTween then activeTween:Cancel(); activeTween = nil end
-                                end
+                            if activeIslandNum >= 5 then
+                                -- Musuh sudah tidak ada dan kita berada di pulau terakhir (Island 5).
+                                -- Raid sudah dianggap SELESAI (tinggal menunggu teleport dari server).
+                                -- Batalkan semua Tween dan biarkan karakter mendarat/berjalan bebas.
+                                if activeTween then activeTween:Cancel(); activeTween = nil end
+                                ToggleFloat(false)
                                 return
                             end
 
