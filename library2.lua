@@ -868,7 +868,6 @@ function Lonum:CreateWindow(options)
             dropFrame.Size = UDim2.new(1, 0, 0, 42)
             dropFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
             dropFrame.ClipsDescendants = true
-            dropFrame.AutomaticSize = Enum.AutomaticSize.Y
             dropFrame.Parent = TabPage
 
             local dropCorner = Instance.new("UICorner")
@@ -885,7 +884,6 @@ function Lonum:CreateWindow(options)
             dropBtn.BackgroundTransparency = 1
             dropBtn.Text = ""
             dropBtn.AutoButtonColor = false
-            dropBtn.AutomaticSize = Enum.AutomaticSize.Y
             dropBtn.Parent = dropFrame
 
             local dTitle = Instance.new("TextLabel")
@@ -898,35 +896,41 @@ function Lonum:CreateWindow(options)
             dTitle.TextSize = 13
             dTitle.TextXAlignment = Enum.TextXAlignment.Left
             dTitle.TextWrapped = true
-            dTitle.AutomaticSize = Enum.AutomaticSize.Y
             dTitle.Parent = dropBtn
 
             local dValue = Instance.new("TextLabel")
             dValue.Size = UDim2.new(0.5, -20, 0, 42)
             dValue.Position = UDim2.new(0.5, 0, 0, 0)
             dValue.BackgroundTransparency = 1
-            dValue.Text = (options.CurrentOption[1] or "") .. " ▾"
+            dValue.Text = (options.CurrentOption and options.CurrentOption[1] or "") .. " ▾"
             dValue.TextColor3 = Lonum.Theme.TextDim
             dValue.Font = Lonum.Theme.Font
             dValue.TextSize = 12
             dValue.TextXAlignment = Enum.TextXAlignment.Right
             dValue.TextWrapped = true
-            dValue.AutomaticSize = Enum.AutomaticSize.Y
             dValue.Parent = dropBtn
 
             local isOpen = false
-            local optionContainer = Instance.new("Frame")
+            local optionContainer = Instance.new("ScrollingFrame")
             optionContainer.Size = UDim2.new(1, 0, 1, -42)
             optionContainer.Position = UDim2.new(0, 0, 0, 42)
             optionContainer.BackgroundTransparency = 1
+            optionContainer.ScrollBarThickness = 3
+            optionContainer.ScrollBarImageColor3 = Lonum.Theme.TextDim
+            optionContainer.BorderSizePixel = 0
+            optionContainer.Visible = false
             optionContainer.Parent = dropFrame
 
             local optLayout = Instance.new("UIListLayout")
             optLayout.SortOrder = Enum.SortOrder.LayoutOrder
             optLayout.Parent = optionContainer
 
+            optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                optionContainer.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y)
+            end)
+
             local flag = options.Flag or options.Name
-            local selected = options.CurrentOption[1] or ""
+            local selected = options.CurrentOption and options.CurrentOption[1] or ""
 
             if configData[flag] ~= nil then
                 selected = configData[flag]
@@ -946,62 +950,64 @@ function Lonum:CreateWindow(options)
                 Lonum:SaveConfig()
             end
 
-            for _, opt in ipairs(options.Options or {}) do
-                local oBtn = Instance.new("TextButton")
-                oBtn.Size = UDim2.new(1, 0, 0, 35)
-                oBtn.BackgroundColor3 = Lonum.Theme.ElementBackground
-                oBtn.Text = "    " .. opt
-                oBtn.TextColor3 = Lonum.Theme.TextDim
-                oBtn.Font = Lonum.Theme.Font
-                oBtn.TextSize = 12
-                oBtn.TextXAlignment = Enum.TextXAlignment.Left
-                oBtn.AutoButtonColor = false
-                oBtn.Parent = optionContainer
-
-                oBtn.MouseEnter:Connect(function()
-                    TweenService:Create(oBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.SidebarBackground, TextColor3 = Lonum.Theme.TextNormal}):Play()
-                end)
-                oBtn.MouseLeave:Connect(function()
-                    TweenService:Create(oBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.ElementBackground, TextColor3 = Lonum.Theme.TextDim}):Play()
-                end)
-                oBtn.Activated:Connect(function()
-                    Fire(opt)
-                    isOpen = false
-                    TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 42)}):Play()
-                end)
+            local function GetTargetHeight()
+                local optCount = #(options.Options or {})
+                if optCount == 0 then return 42 end
+                local visibleOpts = math.min(optCount, 4) -- Limit to showing max 4 items at once
+                return 42 + (visibleOpts * 35)
             end
 
-            dropBtn.Activated:Connect(function()
-                isOpen = not isOpen
-                local targetHeight = isOpen and (42 + (#(options.Options or {}) * 35)) or 42
-                TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
-            end)
-
-            local DropObj = {}
-            function DropObj:Refresh(newOpts)
+            local function PopulateOptions(newOpts)
                 for _, child in ipairs(optionContainer:GetChildren()) do
                     if child:IsA("TextButton") then child:Destroy() end
                 end
                 for _, opt in ipairs(newOpts or {}) do
                     local oBtn = Instance.new("TextButton")
-                    oBtn.Size = UDim2.new(1, 0, 0, 35)
+                    oBtn.Size = UDim2.new(1, -8, 0, 35) -- Leave space for scrollbar
                     oBtn.BackgroundColor3 = Lonum.Theme.ElementBackground
                     oBtn.Text = "    " .. opt
                     oBtn.TextColor3 = Lonum.Theme.TextDim
                     oBtn.Font = Lonum.Theme.Font
                     oBtn.TextSize = 12
                     oBtn.TextXAlignment = Enum.TextXAlignment.Left
+                    oBtn.AutoButtonColor = false
                     oBtn.Parent = optionContainer
 
+                    oBtn.MouseEnter:Connect(function()
+                        TweenService:Create(oBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.SidebarBackground, TextColor3 = Lonum.Theme.TextNormal}):Play()
+                    end)
+                    oBtn.MouseLeave:Connect(function()
+                        TweenService:Create(oBtn, TweenInfo.new(0.2), {BackgroundColor3 = Lonum.Theme.ElementBackground, TextColor3 = Lonum.Theme.TextDim}):Play()
+                    end)
                     oBtn.Activated:Connect(function()
                         Fire(opt)
                         isOpen = false
                         TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 42)}):Play()
+                        task.delay(0.3, function() if not isOpen then optionContainer.Visible = false end end)
                     end)
                 end
                 options.Options = newOpts
+            end
+
+            PopulateOptions(options.Options)
+
+            dropBtn.Activated:Connect(function()
+                isOpen = not isOpen
                 if isOpen then
-                    local targetHeight = 42 + (#newOpts * 35)
+                    optionContainer.Visible = true
+                    local targetHeight = GetTargetHeight()
+                    TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
+                else
+                    TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 42)}):Play()
+                    task.delay(0.3, function() if not isOpen then optionContainer.Visible = false end end)
+                end
+            end)
+
+            local DropObj = {}
+            function DropObj:Refresh(newOpts)
+                PopulateOptions(newOpts)
+                if isOpen then
+                    local targetHeight = GetTargetHeight()
                     TweenService:Create(dropFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
                 end
             end
