@@ -18,8 +18,8 @@ Lonum.Theme = {
     TextNormal = Color3.fromRGB(200, 200, 200),     -- #c8c8c8
     TextDim = Color3.fromRGB(150, 150, 150),        -- #969696
     CornerRadius = UDim.new(0, 10),                  -- Standard rounded
-    Font = Enum.Font.Jura,
-    FontBold = Enum.Font.Jura
+    Font = Enum.Font.GothamMedium,
+    FontBold = Enum.Font.GothamBold
 }
 
 Lonum.ToggleKey = Enum.KeyCode.K
