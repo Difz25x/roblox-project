@@ -177,7 +177,13 @@ local function SetupAutoExecute()
     if qot then
         player.OnTeleport:Connect(function(State)
             if cfg.AutoExecute and State == Enum.TeleportState.Started then
-                qot('loadstring(game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua"))()')
+                local cacheBuster = "?v=" .. tostring(os.time())
+                local code = game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua" .. cacheBuster)
+                if code then
+                    qot(code)
+                else
+                    qot('loadstring(game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua"))()')
+                end
             end
         end)
     end
