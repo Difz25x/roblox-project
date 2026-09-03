@@ -128,6 +128,7 @@ local cfg = {
 	MasteryHealth = 30,
 
     UsePortal = true,
+    AutoExecute = false,
 
 	TweenSpeed = 300,
 	BringRadius = 350,
@@ -170,6 +171,18 @@ local cfg = {
 	dodgeDistance = 15,
 	dodgeCooldown = 1
 }
+
+local function SetupAutoExecute()
+    local qot = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+    if qot then
+        player.OnTeleport:Connect(function(State)
+            if cfg.AutoExecute and State == Enum.TeleportState.Started then
+                qot('loadstring(game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua"))()')
+            end
+        end)
+    end
+end
+SetupAutoExecute()
 
 local attackSpeedMode = "Fast Attack"
 local isMultiMobDamage = false
@@ -3263,7 +3276,10 @@ local function StartAutoRaid()
 
                 if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
                     local closest = nil
-                    local shortestDist = 2000
+                    -- Batasi radius pencarian hingga 700 stud!
+                    -- Mencegah karakter mencari musuh di daratan pulau lain (seperti Floating Turtle)
+                    -- yang kebetulan posisinya berada lurus di bawah Raid Map ini di angkasa.
+                    local shortestDist = 700
                     if enemiesFolder then
 
                         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
@@ -4347,6 +4363,10 @@ task.spawn(function()
     })
 
     Tabs.Settings:CreateSection("UI Configuration")
+    Tabs.Settings:CreateToggle({
+        Name = "Enable Auto Execute", CurrentValue = cfg.AutoExecute, Flag = "ToggleAutoExecute",
+        Callback = function(Value) cfg.AutoExecute = Value end,
+    })
     Tabs.Settings:CreateKeybind({
         Name = "Toggle Menu Key",
         CurrentValue = Enum.KeyCode.K,
