@@ -4529,7 +4529,7 @@ task.spawn(function()
         end,
     })
 
-    Tabs.SEA3:CreateToggle({
+    Tabs.Sea3:CreateToggle({
         Name = "Auto Farm Bone", CurrentValue = false, Flag = "ToggleAutoBone",
         Callback = function(Value)
             isAutoBone = Value
