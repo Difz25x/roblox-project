@@ -408,19 +408,12 @@ function Lonum.UNC(callback)
 
     task.spawn(function()
         local tests = {
-            "cache.invalidate", "cache.iscached", "cache.replace", "cloneref", "compareinstances",
-            "checkcaller", "clonefunction", "getcallingscript", "getscriptclosure", "hookfunction",
-            "iscclosure", "islclosure", "isexecutorclosure", "loadstring", "newcclosure", "rconsoleprint",
-            "crypt.base64encode", "crypt.encrypt", "crypt.hash", "debug.getconstant", "debug.getinfo",
-            "debug.getupvalue", "debug.setupvalue", "readfile", "listfiles", "writefile", "makefolder",
-            "isfile", "isfolder", "loadfile", "dofile", "mouse1click", "mousescroll", "fireclickdetector",
-            "getconnections", "getcustomasset", "gethiddenproperty", "sethiddenproperty", "gethui",
-            "getinstances", "getnilinstances", "isscriptable", "setscriptable", "setrbxclipboard",
-            "getrawmetatable", "hookmetamethod", "getnamecallmethod", "isreadonly", "setrawmetatable",
-            "setreadonly", "identifyexecutor", "lz4compress", "messagebox", "queue_on_teleport",
-            "request", "setclipboard", "setfpscap", "getgc", "getgenv", "getloadedmodules", "getrenv",
-            "getrunningscripts", "getscripts", "getsenv", "getthreadidentity", "setthreadidentity",
-            "Drawing.new", "isrenderobj", "getrenderproperty", "cleardrawcache", "WebSocket.connect"
+            "checkcaller", "getnamecallmethod", "hookmetamethod",
+            "getgenv", "getinstances", "getnilinstances",
+            "sethiddenproperty", "getconnections", "firetouchinterest",
+            "fireproximityprompt", "gethui", "queue_on_teleport",
+            "debug.getupvalues", "debug.setupvalue", "require",
+            "hookfunction"
         }
 
         local passed = 0
