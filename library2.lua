@@ -1,7 +1,22 @@
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
+
+local function GetSafeParent()
+    if gethui and type(gethui) == "function" then
+        local success, result = pcall(gethui)
+        if success and result then return result end
+    end
+
+    local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    if success and coreGui then
+        local robloxGui = coreGui:FindFirstChild("RobloxGui")
+        if robloxGui then return robloxGui end
+        return coreGui
+    end
+
+    return game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+end
 
 local Lonum = {}
 Lonum.__index = Lonum
@@ -106,12 +121,7 @@ function Lonum:CreateFloatingHUD(options)
     options = options or {}
     local Title = options.Title or "Server Live Status"
 
-    local targetParent = CoreGui:FindFirstChild("RobloxGui") or CoreGui
-    pcall(function()
-        if not targetParent or not targetParent:FindFirstChild("RobloxGui") then
-            targetParent = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-        end
-    end)
+    local targetParent = GetSafeParent()
 
     for _, gui in pairs(targetParent:GetChildren()) do
         if gui.Name == "LonumFloatingGui" then gui:Destroy() end
@@ -282,6 +292,247 @@ function Lonum:CreateFloatingHUD(options)
 end
 
 --=========================================
+-- SUNC CHECKER & ENVIRONMENT VALIDATION
+--=========================================
+function Lonum.UNC(callback)
+    local targetParent = GetSafeParent()
+    for _, gui in pairs(targetParent:GetChildren()) do
+        if gui.Name == "LonumUNC_Test" then gui:Destroy() end
+    end
+
+    local UNCGui = Instance.new("ScreenGui")
+    UNCGui.Name = "LonumUNC_Test"
+    UNCGui.ResetOnSpawn = false
+    UNCGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    UNCGui.Parent = targetParent
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 400, 0, 500)
+    MainFrame.Position = UDim2.new(0.5, -200, 0.5, -250)
+    MainFrame.BackgroundColor3 = Lonum.Theme.SidebarBackground
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = UNCGui
+    Instance.new("UICorner", MainFrame).CornerRadius = Lonum.Theme.CornerRadius
+
+    local TopBar = Instance.new("Frame")
+    TopBar.Size = UDim2.new(1, 0, 0, 40)
+    TopBar.BackgroundColor3 = Lonum.Theme.ElementBackground
+    TopBar.BorderSizePixel = 0
+    TopBar.Parent = MainFrame
+    Instance.new("UICorner", TopBar).CornerRadius = Lonum.Theme.CornerRadius
+
+    -- Fix bottom rounded corners of topbar
+    local Fix = Instance.new("Frame")
+    Fix.Size = UDim2.new(1, 0, 0, 10)
+    Fix.Position = UDim2.new(0, 0, 1, -10)
+    Fix.BackgroundColor3 = Lonum.Theme.ElementBackground
+    Fix.BorderSizePixel = 0
+    Fix.Parent = TopBar
+
+    local TitleLbl = Instance.new("TextLabel")
+    TitleLbl.Size = UDim2.new(1, -20, 1, 0)
+    TitleLbl.Position = UDim2.new(0, 10, 0, 0)
+    TitleLbl.BackgroundTransparency = 1
+    TitleLbl.Text = "Wait, Load Script... (Make sure you see UNC Test!)"
+    TitleLbl.TextColor3 = Lonum.Theme.TextTitle
+    TitleLbl.Font = Lonum.Theme.FontBold
+    TitleLbl.TextSize = 14
+    TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLbl.Parent = TopBar
+
+    local ProgBG = Instance.new("Frame")
+    ProgBG.Size = UDim2.new(1, -20, 0, 10)
+    ProgBG.Position = UDim2.new(0, 10, 0, 50)
+    ProgBG.BackgroundColor3 = Lonum.Theme.MainBackground
+    ProgBG.Parent = MainFrame
+    Instance.new("UICorner", ProgBG).CornerRadius = UDim.new(1, 0)
+
+    local ProgFill = Instance.new("Frame")
+    ProgFill.Size = UDim2.new(0, 0, 1, 0)
+    ProgFill.BackgroundColor3 = Lonum.Theme.Accent
+    ProgFill.Parent = ProgBG
+    Instance.new("UICorner", ProgFill).CornerRadius = UDim.new(1, 0)
+
+    local InfoLbl = Instance.new("TextLabel")
+    InfoLbl.Size = UDim2.new(1, -20, 0, 20)
+    InfoLbl.Position = UDim2.new(0, 10, 0, 65)
+    InfoLbl.BackgroundTransparency = 1
+    InfoLbl.Text = "Starting tests..."
+    InfoLbl.TextColor3 = Lonum.Theme.TextDim
+    InfoLbl.Font = Lonum.Theme.Font
+    InfoLbl.TextSize = 13
+    InfoLbl.Parent = MainFrame
+
+    local ScrollFrame = Instance.new("ScrollingFrame")
+    ScrollFrame.Size = UDim2.new(1, -20, 1, -140)
+    ScrollFrame.Position = UDim2.new(0, 10, 0, 90)
+    ScrollFrame.BackgroundTransparency = 1
+    ScrollFrame.ScrollBarThickness = 4
+    ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    ScrollFrame.Parent = MainFrame
+
+    local UIListLayout = Instance.new("UIListLayout")
+    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayout.Padding = UDim.new(0, 5)
+    UIListLayout.Parent = ScrollFrame
+
+    -- Buttons (hidden initially)
+    local ButtonsFrame = Instance.new("Frame")
+    ButtonsFrame.Size = UDim2.new(1, -20, 0, 35)
+    ButtonsFrame.Position = UDim2.new(0, 10, 1, -45)
+    ButtonsFrame.BackgroundTransparency = 1
+    ButtonsFrame.Visible = false
+    ButtonsFrame.Parent = MainFrame
+
+    local BtnCopy = Instance.new("TextButton")
+    BtnCopy.Size = UDim2.new(1, 0, 0, 35)
+    BtnCopy.BackgroundColor3 = Lonum.Theme.ElementBackground
+    BtnCopy.Text = "Copy Output to Clipboard"
+    BtnCopy.TextColor3 = Lonum.Theme.TextTitle
+    BtnCopy.Font = Lonum.Theme.Font
+    BtnCopy.TextSize = 14
+    BtnCopy.Parent = ButtonsFrame
+    Instance.new("UICorner", BtnCopy).CornerRadius = Lonum.Theme.CornerRadius
+
+    local function addLog(text, isSuccess)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = isSuccess and Color3.fromRGB(0, 230, 118) or Color3.fromRGB(255, 59, 59)
+        lbl.Font = Enum.Font.Code
+        lbl.TextSize = 13
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = ScrollFrame
+    end
+
+    task.spawn(function()
+        local tests = {
+            "cache.invalidate", "cache.iscached", "cache.replace", "cloneref", "compareinstances",
+            "checkcaller", "clonefunction", "getcallingscript", "getscriptclosure", "hookfunction",
+            "iscclosure", "islclosure", "isexecutorclosure", "loadstring", "newcclosure", "rconsoleprint",
+            "crypt.base64encode", "crypt.encrypt", "crypt.hash", "debug.getconstant", "debug.getinfo",
+            "debug.getupvalue", "debug.setupvalue", "readfile", "listfiles", "writefile", "makefolder",
+            "isfile", "isfolder", "loadfile", "dofile", "mouse1click", "mousescroll", "fireclickdetector",
+            "getconnections", "getcustomasset", "gethiddenproperty", "sethiddenproperty", "gethui",
+            "getinstances", "getnilinstances", "isscriptable", "setscriptable", "setrbxclipboard",
+            "getrawmetatable", "hookmetamethod", "getnamecallmethod", "isreadonly", "setrawmetatable",
+            "setreadonly", "identifyexecutor", "lz4compress", "messagebox", "queue_on_teleport",
+            "request", "setclipboard", "setfpscap", "getgc", "getgenv", "getloadedmodules", "getrenv",
+            "getrunningscripts", "getscripts", "getsenv", "getthreadidentity", "setthreadidentity",
+            "Drawing.new", "isrenderobj", "getrenderproperty", "cleardrawcache", "WebSocket.connect"
+        }
+
+        local passed = 0
+        local fails = 0
+        local logBuffer = ""
+
+        local function logAndPrint(txt, state)
+            local icon = state and "✅" or "❌"
+            local fTxt = icon .. " " .. txt
+            addLog(fTxt, state)
+            logBuffer = logBuffer .. fTxt .. "\n"
+            print(fTxt)
+        end
+
+        for i, funcName in ipairs(tests) do
+            ProgFill.Size = UDim2.new(i / #tests, 0, 1, 0)
+            InfoLbl.Text = "Testing: " .. funcName .. " (" .. i .. "/" .. #tests .. ")"
+
+            local path = string.split(funcName, ".")
+            local envObj = getgenv()
+            local found = true
+
+            -- Quick check if function exists in executor environment
+            for _, k in ipairs(path) do
+                if type(envObj) == "table" and envObj[k] ~= nil then
+                    envObj = envObj[k]
+                else
+                    found = false
+                    break
+                end
+            end
+
+            -- Certain built-ins validation
+            if not found then
+                -- if not in getgenv, maybe normal lua environment check
+                local ok, res = pcall(function()
+                    return loadstring("return " .. funcName)()
+                end)
+                if ok and res ~= nil then found = true end
+            end
+
+            if found then
+                passed = passed + 1
+                logAndPrint(funcName, true)
+            else
+                fails = fails + 1
+                logAndPrint(funcName, false)
+            end
+
+            if i % 5 == 0 then task.wait() end
+        end
+
+        local Rate = math.floor((passed / #tests) * 100)
+        local summary = "🟢 Passed: " .. passed .. " | 🔴 Failed: " .. fails .. "\nThe Result of the UNC is : " .. Rate .. "%"
+
+        InfoLbl.Text = "Test Complete! Rate: " .. Rate .. "%"
+        InfoLbl.TextColor3 = Lonum.Theme.TextTitle
+        logBuffer = logBuffer .. "\n" .. summary
+        print(summary)
+
+        ButtonsFrame.Visible = true
+
+        BtnCopy.MouseButton1Click:Connect(function()
+            if setclipboard then setclipboard(logBuffer) end
+        end)
+
+        if Rate >= 80 then
+            task.wait(1.5)
+            UNCGui:Destroy()
+            if type(callback) == "function" then callback() end
+        else
+            TitleLbl.Text = "Failed: Executor must support >= 80% UNC"
+            TitleLbl.TextColor3 = Color3.fromRGB(255, 59, 59)
+
+            -- Change UI to show Kick/Bypass
+            BtnCopy.Size = UDim2.new(0.3, -5, 0, 35)
+
+            local BtnKick = Instance.new("TextButton")
+            BtnKick.Size = UDim2.new(0.3, -5, 0, 35)
+            BtnKick.Position = UDim2.new(0.3, 5, 0, 0)
+            BtnKick.BackgroundColor3 = Color3.fromRGB(255, 59, 59)
+            BtnKick.Text = "Kick"
+            BtnKick.TextColor3 = Color3.fromRGB(255, 255, 255)
+            BtnKick.Font = Lonum.Theme.FontBold
+            BtnKick.TextSize = 14
+            BtnKick.Parent = ButtonsFrame
+            Instance.new("UICorner", BtnKick).CornerRadius = Lonum.Theme.CornerRadius
+
+            local BtnBypass = Instance.new("TextButton")
+            BtnBypass.Size = UDim2.new(0.4, -5, 0, 35)
+            BtnBypass.Position = UDim2.new(0.6, 5, 0, 0)
+            BtnBypass.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
+            BtnBypass.Text = "Bypass (Bugs Expected)"
+            BtnBypass.TextColor3 = Color3.fromRGB(255, 255, 255)
+            BtnBypass.Font = Lonum.Theme.FontBold
+            BtnBypass.TextSize = 12
+            BtnBypass.Parent = ButtonsFrame
+            Instance.new("UICorner", BtnBypass).CornerRadius = Lonum.Theme.CornerRadius
+
+            BtnKick.MouseButton1Click:Connect(function()
+                game.Players.LocalPlayer:Kick("Executor does not meet the 80% UNC requirements.")
+            end)
+
+            BtnBypass.MouseButton1Click:Connect(function()
+                UNCGui:Destroy()
+                if type(callback) == "function" then callback() end
+            end)
+        end
+    end)
+end
+
+--=========================================
 -- WINDOW CREATION
 --=========================================
 function Lonum:CreateWindow(options)
@@ -295,12 +546,7 @@ function Lonum:CreateWindow(options)
         self:LoadConfig()
     end
 
-    local targetParent = CoreGui:FindFirstChild("RobloxGui") or CoreGui
-    pcall(function()
-        if not targetParent or not targetParent:FindFirstChild("RobloxGui") then
-            targetParent = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-        end
-    end)
+    local targetParent = GetSafeParent()
 
     for _, gui in pairs(targetParent:GetChildren()) do
         if gui.Name == "LonumMainGui" then gui:Destroy() end
@@ -1272,12 +1518,7 @@ function Lonum:Notify(options)
     local Content = options.Content or "..."
     local Duration = options.Duration or 3
 
-    local targetParent = CoreGui:FindFirstChild("RobloxGui") or CoreGui
-    pcall(function()
-        if not targetParent or not targetParent:FindFirstChild("RobloxGui") then
-            targetParent = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-        end
-    end)
+    local targetParent = GetSafeParent()
 
     local NotifGui = targetParent:FindFirstChild("LonumNotifGui")
     if not NotifGui then
