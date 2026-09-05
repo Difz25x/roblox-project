@@ -117,18 +117,24 @@ end
 --=========================================
 -- FLOATING HUD (DEBUG MENU)
 --=========================================
+local function GenerateRandomName()
+    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    local name = ""
+    for i = 1, 15 do
+        local r = math.random(1, #chars)
+        name = name .. string.sub(chars, r, r)
+    end
+    return name
+end
+
 function Lonum:CreateFloatingHUD(options)
     options = options or {}
     local Title = options.Title or "Server Live Status"
 
     local targetParent = GetSafeParent()
 
-    for _, gui in pairs(targetParent:GetChildren()) do
-        if gui.Name == "LonumFloatingGui" then gui:Destroy() end
-    end
-
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "LonumFloatingGui"
+    ScreenGui.Name = GenerateRandomName()
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = targetParent
