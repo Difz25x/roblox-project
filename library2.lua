@@ -302,12 +302,9 @@ end
 --=========================================
 function Lonum.UNC(callback)
     local targetParent = GetSafeParent()
-    for _, gui in pairs(targetParent:GetChildren()) do
-        if gui.Name == "LonumUNC_Test" then gui:Destroy() end
-    end
 
     local UNCGui = Instance.new("ScreenGui")
-    UNCGui.Name = "LonumUNC_Test"
+    UNCGui.Name = GenerateRandomName()
     UNCGui.ResetOnSpawn = false
     UNCGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     UNCGui.Parent = targetParent
@@ -547,12 +544,8 @@ function Lonum:CreateWindow(options)
 
     local targetParent = GetSafeParent()
 
-    for _, gui in pairs(targetParent:GetChildren()) do
-        if gui.Name == "LonumMainGui" then gui:Destroy() end
-    end
-
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "LonumMainGui"
+    ScreenGui.Name = GenerateRandomName()
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = targetParent
