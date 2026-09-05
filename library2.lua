@@ -135,6 +135,7 @@ function Lonum:CreateFloatingHUD(options)
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = GenerateRandomName()
+    ScreenGui:SetAttribute("isLonumUI", true)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = targetParent
@@ -305,6 +306,7 @@ function Lonum.UNC(callback)
 
     local UNCGui = Instance.new("ScreenGui")
     UNCGui.Name = GenerateRandomName()
+    UNCGui:SetAttribute("isLonumUI", true)
     UNCGui.ResetOnSpawn = false
     UNCGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     UNCGui.Parent = targetParent
@@ -546,6 +548,7 @@ function Lonum:CreateWindow(options)
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = GenerateRandomName()
+    ScreenGui:SetAttribute("isLonumUI", true)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.Parent = targetParent
