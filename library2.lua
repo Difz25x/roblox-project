@@ -142,8 +142,8 @@ function Lonum:CreateFloatingHUD(options)
 
     local HUDFrame = Instance.new("Frame")
     HUDFrame.Name = "HUDFrame"
-    HUDFrame.Size = UDim2.new(0, 250, 0, 80)
-    HUDFrame.Position = UDim2.new(1, -270, 0, 20)
+    HUDFrame.Size = UDim2.new(0, 360, 0, 80)
+    HUDFrame.Position = UDim2.new(1, -380, 0, 20)
     HUDFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     HUDFrame.BackgroundTransparency = 0.15
     HUDFrame.BorderSizePixel = 0
@@ -220,7 +220,7 @@ function Lonum:CreateFloatingHUD(options)
     -- Auto Resize HUD
     ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         local h = 38 + ContentLayout.AbsoluteContentSize.Y + 12
-        TweenService:Create(HUDFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, 250, 0, h)}):Play()
+        TweenService:Create(HUDFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, 360, 0, h)}):Play()
     end)
 
     local HUDObj = {}
@@ -254,22 +254,23 @@ function Lonum:CreateFloatingHUD(options)
                 rFrame.Parent = ContentContainer
 
                 local lText = Instance.new("TextLabel")
-                lText.Size = UDim2.new(0.5, 0, 1, 0)
+                lText.Size = UDim2.new(0.35, 0, 1, 0)
                 lText.BackgroundTransparency = 1
                 lText.TextColor3 = Lonum.Theme.TextDim
                 lText.Font = Lonum.Theme.Font
-                lText.TextSize = 12
+                lText.TextSize = 11
                 lText.TextXAlignment = Enum.TextXAlignment.Left
                 lText.Parent = rFrame
 
                 local rText = Instance.new("TextLabel")
-                rText.Size = UDim2.new(0.5, 0, 1, 0)
-                rText.Position = UDim2.new(0.5, 0, 0, 0)
+                rText.Size = UDim2.new(0.65, 0, 1, 0)
+                rText.Position = UDim2.new(0.35, 0, 0, 0)
                 rText.BackgroundTransparency = 1
                 rText.TextColor3 = Lonum.Theme.TextTitle
-                rText.Font = Lonum.Theme.Font
-                rText.TextSize = 12
+                rText.Font = Lonum.Theme.FontBold
+                rText.TextSize = 11
                 rText.TextXAlignment = Enum.TextXAlignment.Right
+                rText.ClipsDescendants = false
                 rText.Parent = rFrame
 
                 row = {Frame = rFrame, Left = lText, Right = rText}
