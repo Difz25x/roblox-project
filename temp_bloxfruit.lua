@@ -1,3 +1,31 @@
+if not math.ldexp then
+	math.ldexp = function(x, n)
+		return x * 2 ^ n
+	end
+end
+if not math.frexp then
+	math.frexp = function(x)
+		if x == 0 then
+			return 0, 0
+		end
+		local exp = math.floor(math.log(math.abs(x)) / math.log(2)) + 1
+		local mantissa = x / 2 ^ exp
+		return mantissa, exp
+	end
+end
+if not loadstring and load then
+	loadstring = load
+end
+if not loadstring then
+	loadstring = function(s)
+		return load(s)
+	end
+end
+
+while not game:IsLoaded() do
+	task.wait()
+end
+
 local SCRIPT_ID = "BloxFruits_MegaFarm_Overdrive"
 
 pcall(function()
@@ -65,6 +93,7 @@ local cfg = {
 	isMultiMobDamage = false,
 	isAutoTorch = false,
 	isAutoBanana = false,
+	isAutoGrapplingHook = false,
 	isAutoPearl = false,
 	isAutoCrowd = false,
 	isAutoMagmaEvent = false,
@@ -75,7 +104,7 @@ local cfg = {
 	MasteryCategory = "Melee",
 	MasteryHealth = 30,
 
-	UsePortal = true,
+	UsePortal = false,
 	AutoExecute = false,
 	BringMethod = "Tween",
 
@@ -90,8 +119,9 @@ local cfg = {
 
 	TargetRefresh = 0,
 	BringInterval = 0,
-	AttackIntervalFast = 0.05,
-	AttackIntervalSuper = 0,
+	AttackIntervalFast = 0.14,
+	AttackIntervalSuper = 0.11,
+	AttackIntervalBeta = 0,
 	EvasionMoveInterval = 0.45,
 	ThreadSleep = 0.05,
 
@@ -117,6 +147,8 @@ local cfg = {
 	chestScanRadius = 300,
 	playerScanRadius = 200,
 	dodgeEnabled = false,
+	cframeSpeed = false,
+	cframeSpeedValue = 50,
 	dodgeDistance = 15,
 	dodgeCooldown = 1,
 
@@ -125,9 +157,24 @@ local cfg = {
 	isTeleportingToIsland = false,
 
 	isAutoHaze = false,
+	isAutoFarmMagnet = false,
 }
 
-local activeTween = nil
+local Runtime = {
+	activeTween = nil,
+	activeCarrier = nil,
+	activeFollowConn = nil,
+	RegisterHitEvent = nil,
+	RegisterAttackEvent = nil,
+	activeMagnetTweens = {},
+	lastFindAnywhereAt = 0,
+	emptyTargetThrottle = {},
+	lastMagnetTick = 0,
+	lastDripMamaCheck = 0,
+	cachedDripMamaStatus = "unknown",
+	skillKeys = { Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V, Enum.KeyCode.F },
+	skillIndex = 1,
+}
 local syn = getgenv and getgenv().syn or nil
 FarmToggle = nil
 local GetSafePosition = nil
@@ -184,9 +231,9 @@ function ScriptContext:Destroy()
 	table.clear(self.Connections)
 
 	pcall(function()
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
 		local c = game:GetService("Players").LocalPlayer.Character
 		if c and c:FindFirstChild("HumanoidRootPart") then
@@ -218,9 +265,6 @@ HttpService = game:GetService("HttpService")
 TeleportService = game:GetService("TeleportService")
 Lighting = game:GetService("Lighting")
 
---=========================================
--- CENTRALIZED WORKSPACE PATHS
---=========================================
 local Paths = setmetatable({
 	Enemies = workspace:FindFirstChild("Enemies"),
 	Characters = workspace:FindFirstChild("Characters"),
@@ -241,8 +285,184 @@ local Paths = setmetatable({
 	end,
 })
 
-local hasFireTouch = type(firetouchinterest) == "function"
-local hasProximity = type(fireproximityprompt) == "function"
+UncAliases = {
+	queue_on_teleport = { "queue_on_teleport", "queueonteleport" },
+	firetouchinterest = { "firetouchinterest", "touchinterest" },
+	fireproximityprompt = { "fireproximityprompt", "proximityprompt" },
+	setclipboard = { "setclipboard", "toclipboard", "set_clipboard" },
+	sethiddenproperty = { "sethiddenproperty", "set_hidden_property", "set_hidden_prop" },
+	gethiddenproperty = { "gethiddenproperty", "get_hidden_property", "get_hidden_prop" },
+	getnilinstances = { "getnilinstances", "get_nil_instances" },
+	getinstances = { "getinstances", "get_instances" },
+	getinstancesbyclass = { "getinstancesbyclass", "get_instances_by_class" },
+	getconnections = { "getconnections", "get_connections" },
+	readfile = { "readfile", "read_file" },
+	writefile = { "writefile", "write_file" },
+	isfile = { "isfile", "is_file" },
+	isfolder = { "isfolder", "is_folder" },
+	makefolder = { "makefolder", "make_folder" },
+
+	-- sUNC / modern UNC compatibility
+	gethui = { "gethui" },
+	getsenv = { "getsenv" },
+	getgc = { "getgc" },
+	filtergc = { "filtergc" },
+	getloadedmodules = { "getloadedmodules" },
+	getrunningscripts = { "getrunningscripts" },
+	getscripts = { "getscripts" },
+	cloneref = { "cloneref" },
+	compareinstances = { "compareinstances" },
+	getrawmetatable = { "getrawmetatable" },
+	setrawmetatable = { "setrawmetatable" },
+	isreadonly = { "isreadonly" },
+	isscriptable = { "isscriptable" },
+	getrenderproperty = { "getrenderproperty" },
+	setrenderproperty = { "setrenderproperty" },
+	isrenderobj = { "isrenderobj" },
+	cleardrawcache = { "cleardrawcache" },
+	restorefunction = { "restorefunction" },
+	clonefunction = { "clonefunction" },
+	iscclosure = { "iscclosure" },
+	islclosure = { "islclosure" },
+	isexecutorclosure = { "isexecutorclosure" },
+	getfunctionhash = { "getfunctionhash" },
+	getscriptbytecode = { "getscriptbytecode", "dumpstring" },
+	getscriptclosure = { "getscriptclosure" },
+	getscriptfromthread = { "getscriptfromthread" },
+	getcallingscript = { "getcallingscript" },
+	getcallbackvalue = { "getcallbackvalue" },
+	decompile = { "decompile" },
+	firesignal = { "firesignal" },
+	replicatesignal = { "replicatesignal" },
+	setfpscap = { "setfpscap" },
+}
+
+local function useUnc(name, argsTable)
+	argsTable = argsTable or {}
+
+	Runtime.ExecutorFunctionCache = Runtime.ExecutorFunctionCache or {}
+	local cache = Runtime.ExecutorFunctionCache[name]
+
+	if cache == false then
+		return false, nil, nil
+	end
+
+	if type(cache) == "function" then
+		local ok, res = pcall(cache, unpack(argsTable))
+		if ok then
+			return true, res, cache
+		end
+	end
+
+	local candidates = UncAliases[name] or { name }
+
+	local function resolve(root, path)
+		if type(root) ~= "table" then
+			return nil
+		end
+
+		local value = root
+		for segment in string.gmatch(path, "[^%.]+") do
+			value = rawget(value, segment)
+			if value == nil then
+				return nil
+			end
+		end
+
+		return type(value) == "function" and value or nil
+	end
+
+	for _, fnName in ipairs(candidates) do
+		local func = nil
+
+		pcall(function()
+			func = resolve(_G, fnName)
+				or (getgenv and resolve(getgenv(), fnName))
+				or (shared and resolve(shared, fnName))
+		end)
+
+		if not func and string.find(fnName, ".", 1, true) then
+			local rootName = string.match(fnName, "^[^%.]+")
+			local env = nil
+
+			pcall(function()
+				env = getfenv()
+			end)
+
+			if env then
+				func = resolve(env, fnName)
+			end
+
+			if not func and rootName then
+				local debugRoot = rawget(_G, rootName)
+					or (getgenv and rawget(getgenv(), rootName))
+					or (shared and rawget(shared, rootName))
+				func = resolve(debugRoot, fnName)
+			end
+		elseif not func then
+			pcall(function()
+				func = getfenv()[fnName]
+			end)
+		end
+
+		if type(func) == "function" then
+			Runtime.ExecutorFunctionCache[name] = func
+			local ok, res = pcall(func, unpack(argsTable))
+			return ok, res, func
+		end
+	end
+
+	if type(syn) == "table" then
+		for _, fnName in ipairs(candidates) do
+			local clean = string.gsub(fnName, "^syn%_", "")
+			if type(syn[clean]) == "function" then
+				Runtime.ExecutorFunctionCache[name] = syn[clean]
+				local ok, res = pcall(syn[clean], unpack(argsTable))
+				return ok, res, syn[clean]
+			end
+		end
+	end
+
+	if type(fluxus) == "table" then
+		for _, fnName in ipairs(candidates) do
+			local clean = string.gsub(fnName, "^fluxus%_", "")
+			if type(fluxus[clean]) == "function" then
+				Runtime.ExecutorFunctionCache[name] = fluxus[clean]
+				local ok, res = pcall(fluxus[clean], unpack(argsTable))
+				return ok, res, fluxus[clean]
+			end
+		end
+	end
+
+	Runtime.ExecutorFunctionCache[name] = false
+	return false, nil, nil
+end
+
+local hasFireTouch = select(3, useUnc("firetouchinterest")) ~= nil
+local hasProximity = select(3, useUnc("fireproximityprompt")) ~= nil
+
+local function SafeGetInstancesByClass(className)
+	local ok, res = useUnc("getinstancesbyclass", { className })
+	if ok and type(res) == "table" then
+		return res
+	end
+	local list = {}
+	if Paths.Enemies then
+		for _, v in ipairs(Paths.Enemies:GetChildren()) do
+			if v:IsA(className) then
+				table.insert(list, v)
+			end
+		end
+	end
+	if Paths.Characters then
+		for _, v in ipairs(Paths.Characters:GetChildren()) do
+			if v:IsA(className) then
+				table.insert(list, v)
+			end
+		end
+	end
+	return list
+end
 
 local function SafeGetNilInstances()
 	if type(getnilinstances) == "function" then
@@ -252,26 +472,6 @@ local function SafeGetNilInstances()
 		end
 	end
 	return {}
-end
-
-local function SafeGetInstances()
-	if type(getinstances) == "function" then
-		local ok, res = pcall(getinstances)
-		if ok and type(res) == "table" then
-			return res
-		end
-	end
-	local list = {}
-	for _, inst in ipairs(workspace:GetDescendants()) do
-		table.insert(list, inst)
-	end
-	local rep = game:GetService("ReplicatedStorage")
-	if rep then
-		for _, inst in ipairs(rep:GetDescendants()) do
-			table.insert(list, inst)
-		end
-	end
-	return list
 end
 
 local player = Players.LocalPlayer
@@ -295,35 +495,68 @@ pcall(function()
 end)
 
 local function SetupAutoExecute()
-	local qot = queue_on_teleport
-		or queueonteleport
-		or (syn and syn.queue_on_teleport)
-		or (fluxus and fluxus.queue_on_teleport)
-	if qot then
-		player.OnTeleport:Connect(function(State)
-			if cfg.AutoExecute and State == Enum.TeleportState.Started then
-				local cacheBuster = "?v=" .. tostring(os.time())
-				local code = game:HttpGet(
-					"https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua" .. cacheBuster
-				)
-				if code then
-					qot(code)
-				else
-					qot(
-						'loadstring(game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua"))()'
-					)
-				end
-			end
-		end)
-	end
+	player.OnTeleport:Connect(function(State)
+		if cfg.AutoExecute and State == Enum.TeleportState.Started then
+			local cacheBuster = "?v=" .. tostring(os.time())
+			local scriptPayload = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/Difz25x/roblox-project/main/temp_bloxfruit.lua'
+				.. cacheBuster
+				.. '"))()'
+			useUnc("queue_on_teleport", { scriptPayload })
+		end
+	end)
 end
 SetupAutoExecute()
 
 task.spawn(function()
+	-- Purge stale teleport anchors left by any previous script instance.
+	-- Their RenderStepped follow-loops disconnect once the part is gone.
 	pcall(function()
-		if sethiddenproperty then
-			sethiddenproperty(player, "SimulationRadius", 1000)
-			sethiddenproperty(player, "MaxSimulationRadius", 1000)
+		for _, container in ipairs({ workspace, workspace:FindFirstChild("_WorldOrigin") }) do
+			if container then
+				for _, child in ipairs(container:GetChildren()) do
+					if child.Name == "PartTele" then
+						child:Destroy()
+					end
+				end
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while ScriptContext.Running do
+			pcall(function()
+				if sethiddenproperty then
+					sethiddenproperty(player, "SimulationRadius", math.huge)
+					sethiddenproperty(player, "MaxSimulationRadius", math.huge)
+				end
+
+				-- Purge any anchor that drifted into the void (stale/poisoned instance)
+				for _, container in ipairs({ workspace, workspace:FindFirstChild("_WorldOrigin") }) do
+					if container then
+						for _, child in ipairs(container:GetChildren()) do
+							if child.Name == "PartTele" and child:IsA("BasePart") then
+								local cp = child.Position
+								if cp.Y < -500 or math.abs(cp.X) > 200000 or math.abs(cp.Z) > 200000 then
+									child:Destroy()
+								end
+							end
+						end
+					end
+				end
+
+				-- Watchdog: never let a stuck teleport flag freeze all movement forever
+				if isTeleporting then
+					if not getgenv().LonumTeleportStuckAt then
+						getgenv().LonumTeleportStuckAt = os.clock()
+					elseif os.clock() - getgenv().LonumTeleportStuckAt > 40 then
+						getgenv().LonumTeleportStuckAt = nil
+						isTeleporting = false
+					end
+				else
+					getgenv().LonumTeleportStuckAt = nil
+				end
+			end)
+			task.wait(1)
 		end
 	end)
 
@@ -413,7 +646,9 @@ task.spawn(function()
 		end
 	end
 
-	game.Players.LocalPlayer.CharacterAdded:Connect(OptimizeMovement)
+	game.Players.LocalPlayer.CharacterAdded:Connect(function(c)
+		OptimizeMovement()
+	end)
 	if game.Players.LocalPlayer.Character then
 		OptimizeMovement()
 	end
@@ -436,62 +671,106 @@ local function SmartSetProperty(instance, prop, value)
 	end)
 end
 
-local attackSpeedMode = "Fast Attack"
-local dungeonWorkerGeneration = 10
-local currentRaidIsland = 1
+attackSpeedMode = "Fast Attack"
+dungeonWorkerGeneration = 10
+currentRaidIsland = 1
 
-local enabled = false
-local selectedStatCategory = "Melee"
-local bypassRender = false
+isAutoFarm = false
+selectedStatCategory = "Melee"
+bypassRender = false
 
-activeTween = nil
-local lastTargetPos = nil
-local currentEvasionOffset = Vector3.new(0, cfg.TweenHeight, 0)
-local lastEvasionTime = 0
-local lastAbandonAttempt = 0
-local lastPlayerPos = nil
+Runtime.activeTween = nil
+lastTargetPos = nil
+currentEvasionOffset = Vector3.new(0, cfg.TweenHeight, 0)
+lastEvasionTime = 0
+lastAbandonAttempt = 0
+lastPlayerPos = nil
 
-local currentTargetInstance = nil
-local lastTargetHealth = -1
-local lastTargetHealthChangeAt = 0
-local enemyBlacklist = {}
+currentTargetInstance = nil
+lastTargetHealth = -1
+lastTargetHealthChangeAt = 0
+enemyBlacklist = {}
 
-local cachedWeapon = nil
-local cachedWeaponCategory = nil
-local lastAttackAt = 0
-local lastTargetRefreshAt = 0
-local lastEvasionMoveAt = 0
-local workerGeneration = 10
-
-local teleportTravelKey = nil
-local teleportTravelStartedAt = 0
-local teleportTravelOrigin = nil
-local TELEPORT_TRAVEL_ARRIVE_RADIUS = 120
-local cachedEnemiesFolder = nil
-
+cachedWeapon = nil
+cachedWeaponCategory = nil
+lastAttackAt = 0
+lastTargetRefreshAt = 0
+lastEvasionMoveAt = 0
+TELEPORT_TRAVEL_ARRIVE_RADIUS = 120
+cachedEnemiesFolder = nil
 selectedBossName = nil
 farmNearestEnabled = false
 farmNearestRadius = 5000
 
-local lastDodgeTime = 0
-local currentBoat = nil
-local currentIsland = nil
-local fruitWaypoints = {}
-local chestWaypoints = {}
-local autoKillVolcano = false
-local AutoEmber = false
-
-local eliteHunterWorkerGen = 0
+State = {
+	WorkerGen = 10,
+	TravelKey = nil,
+	TravelStartedAt = 0,
+	TravelOrigin = nil,
+	LastDodgeTime = 0,
+	CurrentBoat = nil,
+	CurrentIsland = nil,
+	FruitWaypoints = {},
+	ChestWaypoints = {},
+	AutoKillVolcano = false,
+	AutoEmber = false,
+	EliteHunterGen = 0,
+}
 
 local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 local CommE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommE")
 
-local RegisterHitEvent, RegisterAttackEvent
+local shadowRemote = nil
+local shadowId = nil
+
+local function ScanShadowRemote()
+	if shadowRemote and shadowId then
+		return
+	end
+	local scanDirs = {
+		ReplicatedStorage:FindFirstChild("Util"),
+		ReplicatedStorage:FindFirstChild("Common"),
+		ReplicatedStorage:FindFirstChild("Remotes"),
+	}
+
+	for _, folder in ipairs(scanDirs) do
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child:IsA("RemoteEvent") and child:GetAttribute("Id") then
+					shadowId = child:GetAttribute("Id")
+					shadowRemote = child
+					return
+				end
+			end
+		end
+	end
+end
+
+task.defer(ScanShadowRemote)
+
+local cachedOffset = -1
+local cachedEncMethod = "RE/RegisterHit"
+local function GetEncryptedRegisterHit()
+	local offset = math.floor(workspace:GetServerTimeNow() / 10 % 10) + 1
+	if offset ~= cachedOffset then
+		cachedOffset = offset
+		cachedEncMethod = string.gsub("RE/RegisterHit", ".", function(c)
+			return string.char(bit32.bxor(string.byte(c), offset))
+		end)
+	end
+	return cachedEncMethod
+end
+
+local function GetEncryptedSeedKey(seedVal)
+	local idVal = shadowId or 0
+	local realSeed = seedVal or 1
+	return bit32.bxor(idVal + 909090, realSeed * 2)
+end
 
 pcall(function()
 	local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
-	RegisterHitEvent = Net:WaitForChild("RE/RegisterHit")
-	RegisterAttackEvent = Net:WaitForChild("RE/RegisterAttack")
+	Runtime.RegisterHitEvent = Net:WaitForChild("RE/RegisterHit")
+	Runtime.RegisterAttackEvent = Net:WaitForChild("RE/RegisterAttack")
 
 	pcall(function()
 		local CombatUtil = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CombatUtil"))
@@ -501,6 +780,18 @@ pcall(function()
 			end
 			CombatUtil.CanAttack = function()
 				return true
+			end
+			CombatUtil.GetAttackAngle = function()
+				return 0
+			end
+			CombatUtil.GetDefaultAOEDelay = function()
+				return 0
+			end
+			CombatUtil.GetComboPaddingTime = function()
+				return 0
+			end
+			CombatUtil.GetAttackCancelMultiplier = function()
+				return 0
 			end
 		end
 	end)
@@ -548,6 +839,15 @@ pcall(function()
 	end)
 end)
 
+pcall(function()
+	local renv = getrenv and getrenv() or _G
+	if renv and renv._G then
+		pcall(function()
+			renv._G.checkHits = function(...) end
+		end)
+	end
+end)
+
 local currentSessionSecret = nil
 getgenv().cachedNetSeed = 1
 local lastSessionRefreshAt = 0
@@ -573,8 +873,8 @@ local function RefreshSessionSecret(force)
 			end
 		end
 
-		if RegisterHitEvent and currentSessionSecret then
-			RegisterHitEvent:FireServer(currentSessionSecret)
+		if Runtime.RegisterHitEvent and currentSessionSecret then
+			Runtime.RegisterHitEvent:FireServer(currentSessionSecret)
 		end
 	end)
 	return currentSessionSecret
@@ -615,1174 +915,1386 @@ task.defer(function()
 	end)
 end)
 
-BOSSES = {
-	{ Sea = 1, Min = 20, Name = "Gorilla King", Quest = "JungleQuest", Stage = 3, NPC = Vector3.new(-1598, 36, 153) },
-	{ Sea = 1, Min = 55, Name = "Chef", Quest = "BuggyQuest1", Stage = 3, NPC = Vector3.new(-1141, 13, 3827) },
-	{ Sea = 1, Min = 105, Name = "Yeti", Quest = "SnowQuest", Stage = 3, NPC = Vector3.new(1389, 87, -1298) },
-	{
-		Sea = 1,
-		Min = 130,
-		Name = "Vice Admiral",
-		Quest = "MarineQuest2",
-		Stage = 2,
-		NPC = Vector3.new(-5035, 20, 4324),
+Quests = {
+	["Sea1"] = {
+		["BanditQuest1"] = {
+			{
+				Level = 0,
+				Name = "Bandits",
+				Mob = "Bandit",
+				Count = 5,
+				Stage = 1,
+				NPC = Vector3.new(1059, 13, 1552),
+				MobPos = Vector3.new(1145, 17, 1634),
+			},
+		},
+		["MarineQuest"] = {
+			{
+				Level = 0,
+				Name = "Trainees",
+				Mob = "Trainee",
+				Count = 5,
+				Stage = 1,
+				NPC = Vector3.new(-2566.43, 6.856, 2045.256),
+				MobPos = Vector3.new(-2700, 15, 2050),
+			},
+		},
+		["JungleQuest"] = {
+			{
+				Level = 10,
+				Name = "Monkeys",
+				Mob = "Monkey",
+				Count = 6,
+				Stage = 1,
+				NPC = Vector3.new(-1602, 37, 153),
+				MobPos = Vector3.new(-1659.898804, 18.676752, 183.526260),
+			},
+			{
+				Level = 15,
+				Name = "Gorillas",
+				Mob = "Gorilla",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-1602, 37, 153),
+				MobPos = Vector3.new(-1299.239502, -0.035819, -540.964844),
+			},
+			{
+				Level = 20,
+				Name = "Gorilla King",
+				Mob = "The Gorilla King",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-1598, 36, 153),
+				MobPos = Vector3.new(-1598, 36, 153),
+				IsBoss = true,
+			},
+		},
+		["BuggyQuest1"] = {
+			{
+				Level = 30,
+				Name = "Pirates",
+				Mob = "Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-1150.534790, 17.579453, 3861.551514),
+				MobPos = Vector3.new(-1221.892456, 17.579453, 3957.021973),
+			},
+			{
+				Level = 40,
+				Name = "Brute",
+				Mob = "Brute",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-1150.534790, 17.579453, 3861.551514),
+				MobPos = Vector3.new(-1145, 15, 4350),
+			},
+			{
+				Level = 55,
+				Name = "Chef",
+				Mob = "Chef",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-1150.534790, 17.579453, 3861.551514),
+				MobPos = Vector3.new(-1150.534790, 17.579453, 3861.551514),
+				IsBoss = true,
+			},
+		},
+		["DesertQuest"] = {
+			{
+				Level = 60,
+				Name = "Desert Bandit",
+				Mob = "Desert Bandit",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(897, 7, 4389),
+				MobPos = Vector3.new(925.362732, 6.181742, 4513.920410),
+			},
+			{
+				Level = 75,
+				Name = "Desert Officer",
+				Mob = "Desert Officer",
+				Count = 6,
+				Stage = 2,
+				NPC = Vector3.new(897, 7, 4389),
+				MobPos = Vector3.new(1558.841797, 14.011657, 4162.903809),
+			},
+		},
+		["SnowQuest"] = {
+			{
+				Level = 90,
+				Name = "Snow Bandit",
+				Mob = "Snow Bandit",
+				Count = 7,
+				Stage = 1,
+				NPC = Vector3.new(1386, 87, -1297),
+				MobPos = Vector3.new(1354, 105, -1328),
+			},
+			{
+				Level = 100,
+				Name = "Snowman",
+				Mob = "Snowman",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(1386, 87, -1297),
+				MobPos = Vector3.new(1218, 139, -1488),
+			},
+			{
+				Level = 105,
+				Name = "Yeti",
+				Mob = "Yeti",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(1389, 87, -1298),
+				MobPos = Vector3.new(1389, 87, -1298),
+				IsBoss = true,
+			},
+		},
+		["MarineQuest2"] = {
+			{
+				Level = 120,
+				Name = "Chief Petty Officer",
+				Mob = "Chief Petty Officer",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-5035, 29, 4324),
+				MobPos = Vector3.new(-4882, 23, 4273),
+			},
+			{
+				Level = 130,
+				Name = "Vice Admiral",
+				Mob = "Vice Admiral",
+				Count = 1,
+				Stage = 2,
+				NPC = Vector3.new(-5035, 20, 4324),
+				MobPos = Vector3.new(-5035, 20, 4324),
+				IsBoss = true,
+			},
+		},
+		["SkyQuest"] = {
+			{
+				Level = 150,
+				Name = "Sky Bandit",
+				Mob = "Sky Bandit",
+				Count = 7,
+				Stage = 1,
+				NPC = Vector3.new(-4842, 718, -2623),
+				MobPos = Vector3.new(-4953, 295, -2899),
+			},
+			{
+				Level = 175,
+				Name = "Dark Master",
+				Mob = "Dark Master",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-4842, 718, -2623),
+				MobPos = Vector3.new(-5259, 391, -2229),
+			},
+		},
+		["PrisonerQuest"] = {
+			{
+				Level = 190,
+				Name = "Prisoner",
+				Mob = "Prisoner",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(5199.588379, 19.836189, 738.117249),
+				MobPos = Vector3.new(5288.145996, 10.597742, 462.746582),
+			},
+			{
+				Level = 210,
+				Name = "Dangerous Prisoner",
+				Mob = "Dangerous Prisoner",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(5199.588379, 19.836189, 738.117249),
+				MobPos = Vector3.new(5291.542480, 10.597746, 1011.716492),
+			},
+		},
+		["ImpelQuest"] = {
+			{
+				Level = 225,
+				Name = "Ruthless Prisoner",
+				Mob = "Ruthless Prisoner",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(3873, 14, -1940),
+				MobPos = Vector3.new(3873, 14, -1940),
+				IsBoss = true,
+			},
+			{
+				Level = 230,
+				Name = "Warden",
+				Mob = "Warden",
+				Count = 1,
+				Stage = 2,
+				NPC = Vector3.new(3873, 14, -1940),
+				MobPos = Vector3.new(3873, 14, -1940),
+				IsBoss = true,
+			},
+		},
+		["ColosseumQuest"] = {
+			{
+				Level = 250,
+				Name = "Toga Warrior",
+				Mob = "Toga Warrior",
+				Count = 7,
+				Stage = 1,
+				NPC = Vector3.new(-1580, 7, -2986),
+				MobPos = Vector3.new(-1779, 45, -2741),
+			},
+			{
+				Level = 275,
+				Name = "Gladiator",
+				Mob = "Gladiator",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-1580, 7, -2986),
+				MobPos = Vector3.new(-1274, 58, -3188),
+			},
+		},
+		["MagmaQuest"] = {
+			{
+				Level = 300,
+				Name = "Mil. Soldier",
+				Mob = "Military Soldier",
+				Count = 7,
+				Stage = 1,
+				NPC = Vector3.new(-5316, 12, 8517),
+				MobPos = Vector3.new(-5411, 11, 8454),
+			},
+			{
+				Level = 325,
+				Name = "Mil. Spy",
+				Mob = "Military Spy",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-5316, 12, 8517),
+				MobPos = Vector3.new(-5802, 86, 8829),
+			},
+			{
+				Level = 350,
+				Name = "Magma Admiral",
+				Mob = "Magma Admiral",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-5701, 17, 8722),
+				MobPos = Vector3.new(-5701, 17, 8722),
+				IsBoss = true,
+			},
+		},
+		["FishmanQuest"] = {
+			{
+				Level = 375,
+				Name = "Fishman Warrior",
+				Mob = "Fishman Warrior",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(61401.476562, 25.217861, 1630.696655),
+				MobPos = Vector3.new(60843.742188, 25.213957, 1426.922852),
+			},
+			{
+				Level = 400,
+				Name = "Fishman Commando",
+				Mob = "Fishman Commando",
+				Count = 7,
+				Stage = 2,
+				NPC = Vector3.new(61401.476562, 25.217861, 1630.696655),
+				MobPos = Vector3.new(61936.566406, 25.215843, 1325.974976),
+			},
+			{
+				Level = 425,
+				Name = "Fishman Lord",
+				Mob = "Fishman Lord",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(61401.476562, 25.217861, 1630.696655),
+				MobPos = Vector3.new(61358.656250, 65.499023, 1134.429565),
+				IsBoss = true,
+			},
+		},
+		["SkyExp1Quest"] = {
+			{
+				Level = 450,
+				Name = "God's Guard",
+				Mob = "God's Guard",
+				Count = 7,
+				Stage = 1,
+				NPC = Vector3.new(-4722, 846, -1954),
+				MobPos = Vector3.new(-4710, 845, -1927),
+			},
+			{
+				Level = 475,
+				Name = "Shanda",
+				Mob = "Shanda",
+				Count = 9,
+				Stage = 2,
+				NPC = Vector3.new(-7862, 5546, -380),
+				MobPos = Vector3.new(-7685, 5601, -441),
+			},
+			{
+				Level = 500,
+				Name = "Wysper",
+				Mob = "Wysper",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-7862, 5545, -381),
+				MobPos = Vector3.new(-7862, 5545, -381),
+				IsBoss = true,
+			},
+		},
+		["SkyExp2Quest"] = {
+			{
+				Level = 525,
+				Name = "Royal Squad",
+				Mob = "Royal Squad",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-7904, 5635, -1412),
+				MobPos = Vector3.new(-7685, 5606, -1442),
+			},
+			{
+				Level = 550,
+				Name = "Royal Soldier",
+				Mob = "Royal Soldier",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-7904, 5635, -1412),
+				MobPos = Vector3.new(-7864, 5661, -1708),
+			},
+			{
+				Level = 575,
+				Name = "Thunder God",
+				Mob = "Thunder God",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-7749, 5607, -2317),
+				MobPos = Vector3.new(-7749, 5607, -2317),
+				IsBoss = true,
+			},
+		},
+		["FountainQuest"] = {
+			{
+				Level = 625,
+				Name = "Galley Pirate",
+				Mob = "Galley Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(5259, 39, 4050),
+				MobPos = Vector3.new(5558, 39, 3998),
+			},
+			{
+				Level = 650,
+				Name = "Galley Captain",
+				Mob = "Galley Captain",
+				Count = 9,
+				Stage = 2,
+				NPC = Vector3.new(5259, 39, 4050),
+				MobPos = Vector3.new(5677, 93, 4967),
+			},
+			{
+				Level = 675,
+				Name = "Cyborg",
+				Mob = "Cyborg",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(5247, 38, 4067),
+				MobPos = Vector3.new(5247, 38, 4067),
+				IsBoss = true,
+			},
+		},
 	},
-	{ Sea = 1, Min = 220, Name = "Warden", Quest = "ImpelQuest", Stage = 1, NPC = Vector3.new(3873, 14, -1940) },
-	{ Sea = 1, Min = 230, Name = "Chief Warden", Quest = "ImpelQuest", Stage = 2, NPC = Vector3.new(3873, 14, -1940) },
-	{ Sea = 1, Min = 240, Name = "Swan", Quest = "ImpelQuest", Stage = 3, NPC = Vector3.new(3873, 14, -1940) },
-	{ Sea = 1, Min = 350, Name = "Magma Admiral", Quest = "MagmaQuest", Stage = 3, NPC = Vector3.new(-5701, 17, 8722) },
-	{ Sea = 1, Min = 425, Name = "Fishman Lord", Quest = "FishmanQuest", Stage = 3, NPC = Vector3.new(6112, 19, 1567) },
-	{ Sea = 1, Min = 500, Name = "Wysper", Quest = "SkyExp1Quest", Stage = 3, NPC = Vector3.new(-7862, 5545, -381) },
-	{
-		Sea = 1,
-		Min = 575,
-		Name = "Thunder God",
-		Quest = "SkyExp2Quest",
-		Stage = 3,
-		NPC = Vector3.new(-7749, 5607, -2317),
+	["Sea2"] = {
+		["Area1Quest"] = {
+			{
+				Level = 700,
+				Name = "Raider",
+				Mob = "Raider",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-429, 72, 1836),
+				MobPos = Vector3.new(-737, 39, 2385),
+			},
+			{
+				Level = 725,
+				Name = "Mercenary",
+				Mob = "Mercenary",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-429, 72, 1836),
+				MobPos = Vector3.new(-972, 73, 1419),
+			},
+			{
+				Level = 750,
+				Name = "Diamond",
+				Mob = "Diamond",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-429, 72, 1836),
+				MobPos = Vector3.new(-429, 72, 1836),
+				IsBoss = true,
+			},
+		},
+		["Area2Quest"] = {
+			{
+				Level = 775,
+				Name = "Swan Pirate",
+				Mob = "Swan Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(638, 73, 918),
+				MobPos = Vector3.new(970, 142, 1217),
+			},
+			{
+				Level = 800,
+				Name = "Factory Staff",
+				Mob = "Factory Staff",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(638, 73, 918),
+				MobPos = Vector3.new(296, 73, -56),
+			},
+			{
+				Level = 850,
+				Name = "Jeremy",
+				Mob = "Jeremy",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(638, 73, 918),
+				MobPos = Vector3.new(638, 73, 918),
+				IsBoss = true,
+			},
+		},
+		["MarineQuest3"] = {
+			{
+				Level = 875,
+				Name = "Marine Lieutenant",
+				Mob = "Marine Lieutenant",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-2441, 73, -3219),
+				MobPos = Vector3.new(-2821, 73, -3070),
+			},
+			{
+				Level = 900,
+				Name = "Marine Captain",
+				Mob = "Marine Captain",
+				Count = 9,
+				Stage = 2,
+				NPC = Vector3.new(-2441, 73, -3219),
+				MobPos = Vector3.new(-1867, 73, -3321),
+			},
+			{
+				Level = 925,
+				Name = "Orbitus",
+				Mob = "Orbitus",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-2441, 73, -3219),
+				MobPos = Vector3.new(-2441, 73, -3219),
+				IsBoss = true,
+			},
+		},
+		["ZombieQuest"] = {
+			{
+				Level = 950,
+				Name = "Zombie",
+				Mob = "Zombie",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-5497, 48, -795),
+				MobPos = Vector3.new(-5736, 126, -728),
+			},
+			{
+				Level = 975,
+				Name = "Vampire",
+				Mob = "Vampire",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-5497, 48, -795),
+				MobPos = Vector3.new(-6033, 7, -1317),
+			},
+		},
+		["SnowMountainQuest"] = {
+			{
+				Level = 1000,
+				Name = "Snow Trooper",
+				Mob = "Snow Trooper",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(609, 401, -5372),
+				MobPos = Vector3.new(535, 432, -5484),
+			},
+			{
+				Level = 1050,
+				Name = "Winter Warrior",
+				Mob = "Winter Warrior",
+				Count = 9,
+				Stage = 2,
+				NPC = Vector3.new(609, 401, -5372),
+				MobPos = Vector3.new(1234, 456, -5174),
+			},
+		},
+		["IceSideQuest"] = {
+			{
+				Level = 1100,
+				Name = "Lab Subordinate",
+				Mob = "Lab Subordinate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-6061, 16, -4905),
+				MobPos = Vector3.new(-5720, 63, -4784),
+			},
+			{
+				Level = 1125,
+				Name = "Horned Warrior",
+				Mob = "Horned Warrior",
+				Count = 9,
+				Stage = 2,
+				NPC = Vector3.new(-6061, 16, -4905),
+				MobPos = Vector3.new(-6292, 91, -5503),
+			},
+			{
+				Level = 1150,
+				Name = "Smoke Admiral",
+				Mob = "Smoke Admiral",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-6061, 16, -4905),
+				MobPos = Vector3.new(-6061, 16, -4905),
+				IsBoss = true,
+			},
+		},
+		["FireSideQuest"] = {
+			{
+				Level = 1175,
+				Name = "Magma Ninja",
+				Mob = "Magma Ninja",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-5429, 16, -5297),
+				MobPos = Vector3.new(-5461, 130, -5836),
+			},
+			{
+				Level = 1200,
+				Name = "Lava Pirate",
+				Mob = "Lava Pirate",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-5429, 16, -5297),
+				MobPos = Vector3.new(-5251, 55, -4774),
+			},
+		},
+		["ShipQuest1"] = {
+			{
+				Level = 1250,
+				Name = "Ship Deckhand",
+				Mob = "Ship Deckhand",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(1038, 125, 32911),
+				MobPos = Vector3.new(1212, 126, 33059),
+			},
+			{
+				Level = 1275,
+				Name = "Ship Engineer",
+				Mob = "Ship Engineer",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(1038, 125, 32911),
+				MobPos = Vector3.new(919, 44, 32779),
+			},
+		},
+		["ShipQuest2"] = {
+			{
+				Level = 1300,
+				Name = "Ship Steward",
+				Mob = "Ship Steward",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(969, 125, 33245),
+				MobPos = Vector3.new(919, 130, 33419),
+			},
+			{
+				Level = 1325,
+				Name = "Ship Officer",
+				Mob = "Ship Officer",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(969, 125, 33245),
+				MobPos = Vector3.new(1037, 181, 33316),
+			},
+		},
+		["FrostQuest"] = {
+			{
+				Level = 1350,
+				Name = "Arctic Warrior",
+				Mob = "Arctic Warrior",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(5668, 28, -6484),
+				MobPos = Vector3.new(5966, 58, -6179),
+			},
+			{
+				Level = 1375,
+				Name = "Snow Lurker",
+				Mob = "Snow Lurker",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(5668, 28, -6484),
+				MobPos = Vector3.new(5407, 69, -6880),
+			},
+			{
+				Level = 1400,
+				Name = "Ice Admiral",
+				Mob = "Awakened Ice Admiral",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(5668, 28, -6484),
+				MobPos = Vector3.new(5668, 28, -6484),
+				IsBoss = true,
+			},
+		},
+		["ForgottenQuest"] = {
+			{
+				Level = 1425,
+				Name = "Sea Soldier",
+				Mob = "Sea Soldier",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-3054, 237, -10148),
+				MobPos = Vector3.new(-3028, 65, -9775),
+			},
+			{
+				Level = 1450,
+				Name = "Water Fighter",
+				Mob = "Water Fighter",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-3054, 237, -10148),
+				MobPos = Vector3.new(-3262, 298, -10553),
+			},
+			{
+				Level = 1475,
+				Name = "Tide Keeper",
+				Mob = "Tide Keeper",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-3054, 237, -10148),
+				MobPos = Vector3.new(-3054, 237, -10148),
+				IsBoss = true,
+			},
+		},
+		["BartiloQuest"] = {
+			{
+				Level = 850,
+				Name = "Swan's Raid",
+				Mob = "Swan Pirate",
+				Count = 50,
+				Stage = 1,
+				NPC = Vector3.new(-429, 72, 1836),
+				MobPos = Vector3.new(-429, 72, 1836),
+			},
+		},
+		["CitizenQuest"] = {
+			{
+				Level = 1800,
+				Name = "Town Raid",
+				Mob = "Forest Pirate",
+				Count = 50,
+				Stage = 1,
+				NPC = Vector3.new(-429, 72, 1836),
+				MobPos = Vector3.new(-429, 72, 1836),
+			},
+		},
 	},
-	{ Sea = 1, Min = 675, Name = "Cyborg", Quest = "FountainQuest", Stage = 3, NPC = Vector3.new(5247, 38, 4067) },
-	{ Sea = 2, Min = 750, Name = "Diamond", Quest = "Area1Quest", Stage = 3, NPC = Vector3.new(-429, 72, 1836) },
-	{ Sea = 2, Min = 850, Name = "Jeremy", Quest = "Area2Quest", Stage = 3, NPC = Vector3.new(638, 73, 918) },
-	{ Sea = 2, Min = 925, Name = "Orbitus", Quest = "MarineQuest3", Stage = 3, NPC = Vector3.new(-2441, 73, -3219) },
-	{
-		Sea = 2,
-		Min = 1150,
-		Name = "Smoke Admiral",
-		Quest = "IceSideQuest",
-		Stage = 3,
-		NPC = Vector3.new(-6061, 16, -4905),
-	},
-	{
-		Sea = 2,
-		Min = 1400,
-		Name = "Awakened Ice Admiral",
-		Quest = "FrostQuest",
-		Stage = 3,
-		NPC = Vector3.new(5668, 28, -6484),
-	},
-	{
-		Sea = 2,
-		Min = 1475,
-		Name = "Tide Keeper",
-		Quest = "ForgottenQuest",
-		Stage = 3,
-		NPC = Vector3.new(-3054, 237, -10148),
-	},
-	{
-		Sea = 3,
-		Min = 1550,
-		Name = "Stone",
-		Quest = "PiratePortQuest",
-		Stage = 3,
-		NPC = Vector3.new(-448.99, 108.63, 5948.77),
-	},
-	{
-		Sea = 3,
-		Min = 1675,
-		Name = "Hydra Leader",
-		Quest = "VenomCrewQuest",
-		Stage = 3,
-		NPC = Vector3.new(5214.16, 1004.13, 756.39),
-	},
-	{
-		Sea = 3,
-		Min = 1750,
-		Name = "Kilo Admiral",
-		Quest = "MarineTreeIsland",
-		Stage = 3,
-		NPC = Vector3.new(2484.00, 74.29, -6787.78),
-	},
-	{
-		Sea = 3,
-		Min = 1875,
-		Name = "Captain Elephant",
-		Quest = "DeepForestIsland",
-		Stage = 3,
-		NPC = Vector3.new(-13232, 332, -7625),
-	},
-	{
-		Sea = 3,
-		Min = 1950,
-		Name = "Beautiful Pirate",
-		Quest = "DeepForestIsland2",
-		Stage = 3,
-		NPC = Vector3.new(-11939, 277, -8814),
-	},
-	{
-		Sea = 3,
-		Min = 2175,
-		Name = "Cake Queen",
-		Quest = "IceCreamIslandQuest",
-		Stage = 3,
-		NPC = Vector3.new(-820, 66, -10966),
+	["Sea3"] = {
+		["PiratePortQuest"] = {
+			{
+				Level = 1500,
+				Name = "Pirate Millionaire",
+				Mob = "Pirate Millionaire",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-448.99, 108.63, 5948.77),
+				MobPos = Vector3.new(-435, 190, 5551),
+			},
+			{
+				Level = 1525,
+				Name = "Pistol Billionaire",
+				Mob = "Pistol Billionaire",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-448.99, 108.63, 5948.77),
+				MobPos = Vector3.new(-236, 217, 6007),
+			},
+			{
+				Level = 1550,
+				Name = "Stone",
+				Mob = "Stone",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-448.99, 108.63, 5948.77),
+				MobPos = Vector3.new(-448.99, 108.63, 5948.77),
+				IsBoss = true,
+			},
+		},
+		["DragonCrewQuest"] = {
+			{
+				Level = 1575,
+				Name = "Dragon Crew Warrior",
+				Mob = "Dragon Crew Warrior",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(6737.21, 127.44, -712.48),
+				MobPos = Vector3.new(6834.66, 192.74, -829.06),
+			},
+			{
+				Level = 1600,
+				Name = "Dragon Crew Archer",
+				Mob = "Dragon Crew Archer",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(6737.21, 127.44, -712.48),
+				MobPos = Vector3.new(6713.14, 716.12, 631.09),
+			},
+		},
+		["VenomCrewQuest"] = {
+			{
+				Level = 1625,
+				Name = "Hydra Enforcer",
+				Mob = "Hydra Enforcer",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(5214.16, 1004.13, 756.39),
+				MobPos = Vector3.new(4570.93, 1026.70, 405.84),
+			},
+			{
+				Level = 1650,
+				Name = "Venomous Assailant",
+				Mob = "Venomous Assailant",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(5214.16, 1004.13, 756.39),
+				MobPos = Vector3.new(4499.958984, 1169.141724, 796.885559),
+			},
+			{
+				Level = 1675,
+				Name = "Hydra Leader",
+				Mob = "Hydra Leader",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(5214.16, 1004.13, 756.39),
+				MobPos = Vector3.new(5214.16, 1004.13, 756.39),
+				IsBoss = true,
+			},
+		},
+		["MarineTreeIsland"] = {
+			{
+				Level = 1700,
+				Name = "Marine Commodore",
+				Mob = "Marine Commodore",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(2484.00, 74.29, -6787.78),
+				MobPos = Vector3.new(2196.70, 284.17, -7413.28),
+			},
+			{
+				Level = 1725,
+				Name = "Marine Rear Admiral",
+				Mob = "Marine Rear Admiral",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(2484.00, 74.29, -6787.78),
+				MobPos = Vector3.new(3671, 161, -6932),
+			},
+			{
+				Level = 1750,
+				Name = "Kilo Admiral",
+				Mob = "Kilo Admiral",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(2484.00, 74.29, -6787.78),
+				MobPos = Vector3.new(2484.00, 74.29, -6787.78),
+				IsBoss = true,
+			},
+		},
+		["DeepForestIsland3"] = {
+			{
+				Level = 1775,
+				Name = "Fishman Raider",
+				Mob = "Fishman Raider",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-10582, 332, -8758),
+				MobPos = Vector3.new(-10407, 332, -8368),
+			},
+			{
+				Level = 1800,
+				Name = "Fishman Captain",
+				Mob = "Fishman Captain",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-10582, 332, -8758),
+				MobPos = Vector3.new(-10993, 352, -9003),
+			},
+		},
+		["DeepForestIsland"] = {
+			{
+				Level = 1825,
+				Name = "Forest Pirate",
+				Mob = "Forest Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-13232, 333, -7627),
+				MobPos = Vector3.new(-13389.283203, 332.440765, -7799.888184),
+			},
+			{
+				Level = 1850,
+				Name = "Mythological Pirate",
+				Mob = "Mythological Pirate",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-13232, 333, -7627),
+				MobPos = Vector3.new(-13508, 583, -6985),
+			},
+			{
+				Level = 1875,
+				Name = "Captain Elephant",
+				Mob = "Captain Elephant",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-13232, 332, -7625),
+				MobPos = Vector3.new(-13232, 332, -7625),
+				IsBoss = true,
+			},
+		},
+		["DeepForestIsland2"] = {
+			{
+				Level = 1900,
+				Name = "Jungle Pirate",
+				Mob = "Jungle Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-12684, 391, -9902),
+				MobPos = Vector3.new(-12132.820312, 331.800903, -10543.690430),
+			},
+			{
+				Level = 1925,
+				Name = "Musketeer Pirate",
+				Mob = "Musketeer Pirate",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-12684, 391, -9902),
+				MobPos = Vector3.new(-13291, 392, -9769),
+			},
+			{
+				Level = 1950,
+				Name = "Beautiful Pirate",
+				Mob = "Beautiful Pirate",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-11939, 277, -8814),
+				MobPos = Vector3.new(-11939, 277, -8814),
+				IsBoss = true,
+			},
+		},
+		["HauntedQuest1"] = {
+			{
+				Level = 1975,
+				Name = "Reborn Skeleton",
+				Mob = "Reborn Skeleton",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-9482, 142, 5567),
+				MobPos = Vector3.new(-8760, 183, 6168),
+			},
+			{
+				Level = 2000,
+				Name = "Living Zombie",
+				Mob = "Living Zombie",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-9482, 142, 5567),
+				MobPos = Vector3.new(-10144, 139, 5932),
+			},
+		},
+		["HauntedQuest2"] = {
+			{
+				Level = 2025,
+				Name = "Demonic Soul",
+				Mob = "Demonic Soul",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-9515, 172, 6078),
+				MobPos = Vector3.new(-9507, 172, 6158),
+			},
+			{
+				Level = 2050,
+				Name = "Posessed Mummy",
+				Mob = "Posessed Mummy",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-9515, 172, 6078),
+				MobPos = Vector3.new(-9582, 6, 6205),
+			},
+		},
+		["NutsIslandQuest"] = {
+			{
+				Level = 2075,
+				Name = "Peanut Scout",
+				Mob = "Peanut Scout",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-2104, 38, -10192),
+				MobPos = Vector3.new(-2150, 122, -10358),
+			},
+			{
+				Level = 2100,
+				Name = "Peanut President",
+				Mob = "Peanut President",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-2104, 38, -10192),
+				MobPos = Vector3.new(-2150, 123, -10536),
+			},
+		},
+		["IceCreamIslandQuest"] = {
+			{
+				Level = 2125,
+				Name = "Ice Cream Chef",
+				Mob = "Ice Cream Chef",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-820, 66, -10966),
+				MobPos = Vector3.new(-848.671204, 65.882126, -10914.947266),
+			},
+			{
+				Level = 2150,
+				Name = "Ice Cream Commander",
+				Mob = "Ice Cream Commander",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-820, 66, -10966),
+				MobPos = Vector3.new(-610.750732, 208.282623, -11254.516602),
+			},
+			{
+				Level = 2175,
+				Name = "Cake Queen",
+				Mob = "Cake Queen",
+				Count = 1,
+				Stage = 3,
+				NPC = Vector3.new(-820, 66, -10966),
+				MobPos = Vector3.new(-820, 66, -10966),
+				IsBoss = true,
+			},
+		},
+		["CakeQuest1"] = {
+			{
+				Level = 2200,
+				Name = "Cookie Crafter",
+				Mob = "Cookie Crafter",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-2021, 38, -12028),
+				MobPos = Vector3.new(-2288.005371, 37.860714, -12088.270508),
+			},
+			{
+				Level = 2225,
+				Name = "Cake Guard",
+				Mob = "Cake Guard",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-2021, 38, -12028),
+				MobPos = Vector3.new(-1577.599976, 46.978756, -12365.185547),
+			},
+		},
+		["CakeQuest2"] = {
+			{
+				Level = 2250,
+				Name = "Baking Staff",
+				Mob = "Baking Staff",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-1927, 38, -12842),
+				MobPos = Vector3.new(-1887, 78, -12998),
+			},
+			{
+				Level = 2275,
+				Name = "Head Baker",
+				Mob = "Head Baker",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-1927, 38, -12842),
+				MobPos = Vector3.new(-2207.034424, 53.564850, -12857.274414),
+			},
+		},
+		["ChocQuest1"] = {
+			{
+				Level = 2300,
+				Name = "Cocoa Warrior",
+				Mob = "Cocoa Warrior",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(233, 30, -12201),
+				MobPos = Vector3.new(31.493752, 24.796925, -12246.680664),
+			},
+			{
+				Level = 2325,
+				Name = "Chocolate Bar Battler",
+				Mob = "Chocolate Bar Battler",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(233, 30, -12201),
+				MobPos = Vector3.new(683.419617, 24.796822, -12576.225586),
+			},
+		},
+		["ChocQuest2"] = {
+			{
+				Level = 2350,
+				Name = "Sweet Thief",
+				Mob = "Sweet Thief",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(151, 30, -12774),
+				MobPos = Vector3.new(165, 77, -12600),
+			},
+			{
+				Level = 2375,
+				Name = "Candy Rebel",
+				Mob = "Candy Rebel",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(151, 30, -12774),
+				MobPos = Vector3.new(83.6653671, 93.5021515, -12963.4072),
+			},
+		},
+		["CandyQuest1"] = {
+			{
+				Level = 2400,
+				Name = "Candy Pirate",
+				Mob = "Candy Pirate",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-1149, 13, -14446),
+				MobPos = Vector3.new(-1347, 13, -14585),
+			},
+			{
+				Level = 2425,
+				Name = "Snow Demon",
+				Mob = "Snow Demon",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-1149, 13, -14446),
+				MobPos = Vector3.new(-954, 55, -14558),
+			},
+		},
+		["TikiQuest1"] = {
+			{
+				Level = 2450,
+				Name = "Isle Outlaw",
+				Mob = "Isle Outlaw",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-16546, 55, -172),
+				MobPos = Vector3.new(-16101, 55, -155),
+			},
+			{
+				Level = 2475,
+				Name = "Island Boy",
+				Mob = "Island Boy",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-16546, 55, -172),
+				MobPos = Vector3.new(-16731, 55, -257),
+			},
+		},
+		["TikiQuest2"] = {
+			{
+				Level = 2500,
+				Name = "Sun-kissed Warrior",
+				Mob = "Sun-kissed Warrior",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-16539, 55, 1051),
+				MobPos = Vector3.new(-16349, 55, 1005),
+			},
+			{
+				Level = 2525,
+				Name = "Isle Champion",
+				Mob = "Isle Champion",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-16539, 55, 1051),
+				MobPos = Vector3.new(-16847, 55, 1002),
+			},
+		},
+		["TikiQuest3"] = {
+			{
+				Level = 2550,
+				Name = "Serpent Hunter",
+				Mob = "Serpent Hunter",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197),
+				MobPos = Vector3.new(-16586.220703, 107.084724, 1341.448608),
+			},
+			{
+				Level = 2575,
+				Name = "Skull Slayer",
+				Mob = "Skull Slayer",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197),
+				MobPos = Vector3.new(-16666.9453, 176.768646, 1491.6416),
+			},
+		},
+		["SubmergedQuest1"] = {
+			{
+				Level = 2600,
+				Name = "Reef Bandit",
+				Mob = "Reef Bandit",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883),
+				MobPos = Vector3.new(10978.163086, -2023.948853, 9181.994141),
+			},
+			{
+				Level = 2625,
+				Name = "Coral Pirate",
+				Mob = "Coral Pirate",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883),
+				MobPos = Vector3.new(10733.620117, -2010.045288, 9343.441406),
+			},
+		},
+		["SubmergedQuest2"] = {
+			{
+				Level = 2650,
+				Name = "Sea Chanter",
+				Mob = "Sea Chanter",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172),
+				MobPos = Vector3.new(10623.348633, -2046.116455, 10102.416016),
+			},
+			{
+				Level = 2675,
+				Name = "Ocean Prophet",
+				Mob = "Ocean Prophet",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172),
+				MobPos = Vector3.new(11041.423828, -1949.248901, 10147.605469),
+			},
+		},
+		["SubmergedQuest3"] = {
+			{
+				Level = 2675,
+				Name = "High Disciple",
+				Mob = "High Disciple",
+				Count = 8,
+				Stage = 1,
+				NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055),
+				MobPos = Vector3.new(9830.585938, -1941.134888, 9698.757812),
+			},
+			{
+				Level = 2700,
+				Name = "Grand Devotee",
+				Mob = "Grand Devotee",
+				Count = 8,
+				Stage = 2,
+				NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055),
+				MobPos = Vector3.new(9595.754883, -1993.467651, 9845.081055),
+			},
+		},
 	},
 }
 
-SEA1 = {
-	{
-		Min = 1,
-		Max = 9,
-		Quest = "BanditQuest1",
-		Stage = 1,
-		Name = "Bandits",
-		Mob = "Bandit",
-		Count = 5,
-		NPC = Vector3.new(1059, 13, 1552),
-		MobPos = Vector3.new(1145, 17, 1634),
+BOSSES = {}
+for seaKey, seaTable in pairs(Quests) do
+	local seaNum = (seaKey == "Sea3" and 3) or (seaKey == "Sea2" and 2) or 1
+	for questKey, stageList in pairs(seaTable) do
+		for _, stageData in ipairs(stageList) do
+			if stageData.IsBoss then
+				table.insert(BOSSES, {
+					Sea = seaNum,
+					Min = stageData.Level,
+					Name = stageData.Mob or stageData.Name,
+					Quest = questKey,
+					Stage = stageData.Stage,
+					NPC = stageData.NPC,
+					MobPos = stageData.MobPos,
+				})
+			end
+		end
+	end
+end
+table.sort(BOSSES, function(a, b)
+	return a.Min < b.Min
+end)
+
+FightingStyleNPCs = {
+	["Black Leg"] = {
+		[1] = Vector3.new(-988, 13, 3996),
+		[2] = Vector3.new(-4750.61, 35.08, -4846.33),
+		[3] = Vector3.new(-5043.64, 371.35, -3183.40),
 	},
-	{
-		Min = 10,
-		Max = 14,
-		Quest = "JungleQuest",
-		Stage = 1,
-		Name = "Monkeys",
-		Mob = "Monkey",
-		Count = 6,
-		NPC = Vector3.new(-1602, 37, 153),
-		MobPos = Vector3.new(-1448, 50, 64),
+	["Electro"] = {
+		[1] = Vector3.new(-5382.27, 14.15, -2150.34),
+		[2] = Vector3.new(-4863.81, 35.08, -4767.54),
+		[3] = Vector3.new(-4993.20, 314.56, -3198.06),
 	},
-	{
-		Min = 15,
-		Max = 29,
-		Quest = "JungleQuest",
-		Stage = 2,
-		Name = "Gorillas",
-		Mob = "Gorilla",
-		Count = 8,
-		NPC = Vector3.new(-1602, 37, 153),
-		MobPos = Vector3.new(-1237, 7, -486),
+	["Water Kung Fu"] = {
+		[1] = Vector3.new(61584.35, 18.85, 988.89),
+		[2] = Vector3.new(-4960.04, 35.08, -4662.67),
+		[3] = Vector3.new(-5017.39, 371.35, -3187.53),
 	},
-	{
-		Min = 30,
-		Max = 39,
-		Quest = "BuggyQuest1",
-		Stage = 1,
-		Name = "Pirates",
-		Mob = "Pirate",
-		Count = 8,
-		NPC = Vector3.new(-1140, 5, 3828),
-		MobPos = Vector3.new(-1115, 14, 3938),
+	["Dragon Claw"] = {
+		[2] = Vector3.new(-4997.53, 371.35, -3197.46),
 	},
-	{
-		Min = 40,
-		Max = 59,
-		Quest = "BuggyQuest1",
-		Stage = 2,
-		Name = "Brute",
-		Mob = "Brute",
-		Count = 8,
-		NPC = Vector3.new(-1140, 5, 3828),
-		MobPos = Vector3.new(-1145, 15, 4350),
+	["Superhuman"] = {
+		[2] = Vector3.new(1378.05, 247.43, -5189.37),
+		[3] = Vector3.new(-4997.53, 371.35, -3197.46),
 	},
-	{
-		Min = 60,
-		Max = 74,
-		Quest = "DesertQuest",
-		Stage = 1,
-		Name = "Desert Bandits",
-		Mob = "Desert Bandit",
-		Count = 8,
-		NPC = Vector3.new(897, 7, 4389),
-		MobPos = Vector3.new(932, 7, 4484),
+	["Death Step"] = {
+		[2] = Vector3.new(6360.04, 296.67, -6763.93),
+		[3] = Vector3.new(-4997.64, 314.56, -3220.37),
 	},
-	{
-		Min = 75,
-		Max = 89,
-		Quest = "DesertQuest",
-		Stage = 2,
-		Name = "Desert Officers",
-		Mob = "Desert Officer",
-		Count = 6,
-		NPC = Vector3.new(897, 7, 4389),
-		MobPos = Vector3.new(1572, 11, 4386),
+	["Sharkman Karate"] = {
+		[2] = Vector3.new(-2602.40, 239.22, -10314.75),
+		[3] = Vector3.new(-4970.48, 314.56, -3225.04),
 	},
-	{
-		Min = 90,
-		Max = 99,
-		Quest = "SnowQuest",
-		Stage = 1,
-		Name = "Snow Bandits",
-		Mob = "Snow Bandit",
-		Count = 7,
-		NPC = Vector3.new(1386, 87, -1297),
-		MobPos = Vector3.new(1354, 105, -1328),
+	["Electric Claw"] = { [3] = Vector3.new(-10369.83, 331.69, -10126.49) },
+	["Dragon Talon"] = { [3] = Vector3.new(5662.03, 1211.32, 858.60) },
+	["God Human"] = { [3] = Vector3.new(-13775.56, 334.66, -9877.67) },
+	["Sanguine Art"] = { [3] = Vector3.new(-16514.86, 23.18, -190.84) },
+}
+
+local function NavigateAndBuyMelee(name)
+	task.spawn(function()
+		local myChar = GetCharacter()
+		local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+		if not myHrp then
+			return
+		end
+
+		local seaName, seaNum = GetCurrentSea()
+		local meleeData = FightingStyleNPCs[name]
+		local targetPos = meleeData and meleeData[seaNum]
+
+		if not targetPos or typeof(targetPos) ~= "Vector3" then
+			local availableSeas = {}
+			if meleeData then
+				for sNum, _ in pairs(meleeData) do
+					table.insert(availableSeas, "Sea " .. tostring(sNum))
+				end
+			end
+			local seaMsg = #availableSeas > 0 and table.concat(availableSeas, ", ") or "Sea lain"
+			if getgenv().LonumObject then
+				getgenv().LonumObject:Notify({
+					Title = "NPC Tidak Ditemukan",
+					Content = name .. " hanya tersedia di " .. seaMsg .. "!",
+					Duration = 4,
+				})
+			end
+			return
+		end
+
+		if getgenv().LonumObject then
+			getgenv().LonumObject:Notify({
+				Title = "Buy Fighting Style",
+				Content = "Terbang menuju NPC " .. name .. "...",
+				Duration = 3,
+			})
+		end
+
+		ToggleFloat(true)
+		local targetCF = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+		TweenTo(targetCF)
+
+		local startTime = os.clock()
+		while (myHrp.Position - targetPos).Magnitude > 15 and (os.clock() - startTime < 30) do
+			task.wait(0.2)
+		end
+
+		pcall(function()
+			local cleanName = string.gsub(name, " ", "")
+			game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Buy" .. cleanName)
+		end)
+
+		task.wait(0.5)
+		ToggleFloat(false)
+
+		if getgenv().LonumObject then
+			getgenv().LonumObject:Notify({
+				Title = "Fighting Style",
+				Content = "Berhasil mencapai NPC dan membeli " .. name .. "!",
+				Duration = 4,
+			})
+		end
+	end)
+end
+
+Islands = {
+	["Sea1"] = {
+		["WindMill"] = CFrame.new(979.799, 16.516, 1429.047),
+		["Marine"] = CFrame.new(-2566.43, 6.856, 2045.256),
+		["Middle Town"] = CFrame.new(-690.331, 15.094, 1582.238),
+		["Jungle"] = CFrame.new(-1612.796, 36.852, 149.128),
+		["Pirate Village"] = CFrame.new(-1181.309, 4.751, 3803.546),
+		["Desert"] = CFrame.new(944.158, 20.92, 4373.3),
+		["Snow Island"] = CFrame.new(1347.807, 104.668, -1319.737),
+		["MarineFord"] = CFrame.new(-4914.821, 50.964, 4281.028),
+		["Magma Village"] = CFrame.new(-5247.716, 12.884, 8504.969),
+		["Fountain City"] = CFrame.new(5127.128, 59.501, 4105.446),
+		["Sky Island 1"] = CFrame.new(-483.734, 332.038, 595.327),
+		["Sky Island 2"] = CFrame.new(2284.414, 15.152, 875.725),
+		["Sky Island 3"] = CFrame.new(-2448.53, 73.016, -3210.631),
+		["Prison"] = CFrame.new(4875.33, 5.652, 734.85),
+		["Colosseum"] = CFrame.new(-11.311, 29.277, 2771.522),
+		["Under Water Island"] = CFrame.new(-2850.201, 7.392, 5354.993),
+		["Shank Room"] = CFrame.new(-1442.166, 29.879, -28.355),
+		["Mob Island"] = CFrame.new(-2850.201, 7.392, 5354.993),
 	},
-	{
-		Min = 100,
-		Max = 119,
-		Quest = "SnowQuest",
-		Stage = 2,
-		Name = "Snowmen",
-		Mob = "Snowman",
-		Count = 8,
-		NPC = Vector3.new(1386, 87, -1297),
-		MobPos = Vector3.new(1218, 139, -1488),
+	["Sea2"] = {
+		["The Cafe"] = CFrame.new(-380.479, 77.22, 255.826),
+		["Dark Area"] = CFrame.new(3780.03, 22.652, -3498.586),
+		["Factory"] = CFrame.new(424.127, 211.162, -427.54),
+		["Colossuim"] = CFrame.new(-1503.622, 219.796, 1369.31),
+		["Two Snow Mountain"] = CFrame.new(753.143, 408.236, -5274.615),
+		["Punk Hazard"] = CFrame.new(-6127.654, 15.952, -5040.286),
+		["Ussop Island"] = CFrame.new(4816.862, 8.46, 2863.82),
+		["Mini Sky Island"] = CFrame.new(-288.741, 49326.316, -35248.594),
 	},
-	{
-		Min = 120,
-		Max = 149,
-		Quest = "MarineQuest2",
-		Stage = 1,
-		Name = "Chief Petty Officers",
-		Mob = "Chief Petty Officer",
-		Count = 8,
-		NPC = Vector3.new(-5035, 29, 4324),
-		MobPos = Vector3.new(-4882, 23, 4273),
-	},
-	{
-		Min = 150,
-		Max = 174,
-		Quest = "SkyQuest",
-		Stage = 1,
-		Name = "Sky Bandits",
-		Mob = "Sky Bandit",
-		Count = 7,
-		NPC = Vector3.new(-4842, 718, -2623),
-		MobPos = Vector3.new(-4953, 295, -2899),
-	},
-	{
-		Min = 175,
-		Max = 189,
-		Quest = "SkyQuest",
-		Stage = 2,
-		Name = "Dark Masters",
-		Mob = "Dark Master",
-		Count = 8,
-		NPC = Vector3.new(-4842, 718, -2623),
-		MobPos = Vector3.new(-5259, 391, -2229),
-	},
-	{
-		Min = 190,
-		Max = 209,
-		Quest = "PrisonerQuest",
-		Stage = 1,
-		Name = "Prisoners",
-		Mob = "Prisoner",
-		Count = 8,
-		NPC = Vector3.new(5308, 2, 475),
-		MobPos = Vector3.new(5099, 1, 474),
-	},
-	{
-		Min = 210,
-		Max = 249,
-		Quest = "PrisonerQuest",
-		Stage = 2,
-		Name = "Dangerous Prisoners",
-		Mob = "Dangerous Prisoner",
-		Count = 8,
-		NPC = Vector3.new(5308, 2, 475),
-		MobPos = Vector3.new(5654, 15, 866),
-	},
-	{
-		Min = 250,
-		Max = 274,
-		Quest = "ColosseumQuest",
-		Stage = 1,
-		Name = "Toga Warriors",
-		Mob = "Toga Warrior",
-		Count = 7,
-		NPC = Vector3.new(-1580, 7, -2986),
-		MobPos = Vector3.new(-1779, 45, -2741),
-	},
-	{
-		Min = 275,
-		Max = 299,
-		Quest = "ColosseumQuest",
-		Stage = 2,
-		Name = "Gladiators",
-		Mob = "Gladiator",
-		Count = 8,
-		NPC = Vector3.new(-1580, 7, -2986),
-		MobPos = Vector3.new(-1274, 58, -3188),
-	},
-	{
-		Min = 300,
-		Max = 324,
-		Quest = "MagmaQuest",
-		Stage = 1,
-		Name = "Military Soldiers",
-		Mob = "Military Soldier",
-		Count = 7,
-		NPC = Vector3.new(-5316, 12, 8517),
-		MobPos = Vector3.new(-5411, 11, 8454),
-	},
-	{
-		Min = 325,
-		Max = 374,
-		Quest = "MagmaQuest",
-		Stage = 2,
-		Name = "Military Spies",
-		Mob = "Military Spy",
-		Count = 8,
-		NPC = Vector3.new(-5316, 12, 8517),
-		MobPos = Vector3.new(-5802, 86, 8829),
-	},
-	{
-		Min = 375,
-		Max = 399,
-		Quest = "FishmanQuest",
-		Stage = 1,
-		Name = "Fishman Warriors",
-		Mob = "Fishman Warrior",
-		Count = 8,
-		NPC = Vector3.new(6112, 19, 1567),
-		MobPos = Vector3.new(60878, 19, 1543),
-	},
-	{
-		Min = 400,
-		Max = 449,
-		Quest = "FishmanQuest",
-		Stage = 2,
-		Name = "Fishman Commandos",
-		Mob = "Fishman Commando",
-		Count = 7,
-		NPC = Vector3.new(6112, 19, 1567),
-		MobPos = Vector3.new(61891, 19, 1470),
-	},
-	{
-		Min = 450,
-		Max = 474,
-		Quest = "SkyExp1Quest",
-		Stage = 1,
-		Name = "God's Guards",
-		Mob = "God's Guard",
-		Count = 7,
-		NPC = Vector3.new(-4722, 846, -1954),
-		MobPos = Vector3.new(-4710, 845, -1927),
-	},
-	{
-		Min = 475,
-		Max = 524,
-		Quest = "SkyExp1Quest",
-		Stage = 2,
-		Name = "Shandas",
-		Mob = "Shanda",
-		Count = 9,
-		NPC = Vector3.new(-7862, 5546, -380),
-		MobPos = Vector3.new(-7685, 5601, -441),
-	},
-	{
-		Min = 525,
-		Max = 549,
-		Quest = "SkyExp2Quest",
-		Stage = 1,
-		Name = "Royal Squads",
-		Mob = "Royal Squad",
-		Count = 8,
-		NPC = Vector3.new(-7904, 5635, -1412),
-		MobPos = Vector3.new(-7685, 5606, -1442),
-	},
-	{
-		Min = 550,
-		Max = 624,
-		Quest = "SkyExp2Quest",
-		Stage = 2,
-		Name = "Royal Soldiers",
-		Mob = "Royal Soldier",
-		Count = 8,
-		NPC = Vector3.new(-7904, 5635, -1412),
-		MobPos = Vector3.new(-7864, 5661, -1708),
-	},
-	{
-		Min = 625,
-		Max = 649,
-		Quest = "FountainQuest",
-		Stage = 1,
-		Name = "Galley Pirates",
-		Mob = "Galley Pirate",
-		Count = 8,
-		NPC = Vector3.new(5259, 39, 4050),
-		MobPos = Vector3.new(5558, 39, 3998),
-	},
-	{
-		Min = 650,
-		Max = 700,
-		Quest = "FountainQuest",
-		Stage = 2,
-		Name = "Galley Captains",
-		Mob = "Galley Captain",
-		Count = 9,
-		NPC = Vector3.new(5259, 39, 4050),
-		MobPos = Vector3.new(5677, 93, 4967),
+	["Sea3"] = {
+		["Great Tree"] = CFrame.new(2681.274, 1682.809, -7190.985),
+		["Port Town"] = CFrame.new(-226.751, 20.603, 5538.34),
+		["Hydra Island"] = CFrame.new(5291.249, 1005.443, 393.762),
+		["Floating Turtle"] = CFrame.new(-13274.528, 531.821, -7579.223),
+		["Mansion"] = CFrame.new(-12471.17, 374.94, -7551.678),
+		["Castle On The Sea"] = CFrame.new(-5083.26, 314.606, -3175.673),
+		["Haunted Castle"] = CFrame.new(-9515.372, 164.006, 5786.061),
+		["Ice Cream Island"] = CFrame.new(-902.568, 79.932, -10988.848),
+		["Peanut Island"] = CFrame.new(-2062.748, 50.474, -10232.568),
+		["Cake Island"] = CFrame.new(-1884.775, 19.328, -11666.897),
+		["Cocoa Island"] = CFrame.new(87.943, 73.555, -12319.465),
+		["Candy Island"] = CFrame.new(-1014.424, 149.111, -14555.963),
+		["Tiki Outpost"] = CFrame.new(-16218.683, 9.086, 445.618),
 	},
 }
 
-SEA2 = {
-	{
-		Min = 700,
-		Max = 724,
-		Quest = "Area1Quest",
-		Stage = 1,
-		Name = "Raiders",
-		Mob = "Raider",
-		Count = 8,
-		NPC = Vector3.new(-429, 72, 1836),
-		MobPos = Vector3.new(-737, 39, 2385),
-	},
-	{
-		Min = 725,
-		Max = 774,
-		Quest = "Area1Quest",
-		Stage = 2,
-		Name = "Mercenaries",
-		Mob = "Mercenary",
-		Count = 8,
-		NPC = Vector3.new(-429, 72, 1836),
-		MobPos = Vector3.new(-972, 73, 1419),
-	},
-	{
-		Min = 775,
-		Max = 799,
-		Quest = "Area2Quest",
-		Stage = 1,
-		Name = "Swan Pirates",
-		Mob = "Swan Pirate",
-		Count = 8,
-		NPC = Vector3.new(638, 73, 918),
-		MobPos = Vector3.new(970, 142, 1217),
-	},
-	{
-		Min = 800,
-		Max = 874,
-		Quest = "Area2Quest",
-		Stage = 2,
-		Name = "Factory Staff",
-		Mob = "Factory Staff",
-		Count = 8,
-		NPC = Vector3.new(638, 73, 918),
-		MobPos = Vector3.new(296, 73, -56),
-	},
-	{
-		Min = 875,
-		Max = 899,
-		Quest = "MarineQuest3",
-		Stage = 1,
-		Name = "Marine Lieutenants",
-		Mob = "Marine Lieutenant",
-		Count = 8,
-		NPC = Vector3.new(-2441, 73, -3219),
-		MobPos = Vector3.new(-2821, 73, -3070),
-	},
-	{
-		Min = 900,
-		Max = 949,
-		Quest = "MarineQuest3",
-		Stage = 2,
-		Name = "Marine Captains",
-		Mob = "Marine Captain",
-		Count = 9,
-		NPC = Vector3.new(-2441, 73, -3219),
-		MobPos = Vector3.new(-1867, 73, -3321),
-	},
-	{
-		Min = 950,
-		Max = 974,
-		Quest = "ZombieQuest",
-		Stage = 1,
-		Name = "Zombies",
-		Mob = "Zombie",
-		Count = 8,
-		NPC = Vector3.new(-5497, 48, -795),
-		MobPos = Vector3.new(-5736, 126, -728),
-	},
-	{
-		Min = 975,
-		Max = 999,
-		Quest = "ZombieQuest",
-		Stage = 2,
-		Name = "Vampires",
-		Mob = "Vampire",
-		Count = 8,
-		NPC = Vector3.new(-5497, 48, -795),
-		MobPos = Vector3.new(-6033, 7, -1317),
-	},
-	{
-		Min = 1000,
-		Max = 1049,
-		Quest = "SnowMountainQuest",
-		Stage = 1,
-		Name = "Snow Troopers",
-		Mob = "Snow Trooper",
-		Count = 8,
-		NPC = Vector3.new(609, 401, -5372),
-		MobPos = Vector3.new(535, 432, -5484),
-	},
-	{
-		Min = 1050,
-		Max = 1099,
-		Quest = "SnowMountainQuest",
-		Stage = 2,
-		Name = "Winter Warriors",
-		Mob = "Winter Warrior",
-		Count = 9,
-		NPC = Vector3.new(609, 401, -5372),
-		MobPos = Vector3.new(1234, 456, -5174),
-	},
-	{
-		Min = 1100,
-		Max = 1124,
-		Quest = "IceSideQuest",
-		Stage = 1,
-		Name = "Lab Subordinates",
-		Mob = "Lab Subordinate",
-		Count = 8,
-		NPC = Vector3.new(-6061, 16, -4905),
-		MobPos = Vector3.new(-5720, 63, -4784),
-	},
-	{
-		Min = 1125,
-		Max = 1174,
-		Quest = "IceSideQuest",
-		Stage = 2,
-		Name = "Horned Warriors",
-		Mob = "Horned Warrior",
-		Count = 9,
-		NPC = Vector3.new(-6061, 16, -4905),
-		MobPos = Vector3.new(-6292, 91, -5503),
-	},
-	{
-		Min = 1175,
-		Max = 1199,
-		Quest = "FireSideQuest",
-		Stage = 1,
-		Name = "Magma Ninjas",
-		Mob = "Magma Ninja",
-		Count = 8,
-		NPC = Vector3.new(-5429, 16, -5297),
-		MobPos = Vector3.new(-5461, 130, -5836),
-	},
-	{
-		Min = 1200,
-		Max = 1249,
-		Quest = "FireSideQuest",
-		Stage = 2,
-		Name = "Lava Pirates",
-		Mob = "Lava Pirate",
-		Count = 8,
-		NPC = Vector3.new(-5429, 16, -5297),
-		MobPos = Vector3.new(-5251, 55, -4774),
-	},
-	{
-		Min = 1250,
-		Max = 1274,
-		Quest = "ShipQuest1",
-		Stage = 1,
-		Name = "Ship Deckhands",
-		Mob = "Ship Deckhand",
-		Count = 8,
-		NPC = Vector3.new(1038, 125, 32911),
-		MobPos = Vector3.new(1212, 126, 33059),
-	},
-	{
-		Min = 1275,
-		Max = 1299,
-		Quest = "ShipQuest1",
-		Stage = 2,
-		Name = "Ship Engineers",
-		Mob = "Ship Engineer",
-		Count = 8,
-		NPC = Vector3.new(1038, 125, 32911),
-		MobPos = Vector3.new(919, 44, 32779),
-	},
-	{
-		Min = 1300,
-		Max = 1324,
-		Quest = "ShipQuest2",
-		Stage = 1,
-		Name = "Ship Stewards",
-		Mob = "Ship Steward",
-		Count = 8,
-		NPC = Vector3.new(969, 125, 33245),
-		MobPos = Vector3.new(919, 130, 33419),
-	},
-	{
-		Min = 1325,
-		Max = 1349,
-		Quest = "ShipQuest2",
-		Stage = 2,
-		Name = "Ship Officers",
-		Mob = "Ship Officer",
-		Count = 8,
-		NPC = Vector3.new(969, 125, 33245),
-		MobPos = Vector3.new(1037, 181, 33316),
-	},
-	{
-		Min = 1350,
-		Max = 1374,
-		Quest = "FrostQuest",
-		Stage = 1,
-		Name = "Arctic Warriors",
-		Mob = "Arctic Warrior",
-		Count = 8,
-		NPC = Vector3.new(5668, 28, -6484),
-		MobPos = Vector3.new(5966, 58, -6179),
-	},
-	{
-		Min = 1375,
-		Max = 1424,
-		Quest = "FrostQuest",
-		Stage = 2,
-		Name = "Snow Lurkers",
-		Mob = "Snow Lurker",
-		Count = 8,
-		NPC = Vector3.new(5668, 28, -6484),
-		MobPos = Vector3.new(5407, 69, -6880),
-	},
-	{
-		Min = 1425,
-		Max = 1449,
-		Quest = "ForgottenQuest",
-		Stage = 1,
-		Name = "Sea Soldiers",
-		Mob = "Sea Soldier",
-		Count = 8,
-		NPC = Vector3.new(-3054, 237, -10148),
-		MobPos = Vector3.new(-3028, 65, -9775),
-	},
-	{
-		Min = 1450,
-		Max = 1500,
-		Quest = "ForgottenQuest",
-		Stage = 2,
-		Name = "Water Fighters",
-		Mob = "Water Fighter",
-		Count = 8,
-		NPC = Vector3.new(-3054, 237, -10148),
-		MobPos = Vector3.new(-3262, 298, -10553),
-	},
-}
-
-SEA3 = {
-	{
-		Min = 1500,
-		Max = 1524,
-		Quest = "PiratePortQuest",
-		Stage = 1,
-		Name = "Pirate Millionaires",
-		Mob = "Pirate Millionaire",
-		Count = 8,
-		NPC = Vector3.new(-448.99, 108.63, 5948.77),
-		MobPos = Vector3.new(-435, 190, 5551),
-	},
-	{
-		Min = 1525,
-		Max = 1574,
-		Quest = "PiratePortQuest",
-		Stage = 2,
-		Name = "Pistol Billionaires",
-		Mob = "Pistol Billionaire",
-		Count = 8,
-		NPC = Vector3.new(-448.99, 108.63, 5948.77),
-		MobPos = Vector3.new(-236, 217, 6007),
-	},
-	{
-		Min = 1575,
-		Max = 1599,
-		Quest = "DragonCrewQuest",
-		Stage = 1,
-		Name = "Dragon Crew Warriors",
-		Mob = "Dragon Crew Warrior",
-		Count = 8,
-		NPC = Vector3.new(6737.21, 127.44, -712.48),
-		MobPos = Vector3.new(6834.66, 192.74, -829.06),
-	},
-	{
-		Min = 1600,
-		Max = 1624,
-		Quest = "DragonCrewQuest",
-		Stage = 2,
-		Name = "Dragon Crew Archers",
-		Mob = "Dragon Crew Archer",
-		Count = 8,
-		NPC = Vector3.new(6737.21, 127.44, -712.48),
-		MobPos = Vector3.new(6713.14, 716.12, 631.09),
-	},
-	{
-		Min = 1625,
-		Max = 1649,
-		Quest = "VenomCrewQuest",
-		Stage = 1,
-		Name = "Hydra Enforcers",
-		Mob = "Hydra Enforcer",
-		Count = 8,
-		NPC = Vector3.new(5214.16, 1004.13, 756.39),
-		MobPos = Vector3.new(4570.93, 1026.70, 405.84),
-	},
-	{
-		Min = 1650,
-		Max = 1699,
-		Quest = "VenomCrewQuest",
-		Stage = 2,
-		Name = "Venomous Assailant",
-		Mob = "Venomous Assailant",
-		Count = 8,
-		NPC = Vector3.new(5214.16, 1004.13, 756.39),
-		MobPos = Vector3.new(4499.958984, 1169.141724, 796.885559),
-	},
-	{
-		Min = 1700,
-		Max = 1724,
-		Quest = "MarineTreeIsland",
-		Stage = 1,
-		Name = "Marine Commodores",
-		Mob = "Marine Commodore",
-		Count = 8,
-		NPC = Vector3.new(2484.00, 74.29, -6787.78),
-		MobPos = Vector3.new(2196.70, 284.17, -7413.28),
-	},
-	{
-		Min = 1725,
-		Max = 1774,
-		Quest = "MarineTreeIsland",
-		Stage = 2,
-		Name = "Marine Rear Admirals",
-		Mob = "Marine Rear Admiral",
-		Count = 8,
-		NPC = Vector3.new(2484.00, 74.29, -6787.78),
-		MobPos = Vector3.new(3671, 161, -6932),
-	},
-	{
-		Min = 1775,
-		Max = 1799,
-		Quest = "DeepForestIsland3",
-		Stage = 1,
-		Name = "Fishman Raiders",
-		Mob = "Fishman Raider",
-		Count = 8,
-		NPC = Vector3.new(-10582, 332, -8758),
-		MobPos = Vector3.new(-10407, 332, -8368),
-	},
-	{
-		Min = 1800,
-		Max = 1824,
-		Quest = "DeepForestIsland3",
-		Stage = 2,
-		Name = "Fishman Captains",
-		Mob = "Fishman Captain",
-		Count = 8,
-		NPC = Vector3.new(-10582, 332, -8758),
-		MobPos = Vector3.new(-10993, 352, -9003),
-	},
-	{
-		Min = 1825,
-		Max = 1849,
-		Quest = "DeepForestIsland",
-		Stage = 1,
-		Name = "Forest Pirates",
-		Mob = "Forest Pirate",
-		Count = 8,
-		NPC = Vector3.new(-13232, 333, -7627),
-		MobPos = Vector3.new(-13389.283203, 332.440765, -7799.888184),
-	},
-	{
-		Min = 1850,
-		Max = 1899,
-		Quest = "DeepForestIsland",
-		Stage = 2,
-		Name = "Mythological Pirates",
-		Mob = "Mythological Pirate",
-		Count = 8,
-		NPC = Vector3.new(-13232, 333, -7627),
-		MobPos = Vector3.new(-13508, 583, -6985),
-	},
-	{
-		Min = 1900,
-		Max = 1924,
-		Quest = "DeepForestIsland2",
-		Stage = 1,
-		Name = "Jungle Pirates",
-		Mob = "Jungle Pirate",
-		Count = 8,
-		NPC = Vector3.new(-12684, 391, -9902),
-		MobPos = Vector3.new(-12132.820312, 331.800903, -10543.690430),
-	},
-	{
-		Min = 1925,
-		Max = 1974,
-		Quest = "DeepForestIsland2",
-		Stage = 2,
-		Name = "Musketeer Pirates",
-		Mob = "Musketeer Pirate",
-		Count = 8,
-		NPC = Vector3.new(-12684, 391, -9902),
-		MobPos = Vector3.new(-13291, 392, -9769),
-	},
-	{
-		Min = 1975,
-		Max = 1999,
-		Quest = "HauntedQuest1",
-		Stage = 1,
-		Name = "Reborn Skeletons",
-		Mob = "Reborn Skeleton",
-		Count = 8,
-		NPC = Vector3.new(-9482, 142, 5567),
-		MobPos = Vector3.new(-8760, 183, 6168),
-	},
-	{
-		Min = 2000,
-		Max = 2024,
-		Quest = "HauntedQuest1",
-		Stage = 2,
-		Name = "Living Zombies",
-		Mob = "Living Zombie",
-		Count = 8,
-		NPC = Vector3.new(-9482, 142, 5567),
-		MobPos = Vector3.new(-10144, 139, 5932),
-	},
-	{
-		Min = 2025,
-		Max = 2049,
-		Quest = "HauntedQuest2",
-		Stage = 1,
-		Name = "Demonic Souls",
-		Mob = "Demonic Soul",
-		Count = 8,
-		NPC = Vector3.new(-9515, 172, 6078),
-		MobPos = Vector3.new(-9507, 172, 6158),
-	},
-	{
-		Min = 2050,
-		Max = 2074,
-		Quest = "HauntedQuest2",
-		Stage = 2,
-		Name = "Posessed Mummies",
-		Mob = "Posessed Mummy",
-		Count = 8,
-		NPC = Vector3.new(-9515, 172, 6078),
-		MobPos = Vector3.new(-9582, 6, 6205),
-	},
-	{
-		Min = 2075,
-		Max = 2099,
-		Quest = "NutsIslandQuest",
-		Stage = 1,
-		Name = "Peanut Scouts",
-		Mob = "Peanut Scout",
-		Count = 8,
-		NPC = Vector3.new(-2104, 38, -10192),
-		MobPos = Vector3.new(-2150, 122, -10358),
-	},
-	{
-		Min = 2100,
-		Max = 2124,
-		Quest = "NutsIslandQuest",
-		Stage = 2,
-		Name = "Peanut Presidents",
-		Mob = "Peanut President",
-		Count = 8,
-		NPC = Vector3.new(-2104, 38, -10192),
-		MobPos = Vector3.new(-2150, 123, -10536),
-	},
-	{
-		Min = 2125,
-		Max = 2149,
-		Quest = "IceCreamIslandQuest",
-		Stage = 1,
-		Name = "Ice Cream Chefs",
-		Mob = "Ice Cream Chef",
-		Count = 8,
-		NPC = Vector3.new(-820, 66, -10966),
-		MobPos = Vector3.new(-848.671204, 65.882126, -10914.947266),
-	},
-	{
-		Min = 2150,
-		Max = 2199,
-		Quest = "IceCreamIslandQuest",
-		Stage = 2,
-		Name = "Ice Cream Commanders",
-		Mob = "Ice Cream Commander",
-		Count = 8,
-		NPC = Vector3.new(-820, 66, -10966),
-		MobPos = Vector3.new(-610.750732, 208.282623, -11254.516602),
-	},
-	{
-		Min = 2200,
-		Max = 2224,
-		Quest = "CakeQuest1",
-		Stage = 1,
-		Name = "Cookie Crafters",
-		Mob = "Cookie Crafter",
-		Count = 8,
-		NPC = Vector3.new(-2021, 38, -12028),
-		MobPos = Vector3.new(-2288.005371, 37.860714, -12088.270508),
-	},
-	{
-		Min = 2225,
-		Max = 2249,
-		Quest = "CakeQuest1",
-		Stage = 2,
-		Name = "Cake Guards",
-		Mob = "Cake Guard",
-		Count = 8,
-		NPC = Vector3.new(-2021, 38, -12028),
-		MobPos = Vector3.new(-1577.599976, 46.978756, -12365.185547),
-	},
-	{
-		Min = 2250,
-		Max = 2274,
-		Quest = "CakeQuest2",
-		Stage = 1,
-		Name = "Baking Staff",
-		Mob = "Baking Staff",
-		Count = 8,
-		NPC = Vector3.new(-1927, 38, -12842),
-		MobPos = Vector3.new(-1887, 78, -12998),
-	},
-	{
-		Min = 2275,
-		Max = 2299,
-		Quest = "CakeQuest2",
-		Stage = 2,
-		Name = "Head Bakers",
-		Mob = "Head Baker",
-		Count = 8,
-		NPC = Vector3.new(-1927, 38, -12842),
-		MobPos = Vector3.new(-2207.034424, 53.564850, -12857.274414),
-	},
-	{
-		Min = 2300,
-		Max = 2324,
-		Quest = "ChocQuest1",
-		Stage = 1,
-		Name = "Cocoa Warriors",
-		Mob = "Cocoa Warrior",
-		Count = 8,
-		NPC = Vector3.new(233, 30, -12201),
-		MobPos = Vector3.new(31.493752, 24.796925, -12246.680664),
-	},
-	{
-		Min = 2325,
-		Max = 2349,
-		Quest = "ChocQuest1",
-		Stage = 2,
-		Name = "Chocolate Bar Battlers",
-		Mob = "Chocolate Bar Battler",
-		Count = 8,
-		NPC = Vector3.new(233, 30, -12201),
-		MobPos = Vector3.new(683.419617, 24.796822, -12576.225586),
-	},
-	{
-		Min = 2350,
-		Max = 2374,
-		Quest = "ChocQuest2",
-		Stage = 1,
-		Name = "Sweet Thieves",
-		Mob = "Sweet Thief",
-		Count = 8,
-		NPC = Vector3.new(151, 30, -12774),
-		MobPos = Vector3.new(165, 77, -12600),
-	},
-	{
-		Min = 2375,
-		Max = 2399,
-		Quest = "ChocQuest2",
-		Stage = 2,
-		Name = "Candy Rebels",
-		Mob = "Candy Rebel",
-		Count = 8,
-		NPC = Vector3.new(151, 30, -12774),
-		MobPos = Vector3.new(83.6653671, 93.5021515, -12963.4072),
-	},
-	{
-		Min = 2400,
-		Max = 2424,
-		Quest = "CandyQuest1",
-		Stage = 1,
-		Name = "Candy Pirates",
-		Mob = "Candy Pirate",
-		Count = 8,
-		NPC = Vector3.new(-1149, 13, -14446),
-		MobPos = Vector3.new(-1347, 13, -14585),
-	},
-	{
-		Min = 2425,
-		Max = 2449,
-		Quest = "CandyQuest1",
-		Stage = 2,
-		Name = "Snow Demons",
-		Mob = "Snow Demon",
-		Count = 8,
-		NPC = Vector3.new(-1149, 13, -14446),
-		MobPos = Vector3.new(-954, 55, -14558),
-	},
-	{
-		Min = 2450,
-		Max = 2474,
-		Quest = "TikiQuest1",
-		Stage = 1,
-		Name = "Isle Outlaws",
-		Mob = "Isle Outlaw",
-		Count = 8,
-		NPC = Vector3.new(-16546, 55, -172),
-		MobPos = Vector3.new(-16101, 55, -155),
-	},
-	{
-		Min = 2475,
-		Max = 2499,
-		Quest = "TikiQuest1",
-		Stage = 2,
-		Name = "Island Boys",
-		Mob = "Island Boy",
-		Count = 8,
-		NPC = Vector3.new(-16546, 55, -172),
-		MobPos = Vector3.new(-16731, 55, -257),
-	},
-	{
-		Min = 2500,
-		Max = 2524,
-		Quest = "TikiQuest2",
-		Stage = 1,
-		Name = "Sun-kissed Warriors",
-		Mob = "Sun-kissed Warrior",
-		Count = 8,
-		NPC = Vector3.new(-16539, 55, 1051),
-		MobPos = Vector3.new(-16349, 55, 1005),
-	},
-	{
-		Min = 2525,
-		Max = 2549,
-		Quest = "TikiQuest2",
-		Stage = 2,
-		Name = "Isle Champions",
-		Mob = "Isle Champion",
-		Count = 8,
-		NPC = Vector3.new(-16539, 55, 1051),
-		MobPos = Vector3.new(-16847, 55, 1002),
-	},
-	{
-		Min = 2550,
-		Max = 2574,
-		Quest = "TikiQuest3",
-		Stage = 1,
-		Name = "Serpent Hunter",
-		Mob = "Serpent Hunter",
-		Count = 8,
-		NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197),
-		MobPos = Vector3.new(-16586.220703, 107.084724, 1341.448608),
-	},
-	{
-		Min = 2575,
-		Max = 2599,
-		Quest = "TikiQuest3",
-		Stage = 2,
-		Name = "Skull Slayer",
-		Mob = "Skull Slayer",
-		Count = 8,
-		NPC = Vector3.new(-16663.8633, 105.30751, 1577.3197),
-		MobPos = Vector3.new(-16666.9453, 176.768646, 1491.6416),
-	},
-	{
-		Min = 2600,
-		Max = 2624,
-		Quest = "SubmergedQuest1",
-		Stage = 1,
-		Name = "Reef Bandit",
-		Mob = "Reef Bandit",
-		Count = 8,
-		NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883),
-		MobPos = Vector3.new(10978.163086, -2023.948853, 9181.994141),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-	{
-		Min = 2625,
-		Max = 2649,
-		Quest = "SubmergedQuest1",
-		Stage = 2,
-		Name = "Coral Pirate",
-		Mob = "Coral Pirate",
-		Count = 8,
-		NPC = Vector3.new(10780.272461, -2087.699463, 9263.379883),
-		MobPos = Vector3.new(10733.620117, -2010.045288, 9343.441406),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-	{
-		Min = 2650,
-		Max = 2674,
-		Quest = "SubmergedQuest2",
-		Stage = 1,
-		Name = "Sea Chanter",
-		Mob = "Sea Chanter",
-		Count = 8,
-		NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172),
-		MobPos = Vector3.new(10623.348633, -2046.116455, 10102.416016),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-	{
-		Min = 2675,
-		Max = 2699,
-		Quest = "SubmergedQuest2",
-		Stage = 2,
-		Name = "Ocean Prophet",
-		Mob = "Ocean Prophet",
-		Count = 8,
-		NPC = Vector3.new(10882.310547, -2086.176025, 10030.576172),
-		MobPos = Vector3.new(11041.423828, -1949.248901, 10147.605469),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-	{
-		Min = 2675,
-		Max = 2699,
-		Quest = "SubmergedQuest3",
-		Stage = 1,
-		Name = "High Disciple",
-		Mob = "High Disciple",
-		Count = 8,
-		NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055),
-		MobPos = Vector3.new(9830.585938, -1941.134888, 9698.757812),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-	{
-		Min = 2700,
-		Max = 3000,
-		Quest = "SubmergedQuest3",
-		Stage = 2,
-		Name = "Grand Devotee",
-		Mob = "Grand Devotee",
-		Count = 8,
-		NPC = Vector3.new(9636.642578, -1992.420532, 9611.206055),
-		MobPos = Vector3.new(9595.754883, -1993.467651, 9845.081055),
-		TeleportNpc = Vector3.new(-16270.290039, 25.253189, 1371.398926),
-	},
-}
-
-ELITE_HUNTER_SPAWNS = {
-	["Port Town"] = {
-		Vector3.new(-1402.016968, 151.991837, 7390.711914),
-	},
-	["Great Tree"] = {
-		Vector3.new(2581.156250, 567.870239, -8267.071289),
-		Vector3.new(4324.608398, 565.870239, -6157.793457),
-	},
-	["Floating Turtle"] = {
-		Vector3.new(-11246.158203, 707.750793, -6791.939941),
-		Vector3.new(-13938.369141, 382.470673, -9429.875977),
-		Vector3.new(-13658.867188, 401.710175, -10171.397461),
-		Vector3.new(-11861.125000, 457.982635, -10356.706055),
-		Vector3.new(-12436.410156, 334.147888, -9556.802734),
-		Vector3.new(-10812.706055, 453.498596, -9742.287109),
-		Vector3.new(-11550.122070, 639.300781, -8892.951172),
-	},
-	["Hydra Island"] = {
-		Vector3.new(7074.438477, 246.463486, -423.873932),
-		Vector3.new(4395.399902, 1241.267212, 150.202194),
-		Vector3.new(6268.424316, 76.489922, 2101.233398),
-		Vector3.new(5846.037109, 63.953339, 2312.996338),
-	},
-}
-
-IslandProximity = {
-	["Port Town"] = "Hydra Island",
-	["Great Tree"] = "Hydra Island",
-	["Castle on the Sea"] = "Floating Turtle",
-	["Haunted Castle"] = "Tiki Outpost",
-	["Sea of Treats"] = "Floating Turtle",
-	["Submerged Island"] = "Tiki Outpost",
-}
-
-FightingStyleNPC = {
-	["Godhuman"] = Vector3.new(-13774.933594, 334.685089, -9878.292969),
-}
+local function GetIslandCFrame(islandName)
+	if not islandName then
+		return nil
+	end
+	for _, seaTable in pairs(Islands) do
+		if seaTable[islandName] then
+			return seaTable[islandName]
+		end
+	end
+	return nil
+end
 
 selectedBossName = BOSSES[1] and BOSSES[1].Name or nil
 
@@ -1792,11 +2304,24 @@ local function GetMobProfileByName(mobName)
 	end
 	local nameLower = string.lower(mobName)
 
-	for _, sea in ipairs({ SEA1, SEA2, SEA3 }) do
-		if sea then
-			for _, profile in ipairs(sea) do
-				if profile.Mob and string.lower(profile.Mob) == nameLower then
-					return profile
+	for _, seaTable in pairs(Quests) do
+		for questKey, stageList in pairs(seaTable) do
+			for _, stageData in ipairs(stageList) do
+				if
+					(stageData.Mob and string.lower(stageData.Mob) == nameLower)
+					or (stageData.Name and string.lower(stageData.Name) == nameLower)
+				then
+					return {
+						Quest = questKey,
+						Stage = stageData.Stage,
+						Level = stageData.Level,
+						Name = stageData.Name,
+						Mob = stageData.Mob,
+						Count = stageData.Count,
+						NPC = stageData.NPC,
+						MobPos = stageData.MobPos,
+						IsBoss = stageData.IsBoss,
+					}
 				end
 			end
 		end
@@ -1819,6 +2344,50 @@ end
 
 local isNoclipping = false
 
+local function StopCarrier()
+	if Runtime.activeFollowConn then
+		pcall(function()
+			Runtime.activeFollowConn:Disconnect()
+		end)
+		Runtime.activeFollowConn = nil
+	end
+	if Runtime.activeCarrier then
+		if Runtime.activeCarrier.Parent then
+			Runtime.activeCarrier:Destroy()
+		end
+		Runtime.activeCarrier = nil
+	end
+	Runtime.activeTween = nil
+	lastTargetPos = nil
+end
+
+-- Legacy callers use Runtime.activeTween:Cancel(); keep that contract without TweenService.
+carrierToken = {
+	Cancel = function()
+		StopCarrier()
+	end,
+}
+
+local function DestroyTeleAnchor()
+	StopCarrier()
+	for _, container in ipairs({ workspace, workspace:FindFirstChild("_WorldOrigin") }) do
+		if container then
+			for _, child in ipairs(container:GetChildren()) do
+				if child.Name == "PartTele" then
+					child:Destroy()
+				end
+			end
+		end
+	end
+	local c = GetCharacter()
+	if c then
+		local a3 = c:FindFirstChild("PartTele")
+		if a3 then
+			a3:Destroy()
+		end
+	end
+end
+
 local function ToggleFloat(state)
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 	local humanoid = GetHumanoid()
@@ -1835,28 +2404,35 @@ local function ToggleFloat(state)
 		if not hrp:FindFirstChild("BodyClip") then
 			local bv = Instance.new("BodyVelocity")
 			bv.Name = "BodyClip"
-			bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+			bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
 			bv.Velocity = Vector3.zero
 			bv.Parent = hrp
 
 			local bg = Instance.new("BodyGyro")
 			bg.Name = "BodyGyroClip"
-			bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+			bg.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
 			bg.P = 100000
 			bg.D = 1000
 			bg.CFrame = hrp.CFrame
 			bg.Parent = hrp
 		end
 	else
-		if activeTween then
-			return
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
+		DestroyTeleAnchor()
 		if hrp:FindFirstChild("BodyClip") then
 			hrp.BodyClip:Destroy()
 		end
 		if hrp:FindFirstChild("BodyGyroClip") then
 			hrp.BodyGyroClip:Destroy()
 		end
+		if humanoid then
+			humanoid.PlatformStand = false
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+		hrp.AssemblyLinearVelocity = Vector3.zero
 	end
 end
 
@@ -1922,7 +2498,6 @@ local function GetBestRoute(startPos, targetPos)
 	end
 
 	if not cfg.UsePortal then
-		print("[Portal Debug]: Portal bypass disabled in cfg.UsePortal")
 		return nil
 	end
 
@@ -1932,17 +2507,14 @@ local function GetBestRoute(startPos, targetPos)
 
 	local seaName, seaNum = GetCurrentSea()
 	if seaNum ~= 3 then
-		print("[Portal Debug]: Not Sea 3 (Detected = " .. tostring(seaName) .. ")")
 		return nil
 	end
 	if not CheckPortalAccess() then
-		print("[Portal Debug]: CheckPortalAccess returned false/nil (DefeatedIndraTrueForm not unlocked)")
 		return nil
 	end
 	local isActuallyInRaid = player:GetAttribute("IslandRaiding") or false
 	local currLoc = tostring(player:GetAttribute("CurrentLocation") or "")
 	if isActuallyInRaid or string.match(currLoc, "Island%s*%d+") then
-		print("[Portal Debug]: Player actively in Island Raid (" .. currLoc .. ")")
 		return nil
 	end
 
@@ -2001,30 +2573,12 @@ local function GetBestRoute(startPos, targetPos)
 		return nil
 	end
 
-	print(
-		string.format(
-			"[Portal Debug]: Target Hub: %s (Dist: %d) | Current Hubs: (SeaCastle:%s, Tiki:%s, Turtle:%s, Hydra:%s) | Loc: %s",
-			tostring(closestHub),
-			math.floor(minDistToTarget),
-			tostring(isAtSeaCastle),
-			tostring(isAtTiki),
-			tostring(isAtTurtle),
-			tostring(isAtHydra),
-			locStr
-		)
-	)
-
 	if
 		(closestHub == "Castle" and isAtSeaCastle)
 		or (closestHub == "Tiki" and isAtTiki)
 		or (closestHub == "Turtle" and isAtTurtle)
 		or (closestHub == "Hydra" and isAtHydra)
 	then
-		print(
-			"[Portal Debug]: Already at the closest hub ("
-				.. tostring(closestHub)
-				.. "), tweening remaining distance..."
-		)
 		return nil
 	end
 
@@ -2119,6 +2673,16 @@ local function GetBestRoute(startPos, targetPos)
 	return nil
 end
 
+local function LookCFrame(basePos, height)
+	local overhead = basePos + Vector3.new(0, height, 0)
+	local dir = basePos - overhead
+	-- A purely vertical look vector leaves roll undefined and spins the character
+	if math.abs(dir.X) < 1e-3 and math.abs(dir.Z) < 1e-3 then
+		dir = dir + Vector3.new(0.001, 0, 0.001)
+	end
+	return CFrame.lookAt(overhead, overhead + dir)
+end
+
 local function TweenTo(targetCFrame)
 	if not targetCFrame or typeof(targetCFrame) ~= "CFrame" then
 		return
@@ -2137,342 +2701,211 @@ local function TweenTo(targetCFrame)
 		return
 	end
 
-	local isCurrentlySubmerged = (player:GetAttribute("ExactLocation") == "Submerged Island") or (hrp.Position.Y < -500)
-
-	if isCurrentlySubmerged and targetPos.Y > -500 then
-		local exitPos = Vector3.new(11427.093750, -2154.981934, 9729.259766)
-		local distToExitNpc = (hrp.Position - exitPos).Magnitude
-		if distToExitNpc > 30 then
-			targetPos = exitPos
-			targetCFrame = CFrame.new(exitPos)
-		else
-			if not cfg.lastSubmergedExitAt or (os.clock() - cfg.lastSubmergedExitAt > 3) then
-				cfg.lastSubmergedExitAt = os.clock()
-				task.spawn(function()
-					isTeleporting = true
-					print("[Submerged Exit]: Initiating teleport to Tiki Outpost...")
-					pcall(function()
-						local netModule = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
-							and game:GetService("ReplicatedStorage").Modules:FindFirstChild("Net")
-						if netModule then
-							local Net = require(netModule)
-							local rf = Net and Net.RemoteFunction and Net:RemoteFunction("SubmarineTransportation")
-							if rf then
-								rf:InvokeServer("InitiateTeleport", "Tiki Outpost")
-							end
-						end
-					end)
-					pcall(function()
-						local Event = game:GetService("ReplicatedStorage").Modules.Net
-							:FindFirstChild("RF/SubmarineTransportation") or game:GetService("ReplicatedStorage").Modules.Net["RF/SubmarineTransportation"]
-						if Event then
-							Event:InvokeServer("InitiateTeleport", "Tiki Outpost")
-						end
-					end)
-
-					local t = 0
-					local startPos = hrp.Position
-					while t < 25 do
-						t = t + 1
-						task.wait(0.1)
-						local currChar = GetCharacter()
-						local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
-						local currLoc = player:GetAttribute("ExactLocation")
-						if currHrp and (currHrp.Position - startPos).Magnitude > 500 then
-							task.wait(0.8)
-							break
-						elseif currLoc and currLoc ~= "Submerged Island" then
-							task.wait(0.8)
-							break
-						end
-					end
-
-					local freshHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-					if freshHrp then
-						freshHrp.CFrame = freshHrp.CFrame
-						task.wait(0.2)
-						isTeleporting = false
-						TweenTo(targetCFrame)
-					else
-						isTeleporting = false
-					end
-				end)
-			end
+	if targetPos.Y < -500 then
+		local isSubmergedTarget = (targetPos - Vector3.new(11427.09, -2154.98, 9729.26)).Magnitude < 5000
+		if not isSubmergedTarget then
 			return
 		end
 	end
-
-	if
-		not isCurrentlySubmerged
-		and targetPos.Y <= -500
-		and (targetPos - Vector3.new(11427.093750, -2154.981934, 9729.259766)).Magnitude < 5000
-	then
-		local enterPos = Vector3.new(-16270.290039, 25.253189, 1371.398926)
-		local distToEnterNpc = (hrp.Position - enterPos).Magnitude
-		if distToEnterNpc > 35 then
-			targetPos = enterPos
-			targetCFrame = CFrame.new(enterPos)
-		else
-			if not cfg.lastSubmergedEnterAt or (os.clock() - cfg.lastSubmergedEnterAt > 5) then
-				cfg.lastSubmergedEnterAt = os.clock()
-				task.spawn(function()
-					isTeleporting = true
-					print("[Submerged Enter]: Invoking TravelToSubmergedIsland at Tiki Outpost...")
-					pcall(function()
-						game:GetService("ReplicatedStorage").Modules.Net
-							:WaitForChild("RF/SubmarineWorkerSpeak")
-							:InvokeServer("TravelToSubmergedIsland")
-					end)
-
-					local t = 0
-					local startPos = hrp.Position
-					while t < 25 do
-						t = t + 1
-						task.wait(0.1)
-						local currChar = GetCharacter()
-						local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
-						local currLoc = player:GetAttribute("ExactLocation")
-						if currHrp and (currHrp.Position - startPos).Magnitude > 500 then
-							task.wait(0.8)
-							break
-						elseif currLoc == "Submerged Island" then
-							task.wait(0.8)
-							break
-						end
-					end
-
-					local freshHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-					if freshHrp then
-						freshHrp.CFrame = freshHrp.CFrame
-						task.wait(0.2)
-						isTeleporting = false
-						TweenTo(targetCFrame)
-					else
-						isTeleporting = false
-					end
-				end)
-			end
-			return
-		end
+	if math.abs(targetPos.X) > 200000 or math.abs(targetPos.Z) > 200000 then
+		return
 	end
 
-	if cfg.UsePortal then
-		local route = GetBestRoute(hrp.Position, targetPos)
+	local seaName, seaNum = GetCurrentSea()
+	if seaNum == 1 then
+		local isCurrentlyUnderwater = (hrp.Position.X > 55000 and hrp.Position.X < 65000)
+		local isTargetUnderwater = (targetPos.X > 55000 and targetPos.X < 65000)
 
-		if route then
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
-			end
+		if isCurrentlyUnderwater and not isTargetUnderwater then
+			local exitPos = Vector3.new(61170.0469, -2, 1952.83398)
+			local distToExit = (hrp.Position - exitPos).Magnitude
 
-			if route.Type == "Intermediate" then
-				print("[Portal Debug]: " .. tostring(route.Name))
-				targetCFrame = route.CFrame
-				targetPos = targetCFrame.Position
+			if distToExit > 10 then
+				targetPos = exitPos
+				targetCFrame = CFrame.new(exitPos)
 			else
-				task.spawn(function()
-					isTeleporting = true
-
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
-					end
-					hrp.AssemblyLinearVelocity = Vector3.zero
-
-					cfg.lastPortalInvokeAt = os.clock()
-					local startLocation = player:GetAttribute("ExactLocation")
-					local startPos = hrp.Position
-
-					if route.Type == "TikiToCastle" then
-						print("[Portal Debug]: Invoking BoatCastleTeleporters to Sea Castle...")
+				if not cfg.lastUnderwaterExitAt or (os.clock() - cfg.lastUnderwaterExitAt > 2) then
+					cfg.lastUnderwaterExitAt = os.clock()
+					task.spawn(function()
+						isTeleporting = true
+						local startPos = hrp.Position
 						pcall(function()
-							local teleEvent =
-								game:GetService("ReplicatedStorage").Modules.Net["RF/BoatCastleTeleporters"]
-							local targetObj = workspace:FindFirstChild("Map")
-								and workspace.Map:FindFirstChild("TikiOutpost")
-								and workspace.Map.TikiOutpost:FindFirstChild("MapTeleportC")
-							if not targetObj and workspace:FindFirstChild("Map") then
-								targetObj = workspace.Map:FindFirstChild("MapTeleportC", true)
-							end
-							if targetObj and teleEvent then
-								local ok, res = pcall(function()
-									return teleEvent:InvokeServer("InitiateTeleport", targetObj)
-								end)
-								task.wait(0.2)
-								print(
-									"[Portal Debug]: TikiToCastle result -> success: "
-										.. tostring(ok)
-										.. ", res: "
-										.. tostring(res)
-								)
-							else
-								print("[Portal Debug]: TikiOutpost.MapTeleportC not found!")
-							end
-						end)
-					elseif route.Type == "CastleToTiki" then
-						print("[Portal Debug]: Invoking BoatCastleTeleporters to Tiki Outpost...")
-						pcall(function()
-							local teleEvent =
-								game:GetService("ReplicatedStorage").Modules.Net["RF/BoatCastleTeleporters"]
-							local targetObj = nil
-							local map = workspace:FindFirstChild("Map")
-							if
-								map
-								and map:FindFirstChild("Boat Castle")
-								and map["Boat Castle"]:FindFirstChild("MapTeleportC")
-							then
-								targetObj = map["Boat Castle"].MapTeleportC
-							elseif map then
-								targetObj = map:FindFirstChild("MapTeleportC", true)
-							end
-
-							if not targetObj and getnilinstances then
-								for _, Object in ipairs(SafeGetNilInstances()) do
-									if Object.Name == "MapTeleportC" then
-										targetObj = Object
-										break
-									end
+							local t = 0
+							while t < 30 do
+								t = t + 1
+								task.wait(0.1)
+								local currChar = GetCharacter()
+								local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
+								if currHrp and (currHrp.Position - startPos).Magnitude > 500 then
+									task.wait(0.5)
+									break
 								end
 							end
+						end)
+						isTeleporting = false
+						local freshHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+						if freshHrp then
+							TweenTo(targetCFrame)
+						end
+					end)
+				end
+				return
+			end
+		end
 
-							if targetObj and teleEvent then
-								local ok, res = pcall(function()
-									return teleEvent:InvokeServer("InitiateTeleport", targetObj)
-								end)
-								task.wait(0.2)
-								print(
-									"[Portal Debug]: BoatCastleTeleporters (CastleToTiki) result -> success: "
-										.. tostring(ok)
-										.. ", res: "
-										.. tostring(res)
-								)
-							else
-								print("[Portal Debug]: Boat Castle MapTeleportC instance not found!")
+		if not isCurrentlyUnderwater and isTargetUnderwater then
+			local entrancePos = Vector3.new(4050.31104, -1.68800354, -1814.12402)
+			local distToEntrance = (hrp.Position - entrancePos).Magnitude
+
+			if distToEntrance > 10 then
+				targetPos = entrancePos
+				targetCFrame = CFrame.new(entrancePos)
+			else
+				if not cfg.lastUnderwaterEnterAt or (os.clock() - cfg.lastUnderwaterEnterAt > 2) then
+					cfg.lastUnderwaterEnterAt = os.clock()
+					task.spawn(function()
+						isTeleporting = true
+						local startPos = hrp.Position
+						pcall(function()
+							local t = 0
+							while t < 30 do
+								t = t + 1
+								task.wait(0.1)
+								local currChar = GetCharacter()
+								local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
+								if currHrp and (currHrp.Position - startPos).Magnitude > 500 then
+									task.wait(0.5)
+									break
+								end
 							end
 						end)
-					else
-						print("[Portal Debug]: Invoking requestEntrance -> " .. tostring(route.TargetInvoke))
-						local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-							and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
-						if CommF_ then
-							local res = nil
-							local ok, err = pcall(function()
-								res = CommF_:InvokeServer("requestEntrance", route.TargetInvoke)
-							end)
-							task.wait(0.2)
-							print(
-								"[Portal Debug]: Invoke result -> success: "
-									.. tostring(ok)
-									.. ", res: "
-									.. tostring(res)
-									.. ", err: "
-									.. tostring(err)
-							)
-						else
-							print("[Portal Debug]: Remote CommF_ not found!")
-						end
-					end
-
-					local t = 0
-					while t < 25 do
-						t = t + 1
-						task.wait(0.1)
-						local currChar = GetCharacter()
-						local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
-						local currLoc = player:GetAttribute("ExactLocation")
-						if currHrp and (currHrp.Position - startPos).Magnitude > 500 then
-							print(
-								"[Portal Debug]: Position jump detected! Distance jumped: "
-									.. tostring(math.floor((currHrp.Position - startPos).Magnitude))
-							)
-							task.wait(0.8)
-							break
-						elseif currLoc ~= startLocation then
-							print("[Portal Debug]: ExactLocation change detected! New: " .. tostring(currLoc))
-							task.wait(0.8)
-							break
-						end
-					end
-
-					print(
-						"[Portal Debug]: Portal transition finished after "
-							.. tostring(t * 0.1)
-							.. "s. New ExactLocation: "
-							.. tostring(player:GetAttribute("ExactLocation"))
-					)
-					cfg.lastPortalInvokeAt = os.clock()
-
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
-					end
-					lastTargetPos = nil
-
-					local freshHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-					if freshHrp then
-						freshHrp.AssemblyLinearVelocity = Vector3.zero
-						freshHrp.CFrame = freshHrp.CFrame
-						task.wait(0.3)
 						isTeleporting = false
-
-						TweenTo(targetCFrame)
-					else
-						isTeleporting = false
-					end
-				end)
+						local freshHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+						if freshHrp then
+							TweenTo(targetCFrame)
+						end
+					end)
+				end
 				return
 			end
 		end
 	end
 
-	local distance = (hrp.Position - targetPos).Magnitude
-
 	ToggleFloat(true)
-
-	if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 2 then
-		if activeTween then
-			return
-		end
-	end
 
 	if isTeleporting then
 		return
 	end
 
+	if hrp.AssemblyLinearVelocity ~= Vector3.zero then
+		hrp.AssemblyLinearVelocity = Vector3.zero
+	end
+
+	local char = GetCharacter()
+	if not char then
+		return
+	end
+
+	-- Goal only shifted a little: move the marker, keep the running glide.
+	-- Moving the anchor never snaps the character - it lerps toward it each frame.
+	if Runtime.activeCarrier and Runtime.activeCarrier.Parent and lastTargetPos then
+		if (targetPos - lastTargetPos).Magnitude < 5 then
+			Runtime.activeCarrier.CFrame = targetCFrame
+			lastTargetPos = targetPos
+			local bg0 = hrp:FindFirstChild("BodyGyroClip")
+			if bg0 then
+				bg0.CFrame = targetCFrame
+			end
+			return
+		end
+	end
+
+	StopCarrier()
+
 	lastTargetPos = targetPos
 
-	local tweenSpeed = cfg.TweenSpeed
-	local duration = math.max(distance / tweenSpeed, 0.05)
+	local telePart = Instance.new("Part")
+	telePart.Name = "PartTele"
+	telePart.Size = Vector3.new(2, 2, 2)
+	telePart.Transparency = 1
+	telePart.CanCollide = false
+	telePart.CanTouch = false
+	telePart.CanQuery = false
+	telePart.Anchored = true
+	telePart.CFrame = targetCFrame
+	telePart.Parent = workspace._WorldOrigin or workspace
+	Runtime.activeCarrier = telePart
 
-	if activeTween then
-		activeTween:Cancel()
-	end
+	local glideSpeed = cfg.TweenSpeed or 300
+	local glideDone = false
 
-	if activeTween then
-		activeTween:Cancel()
-		activeTween = nil
-	end
+	local followConn
+	followConn = RunService.RenderStepped:Connect(function(dt)
+		if glideDone then
+			return
+		end
 
-	local bg = hrp:FindFirstChild("BodyGyroClip")
-	if bg then
-		bg.CFrame = targetCFrame
-	end
+		if not telePart or not telePart.Parent then
+			followConn:Disconnect()
+			if Runtime.activeFollowConn == followConn then
+				Runtime.activeFollowConn = nil
+			end
+			return
+		end
 
-	activeTween = TweenService:Create(
-		hrp,
-		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-		{ CFrame = targetCFrame }
-	)
+		local anchorPos = telePart.Position
+		if anchorPos.Y < -500 or math.abs(anchorPos.X) > 200000 or math.abs(anchorPos.Z) > 200000 then
+			glideDone = true
+			followConn:Disconnect()
+			if Runtime.activeFollowConn == followConn then
+				Runtime.activeFollowConn = nil
+			end
+			StopCarrier()
+			return
+		end
 
-	local currentTween = activeTween
-	currentTween.Completed:Connect(function(playbackState)
-		if playbackState == Enum.PlaybackState.Completed and activeTween == currentTween then
-			activeTween:Cancel()
-			activeTween = nil
+		local currentHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+		if not currentHrp or not currentHrp.Parent then
+			glideDone = true
+			followConn:Disconnect()
+			if Runtime.activeFollowConn == followConn then
+				Runtime.activeFollowConn = nil
+			end
+			return
+		end
+
+		local goal = telePart.CFrame
+		local remaining = (goal.Position - currentHrp.Position).Magnitude
+
+		if remaining <= 1 then
+			glideDone = true
+			currentHrp.CFrame = goal
+			currentHrp.AssemblyLinearVelocity = Vector3.zero
+			currentHrp.AssemblyAngularVelocity = Vector3.zero
+			local bgEnd = currentHrp:FindFirstChild("BodyGyroClip")
+			if bgEnd then
+				bgEnd.CFrame = goal
+			end
+			followConn:Disconnect()
+			if Runtime.activeFollowConn == followConn then
+				Runtime.activeFollowConn = nil
+			end
+			StopCarrier()
+			return
+		end
+
+		local step = glideSpeed * dt
+		local alpha = math.clamp(step / remaining, 0, 1)
+		currentHrp.CFrame = currentHrp.CFrame:Lerp(goal, alpha)
+		currentHrp.AssemblyLinearVelocity = Vector3.zero
+		currentHrp.AssemblyAngularVelocity = Vector3.zero
+		local bgClip = currentHrp:FindFirstChild("BodyGyroClip")
+		if bgClip then
+			bgClip.CFrame = goal
 		end
 	end)
-
-	activeTween:Play()
+	Runtime.activeFollowConn = followConn
+	Runtime.activeTween = carrierToken
 end
 
 local function SafeTouch(targetPart, hrp, overrideDistance)
@@ -2480,23 +2913,20 @@ local function SafeTouch(targetPart, hrp, overrideDistance)
 		return false
 	end
 
-	if hasFireTouch then
-		pcall(function()
-			firetouchinterest(hrp, targetPart, true)
-			task.wait(0.01)
-			firetouchinterest(hrp, targetPart, false)
-		end)
+	local ok, _ = useUnc("firetouchinterest", { hrp, targetPart, 0 })
+	if ok then
+		task.wait(0.01)
+		useUnc("firetouchinterest", { hrp, targetPart, 1 })
 		return true
 	else
-		-- Fallback jika executor tidak memiliki firetouchinterest: gunakan TweenTo + CFrame touch
 		local dist = (hrp.Position - targetPart.Position).Magnitude
 		if dist > 8 then
 			TweenTo(CFrame.new(targetPart.Position))
 			return false
 		else
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			hrp.CFrame = CFrame.new(targetPart.Position)
 			task.wait(0.1)
@@ -2524,14 +2954,12 @@ local function SafeProximity(prompt, hrp)
 		end
 	end
 
-	if hasProximity then
-		if proximityPrompt then
-			pcall(function()
-				fireproximityprompt(proximityPrompt)
-			end)
-		end
-	else
-		-- Fallback jika executor tidak memiliki fireproximityprompt: TweenTo mendekat lalu simulasi keyboard
+	local fired = false
+	if proximityPrompt then
+		local ok, _ = useUnc("fireproximityprompt", { proximityPrompt })
+		fired = ok
+	end
+	if not fired then
 		local promptPart = prompt:IsA("BasePart") and prompt
 			or (prompt:IsA("Model") and prompt.PrimaryPart)
 			or (proximityPrompt and proximityPrompt.Parent:IsA("BasePart") and proximityPrompt.Parent)
@@ -2636,58 +3064,416 @@ local function CreateIslandESP(islandName, color)
 	end)
 end
 
-local function HandleESP(folderOrList, espName, color, toggleVarName)
-	task.spawn(function()
-		while task.wait(1) do
-			if not getgenv()[toggleVarName] then
+local hasDrawing = type(Drawing) == "table" and type(Drawing.new) == "function"
+local MainCamera = workspace.CurrentCamera or workspace:FindFirstChildOfClass("Camera")
+
+function SafeSetRenderProperty(obj, prop, val)
+	if type(setrenderproperty) == "function" then
+		pcall(setrenderproperty, obj, prop, val)
+	else
+		pcall(function()
+			obj[prop] = val
+		end)
+	end
+end
+
+function GetEntityRenderPart(obj)
+	if not obj then
+		return nil
+	end
+	if obj:IsA("BasePart") then
+		return obj
+	end
+
+	local hrp = obj:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp:IsA("BasePart") then
+		return hrp
+	end
+
+	if obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart:IsA("BasePart") then
+		return obj.PrimaryPart
+	end
+
+	local handle = obj:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		return handle
+	end
+
+	local firstPart = obj:FindFirstChildWhichIsA("BasePart")
+	if firstPart and firstPart:IsA("BasePart") then
+		return firstPart
+	end
+
+	return nil
+end
+
+local function HandleUniversalESP(generatorFn, espTag, color, toggleVarName)
+	if hasDrawing then
+		local drawings = {}
+
+		local function CleanAllDrawings()
+			for obj, draw in pairs(drawings) do
 				pcall(function()
-					local list = type(folderOrList) == "function" and folderOrList() or folderOrList:GetChildren()
-					for _, obj in ipairs(list) do
-						local ui = obj:FindFirstChild(espName)
-						if ui then
-							ui:Destroy()
-						end
+					draw.Visible = false
+					if type(draw.Remove) == "function" then
+						draw:Remove()
+					elseif type(draw.Destroy) == "function" then
+						draw:Destroy()
 					end
 				end)
-			else
-				pcall(function()
-					local list = type(folderOrList) == "function" and folderOrList() or folderOrList:GetChildren()
-					for _, obj in ipairs(list) do
-						if obj ~= game.Players.LocalPlayer.Character then
-							local hrp = obj:FindFirstChild("HumanoidRootPart")
-								or (obj:IsA("BasePart") and obj)
-								or obj:FindFirstChildWhichIsA("BasePart")
-							if hrp then
-								local ui = obj:FindFirstChild(espName)
-								if not ui then
-									ui = Instance.new("BillboardGui")
-									ui.Name = espName
-									ui.AlwaysOnTop = true
-									ui.Size = UDim2.new(0, 200, 0, 50)
-									ui.StudsOffset = Vector3.new(0, 5, 0)
-									local tl = Instance.new("TextLabel")
-									tl.Size = UDim2.new(1, 0, 1, 0)
-									tl.BackgroundTransparency = 1
-									tl.TextColor3 = color
-									tl.TextStrokeTransparency = 0.5
-									tl.TextSize = 14
-									tl.Font = Enum.Font.Code
-									tl.Parent = ui
-									ui.Parent = obj
-								end
+			end
+			table.clear(drawings)
+		end
 
-								local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-								if myHrp then
-									local dist = (myHrp.Position - hrp.Position).Magnitude
-									ui.TextLabel.Text = string.format("%s\n[%d M]", obj.Name, math.floor(dist / 3))
+		RunService.RenderStepped:Connect(function()
+			if not getgenv()[toggleVarName] then
+				if next(drawings) ~= nil then
+					CleanAllDrawings()
+				end
+				return
+			end
+
+			local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+			local myPos = myHrp and myHrp.Position
+			local cam = workspace.CurrentCamera or MainCamera
+			if not cam then
+				return
+			end
+
+			local activeList = {}
+			local success, items = pcall(generatorFn)
+			if success and type(items) == "table" then
+				for _, obj in ipairs(items) do
+					if obj and obj.Parent and obj ~= player.Character then
+						activeList[obj] = true
+						local part = GetEntityRenderPart(obj)
+						if part then
+							local draw = drawings[obj]
+							if not draw then
+								local ok, newDraw = pcall(function()
+									return Drawing.new("Text")
+								end)
+								if ok and newDraw then
+									draw = newDraw
+									drawings[obj] = draw
+									SafeSetRenderProperty(draw, "Size", 13)
+									SafeSetRenderProperty(draw, "Center", true)
+									SafeSetRenderProperty(draw, "Outline", true)
+									SafeSetRenderProperty(draw, "Color", color)
+								end
+							end
+
+							if draw then
+								local pos = part.Position
+								local screenPos, onScreen = cam:WorldToViewportPoint(pos)
+								if onScreen then
+									local distText = ""
+									if myPos then
+										local distMeters = math.floor((myPos - pos).Magnitude / 3)
+										distText = "\n[" .. tostring(distMeters) .. " M]"
+									end
+									SafeSetRenderProperty(draw, "Visible", true)
+									SafeSetRenderProperty(draw, "Position", Vector2.new(screenPos.X, screenPos.Y))
+									SafeSetRenderProperty(draw, "Text", tostring(obj.Name) .. distText)
+								else
+									SafeSetRenderProperty(draw, "Visible", false)
 								end
 							end
 						end
 					end
-				end)
+				end
+			end
+
+			for trackedObj, draw in pairs(drawings) do
+				if not activeList[trackedObj] or not trackedObj.Parent then
+					pcall(function()
+						draw.Visible = false
+						if type(draw.Remove) == "function" then
+							draw:Remove()
+						elseif type(draw.Destroy) == "function" then
+							draw:Destroy()
+						end
+					end)
+					drawings[trackedObj] = nil
+				end
+			end
+		end)
+	else
+		task.spawn(function()
+			while task.wait(0.5) do
+				if not getgenv()[toggleVarName] then
+					pcall(function()
+						local items = generatorFn()
+						for _, obj in ipairs(items) do
+							local ui = obj:FindFirstChild(espTag)
+							if ui then
+								ui:Destroy()
+							end
+						end
+					end)
+				else
+					pcall(function()
+						local items = generatorFn()
+						for _, obj in ipairs(items) do
+							if obj ~= player.Character then
+								local targetPart = GetEntityRenderPart(obj)
+								if targetPart then
+									local ui = obj:FindFirstChild(espTag)
+									if not ui then
+										ui = Instance.new("BillboardGui")
+										ui.Name = espTag
+										ui.AlwaysOnTop = true
+										ui.Size = UDim2.new(0, 200, 0, 50)
+										ui.StudsOffset = Vector3.new(0, 4, 0)
+										local tl = Instance.new("TextLabel")
+										tl.Size = UDim2.new(1, 0, 1, 0)
+										tl.BackgroundTransparency = 1
+										tl.TextColor3 = color
+										tl.TextStrokeTransparency = 0.5
+										tl.TextSize = 13
+										tl.Font = Enum.Font.GothamBold
+										tl.Parent = ui
+										ui.Parent = obj
+									end
+
+									local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+									if myHrp and ui:FindFirstChild("TextLabel") then
+										local dist = math.floor((myHrp.Position - targetPart.Position).Magnitude / 3)
+										ui.TextLabel.Text = string.format("%s\n[%d M]", tostring(obj.Name), dist)
+									end
+								end
+							end
+						end
+					end)
+				end
+			end
+		end)
+	end
+end
+
+local function GetPlayerDisplayInfo(charOrPlayer)
+	local targetPlayer = charOrPlayer:IsA("Player") and charOrPlayer or Players:GetPlayerFromCharacter(charOrPlayer)
+	local char = targetPlayer and targetPlayer.Character or (charOrPlayer:IsA("Model") and charOrPlayer)
+	if not char then
+		return nil
+	end
+
+	local name = targetPlayer and targetPlayer.Name or char.Name
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local curHp = hum and math.floor(hum.Health) or 0
+	local maxHp = hum and math.floor(hum.MaxHealth) or 0
+	local hpText = hum and (tostring(curHp) .. "/" .. tostring(maxHp)) or "N/A"
+
+	local inCombat = targetPlayer and targetPlayer:GetAttribute("InCombat") == true
+	local pvpDisabled = targetPlayer and targetPlayer:GetAttribute("PvpDisabled") == true
+	local statusText = inCombat and "In Combat" or (pvpDisabled and "Disabled" or "Ready")
+
+	local kenActive = targetPlayer and targetPlayer:GetAttribute("KenActive") == true
+	local dodgesLeft = targetPlayer and tonumber(targetPlayer:GetAttribute("KenDodgesLeft")) or 0
+	local maxDodges = targetPlayer and tonumber(targetPlayer:GetAttribute("KenMaxDodges")) or 0
+	local kenText = string.format("Ken: %s [%d/%d]", kenActive and "Active" or "Inactive", dodgesLeft, maxDodges)
+
+	local myTeam = player.Team and player.Team.Name or tostring(player:GetAttribute("Team") or "")
+	local targetTeam = targetPlayer and targetPlayer.Team and targetPlayer.Team.Name
+		or tostring(targetPlayer and targetPlayer:GetAttribute("Team") or "")
+	local isSameMarine = (myTeam == "Marines" and targetTeam == "Marines")
+	local teamColor = isSameMarine and Color3.fromRGB(0, 255, 120) or Color3.fromRGB(255, 60, 60)
+
+	return {
+		Player = targetPlayer,
+		Character = char,
+		Name = name,
+		HealthText = hpText,
+		StatusText = statusText,
+		KenText = kenText,
+		Color = teamColor,
+		IsSameMarine = isSameMarine,
+		IsFriendly = isSameMarine,
+	}
+end
+
+local function GetPlayerEntities()
+	local players = {}
+	local charFolder = workspace:FindFirstChild("Characters") or workspace:FindFirstChild("Character")
+	if charFolder then
+		for _, c in ipairs(charFolder:GetChildren()) do
+			if
+				c ~= player.Character and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChildOfClass("Humanoid"))
+			then
+				table.insert(players, c)
 			end
 		end
-	end)
+	end
+	if #players == 0 then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				table.insert(players, p.Character)
+			end
+		end
+	end
+	return players
+end
+
+local function HandlePlayerESP(toggleVarName)
+	if hasDrawing then
+		local drawings = {}
+
+		local function CleanAllDrawings()
+			for obj, draw in pairs(drawings) do
+				pcall(function()
+					draw.Visible = false
+					if type(draw.Remove) == "function" then
+						draw:Remove()
+					elseif type(draw.Destroy) == "function" then
+						draw:Destroy()
+					end
+				end)
+			end
+			table.clear(drawings)
+		end
+
+		RunService.RenderStepped:Connect(function()
+			if not getgenv()[toggleVarName] then
+				if next(drawings) ~= nil then
+					CleanAllDrawings()
+				end
+				return
+			end
+
+			local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+			local myPos = myHrp and myHrp.Position
+			local cam = workspace.CurrentCamera or MainCamera
+			if not cam then
+				return
+			end
+
+			local activeList = {}
+			local items = GetPlayerEntities()
+			for _, obj in ipairs(items) do
+				if obj and obj.Parent and obj ~= player.Character then
+					activeList[obj] = true
+					local part = GetEntityRenderPart(obj)
+					if part then
+						local draw = drawings[obj]
+						if not draw then
+							local ok, newDraw = pcall(function()
+								return Drawing.new("Text")
+							end)
+							if ok and newDraw then
+								draw = newDraw
+								drawings[obj] = draw
+								SafeSetRenderProperty(draw, "Size", 13)
+								SafeSetRenderProperty(draw, "Center", true)
+								SafeSetRenderProperty(draw, "Outline", true)
+							end
+						end
+
+						if draw then
+							local info = GetPlayerDisplayInfo(obj)
+							local pos = part.Position
+							local screenPos, onScreen = cam:WorldToViewportPoint(pos)
+
+							if onScreen and info then
+								local distText = ""
+								if myPos then
+									local distMeters = math.floor((myPos - pos).Magnitude / 3)
+									distText = "\n[" .. tostring(distMeters) .. " M]"
+								end
+
+								local fullText = string.format(
+									"%s\nHP: %s\nStatus: %s | %s%s",
+									info.Name,
+									info.HealthText,
+									info.StatusText,
+									info.KenText,
+									distText
+								)
+
+								SafeSetRenderProperty(draw, "Color", info.Color)
+								SafeSetRenderProperty(draw, "Visible", true)
+								SafeSetRenderProperty(draw, "Position", Vector2.new(screenPos.X, screenPos.Y))
+								SafeSetRenderProperty(draw, "Text", fullText)
+							else
+								SafeSetRenderProperty(draw, "Visible", false)
+							end
+						end
+					end
+				end
+			end
+
+			for trackedObj, draw in pairs(drawings) do
+				if not activeList[trackedObj] or not trackedObj.Parent then
+					pcall(function()
+						draw.Visible = false
+						if type(draw.Remove) == "function" then
+							draw:Remove()
+						elseif type(draw.Destroy) == "function" then
+							draw:Destroy()
+						end
+					end)
+					drawings[trackedObj] = nil
+				end
+			end
+		end)
+	else
+		task.spawn(function()
+			while task.wait(0.5) do
+				if not getgenv()[toggleVarName] then
+					pcall(function()
+						local items = GetPlayerEntities()
+						for _, obj in ipairs(items) do
+							local ui = obj:FindFirstChild("ESP_Player")
+							if ui then
+								ui:Destroy()
+							end
+						end
+					end)
+				else
+					pcall(function()
+						local items = GetPlayerEntities()
+						for _, obj in ipairs(items) do
+							if obj ~= player.Character then
+								local targetPart = GetEntityRenderPart(obj)
+								local info = GetPlayerDisplayInfo(obj)
+								if targetPart and info then
+									local ui = obj:FindFirstChild("ESP_Player")
+									if not ui then
+										ui = Instance.new("BillboardGui")
+										ui.Name = "ESP_Player"
+										ui.AlwaysOnTop = true
+										ui.Size = UDim2.new(0, 250, 0, 75)
+										ui.StudsOffset = Vector3.new(0, 4.5, 0)
+										local tl = Instance.new("TextLabel")
+										tl.Size = UDim2.new(1, 0, 1, 0)
+										tl.BackgroundTransparency = 1
+										tl.TextStrokeTransparency = 0.5
+										tl.TextSize = 12
+										tl.Font = Enum.Font.GothamBold
+										tl.Parent = ui
+										ui.Parent = obj
+									end
+
+									local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+									if myHrp and ui:FindFirstChild("TextLabel") then
+										local dist = math.floor((myHrp.Position - targetPart.Position).Magnitude / 3)
+										ui.TextLabel.TextColor3 = info.Color
+										ui.TextLabel.Text = string.format(
+											"%s\nHP: %s\nStatus: %s | %s\n[%d M]",
+											info.Name,
+											info.HealthText,
+											info.StatusText,
+											info.KenText,
+											dist
+										)
+									end
+								end
+							end
+						end
+					end)
+				end
+			end
+		end)
+	end
 end
 
 local function GetBoat()
@@ -2808,7 +3594,7 @@ local function DodgeAttack()
 	if not hrp then
 		return
 	end
-	if os.clock() - lastDodgeTime < cfg.dodgeCooldown then
+	if os.clock() - State.LastDodgeTime < cfg.dodgeCooldown then
 		return
 	end
 
@@ -2819,7 +3605,7 @@ local function DodgeAttack()
 				local dodgeDirection = (hrp.Position - obj.Position).Unit * cfg.dodgeDistance
 				local newPosition = hrp.Position + dodgeDirection
 				hrp.CFrame = CFrame.new(newPosition)
-				lastDodgeTime = os.clock()
+				State.LastDodgeTime = os.clock()
 				break
 			end
 		end
@@ -2827,6 +3613,50 @@ local function DodgeAttack()
 end
 
 local isCollectingFruit = false
+
+ValidFruitNames = {
+	"Quake",
+	"Magma",
+	"Light",
+	"Ice",
+	"Buddha",
+	"Flame",
+	"Dark",
+	"Rubber",
+	"Bomb",
+	"Spike",
+	"Meme",
+	"Blade",
+	"Smoke",
+	"Phoenix",
+	"Spring",
+	"Spider",
+	"Sand",
+	"Gravity",
+	"Pain",
+	"Dough",
+	"Control",
+	"Dragon",
+	"Venom",
+	"Spin",
+	"Portal",
+	"Rocket",
+	"Diamond",
+	"Love",
+	"Ghost",
+	"Shadow",
+	"Spirit",
+	"Yeti",
+	"Fiend (Yeti)",
+	"Tiger",
+	"Mammoth",
+	"Sound",
+	"Kitsune",
+	"Empyrean (Kitsune)",
+	"T-Rex",
+	"Gas",
+	"Eagle",
+}
 
 local function IsFruitEntity(obj)
 	if not obj or typeof(obj) ~= "Instance" then
@@ -2839,15 +3669,18 @@ local function IsFruitEntity(obj)
 		return false
 	end
 
-	if obj:IsA("Tool") then
-		if obj.ToolTip == "Blox Fruit" or obj:GetAttribute("OriginalName") ~= nil then
+	local objNameLower = string.lower(obj.Name)
+	local origNameLower = string.lower(tostring(obj:GetAttribute("OriginalName") or ""))
+
+	for _, fruitName in ipairs(ValidFruitNames) do
+		local patternLower = string.lower(fruitName)
+		if
+			origNameLower ~= ""
+			and string.find(objNameLower, patternLower, 1, true)
+			and string.find(origNameLower, "fruit")
+		then
 			return true
 		end
-	end
-
-	local nameLower = string.lower(obj.Name)
-	if string.find(nameLower, "fruit", 1, true) ~= nil then
-		return true
 	end
 
 	return false
@@ -2858,13 +3691,11 @@ local function GetFruitHandle(obj)
 		return nil
 	end
 
-	-- Objek buah di Blox Fruits adalah Model, dan part yang disentuh adalah Handle (BasePart)
 	local handle = obj:FindFirstChild("Handle")
 	if handle and handle:IsA("BasePart") then
 		return handle
 	end
 
-	-- Fallback jika part berada di dalam hierarchy model atau menggunakan PrimaryPart
 	if obj:IsA("Model") and obj.PrimaryPart and obj.PrimaryPart:IsA("BasePart") then
 		return obj.PrimaryPart
 	end
@@ -2878,7 +3709,8 @@ local function GetFruitHandle(obj)
 end
 
 local function ScanForFruits()
-	fruitWaypoints = {}
+	State.FruitWaypoints = {}
+	blacklistedFruits = { "Fruit1", "" }
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 	if not hrp then
 		return
@@ -2888,14 +3720,14 @@ local function ScanForFruits()
 		if IsFruitEntity(obj) then
 			local handle = GetFruitHandle(obj)
 			if handle and handle:IsA("BasePart") and handle.Parent then
-				table.insert(fruitWaypoints, handle)
+				table.insert(State.FruitWaypoints, handle)
 			end
 		end
 	end
 end
 
 local function ScanForChests()
-	chestWaypoints = {}
+	State.ChestWaypoints = {}
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 	local chestModels = Workspace:FindFirstChild("ChestModels")
 	if hrp and chestModels then
@@ -2903,14 +3735,14 @@ local function ScanForChests()
 			local targetPart = chest:IsA("Model") and (chest.PrimaryPart or chest:FindFirstChildWhichIsA("BasePart"))
 				or chest
 			if targetPart and targetPart:IsA("BasePart") then
-				table.insert(chestWaypoints, targetPart)
+				table.insert(State.ChestWaypoints, targetPart)
 			end
 		end
 	end
 end
 
 local function CollectNearestFruit()
-	if #fruitWaypoints == 0 then
+	if #State.FruitWaypoints == 0 then
 		return false
 	end
 	local nearestFruit = nil
@@ -2918,7 +3750,7 @@ local function CollectNearestFruit()
 	local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 	local hum = GetHumanoid()
 	if hrp and hum then
-		for _, fruit in pairs(fruitWaypoints) do
+		for _, fruit in pairs(State.FruitWaypoints) do
 			if fruit and fruit.Parent then
 				local distance = (hrp.Position - fruit.Position).Magnitude
 				if distance < shortestDistance then
@@ -2939,7 +3771,6 @@ local function CollectNearestFruit()
 			end)
 
 			if hasFireTouch then
-				-- Instant UNC: Langsung firetouchinterest ke Handle tanpa tween
 				SafeTouch(nearestFruit, hrp)
 			else
 				local dist = (hrp.Position - nearestFruit.Position).Magnitude
@@ -2950,9 +3781,9 @@ local function CollectNearestFruit()
 					if not isCollectingFruit then
 						isCollectingFruit = true
 						task.spawn(function()
-							if activeTween then
-								activeTween:Cancel()
-								activeTween = nil
+							if Runtime.activeTween then
+								Runtime.activeTween:Cancel()
+								Runtime.activeTween = nil
 							end
 							hrp.CFrame = CFrame.new(nearestFruit.Position)
 							task.wait(0.05)
@@ -2981,7 +3812,7 @@ local function CollectNearestChest()
 		return false
 	end
 
-	if #chestWaypoints == 0 then
+	if #State.ChestWaypoints == 0 then
 		local originLocations = workspace:FindFirstChild("_WorldOrigin")
 			and workspace._WorldOrigin:FindFirstChild("Locations")
 		if originLocations then
@@ -3035,7 +3866,7 @@ local function CollectNearestChest()
 
 	local nearestChest = nil
 	local shortestDistance = math.huge
-	for _, chest in pairs(chestWaypoints) do
+	for _, chest in pairs(State.ChestWaypoints) do
 		local distance = (hrp.Position - chest.Position).Magnitude
 		if distance < shortestDistance then
 			shortestDistance = distance
@@ -3065,9 +3896,9 @@ local function CollectNearestChest()
 				if not isCollectingChest then
 					isCollectingChest = true
 					task.spawn(function()
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 
 						hrp.CFrame = targetPart.CFrame
@@ -3283,26 +4114,41 @@ end
 
 local function GetQuestProfile()
 	local level = GetPlayerLevel()
-	local list = nil
-
 	local seaName, seaNum = GetCurrentSea()
-	if seaNum == 1 then
-		list = SEA1
-	elseif seaNum == 2 then
-		list = SEA2
-	elseif seaNum == 3 then
-		list = SEA3
-	else
-		list = (level >= 1500) and SEA3 or (level >= 700) and SEA2 or SEA1
+	local seaKey = (seaNum == 3 and "Sea3")
+		or (seaNum == 2 and "Sea2")
+		or (seaNum == 1 and "Sea1")
+		or ((level >= 1500 and "Sea3") or (level >= 700 and "Sea2") or "Sea1")
+	local seaTable = Quests[seaKey]
+	if not seaTable then
+		return nil
 	end
 
-	if not list or #list == 0 then
+	local list = {}
+	for questKey, stageList in pairs(seaTable) do
+		for _, stageData in ipairs(stageList) do
+			table.insert(list, {
+				Min = stageData.Level,
+				Max = stageData.Level + 25,
+				Quest = questKey,
+				Stage = stageData.Stage,
+				Name = stageData.Name,
+				Mob = stageData.Mob,
+				Count = stageData.Count,
+				NPC = stageData.NPC,
+				MobPos = stageData.MobPos,
+				IsBoss = stageData.IsBoss,
+			})
+		end
+	end
+
+	if #list == 0 then
 		return nil
 	end
 
 	local highestQuest = nil
 	for _, p in ipairs(list) do
-		if level >= p.Min then
+		if not p.IsBoss and level >= p.Min then
 			if
 				not highestQuest
 				or p.Min > highestQuest.Min
@@ -3317,7 +4163,7 @@ local function GetQuestProfile()
 		return list[1]
 	end
 
-	local bracketKey = tostring(highestQuest.Min) .. ":" .. tostring(highestQuest.Max)
+	local bracketKey = tostring(highestQuest.Quest) .. ":" .. tostring(highestQuest.Min)
 
 	if level ~= lastLevelCalculated or questBracketKey ~= bracketKey then
 		lastLevelCalculated = level
@@ -3330,11 +4176,12 @@ local function GetQuestProfile()
 		currentQuestPool = {}
 
 		for _, p in ipairs(list) do
-			local sameHighestNpc = p.NPC == highestQuest.NPC and level >= p.Min
-			local sameExactBracket = p.Min == highestQuest.Min and p.Max == highestQuest.Max
-
-			if sameHighestNpc or sameExactBracket then
-				table.insert(currentQuestPool, p)
+			if not p.IsBoss then
+				local sameNpc = (p.NPC - highestQuest.NPC).Magnitude < 10 and level >= p.Min
+				local sameQuestType = p.Quest == highestQuest.Quest and level >= p.Min
+				if sameNpc or sameQuestType then
+					table.insert(currentQuestPool, p)
+				end
 			end
 		end
 
@@ -3487,45 +4334,37 @@ GetSafePosition = function(instance)
 end
 
 local function StopAllActivities()
-	if activeTween then
-		activeTween:Cancel()
-		activeTween = nil
+	if Runtime.activeTween then
+		Runtime.activeTween:Cancel()
+		Runtime.activeTween = nil
 	end
 
-	ToggleFloat(false)
 	isNoclipping = false
 
+	DestroyTeleAnchor()
 	local c = GetCharacter()
 	if c then
 		local hrp = c:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			local bv = hrp:FindFirstChild("AutofarmBv")
-			if bv then
-				bv:Destroy()
+			for _, child in ipairs(hrp:GetChildren()) do
+				if child:IsA("BodyVelocity") or child:IsA("BodyGyro") or child:IsA("BodyPosition") then
+					child:Destroy()
+				end
 			end
-			local bg = hrp:FindFirstChild("AutofarmBg")
-			if bg then
-				bg:Destroy()
-			end
-			local bc = hrp:FindFirstChild("BodyClip")
-			if bc then
-				bc:Destroy()
-			end
-			local bgc = hrp:FindFirstChild("BodyGyroClip")
-			if bgc then
-				bgc:Destroy()
-			end
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
 		end
 		local hum = c:FindFirstChildOfClass("Humanoid")
 		if hum then
 			hum.PlatformStand = false
-			hum:ChangeState(8)
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		end
 	end
 
 	isReadyToAttack = false
 	currentTargetInstance = nil
 	lastTargetPos = nil
+	isTeleporting = false
 	cfg.isAutoBerry = false
 	cfg.autoBerryWorker = cfg.autoBerryWorker + 1
 end
@@ -3535,7 +4374,6 @@ local function GetHitPart(model)
 		return nil
 	end
 
-	-- 1. Cek dari daftar preferred hit parts (R15 limbs, Head, ModelHitbox)
 	for _, name in ipairs(preferredHitParts) do
 		local part = model:FindFirstChild(name)
 		if part and part:IsA("BasePart") then
@@ -3543,29 +4381,24 @@ local function GetHitPart(model)
 		end
 	end
 
-	-- 2. Cek PrimaryPart (Model umum / Boss / Pohon / Kaktus / Prop)
 	if model:IsA("Model") and model.PrimaryPart and model.PrimaryPart:IsA("BasePart") then
 		return model.PrimaryPart
 	end
 
-	-- 3. Cek HumanoidRootPart
 	local hrp = model:FindFirstChild("HumanoidRootPart")
 	if hrp and hrp:IsA("BasePart") then
 		return hrp
 	end
 
-	-- 4. Cek Handle (Tools / Props)
 	local handle = model:FindFirstChild("Handle")
 	if handle and handle:IsA("BasePart") then
 		return handle
 	end
 
-	-- 5. Fallback ke model itu sendiri jika BasePart
 	if model:IsA("BasePart") then
 		return model
 	end
 
-	-- 6. Fallback mencari BasePart anak pertama
 	local fallbackPart = model:FindFirstChildWhichIsA("BasePart", true)
 	if fallbackPart then
 		return fallbackPart
@@ -3630,18 +4463,67 @@ local function IsEnemyVulnerable(targetChar, targetMobName)
 	) ~= nil
 end
 
-local activeMagnetTweens, lastFindAnywhereAt, emptyTargetThrottle, lastMagnetTick =
-	setmetatable({}, { __mode = "k" }), 0, {}, 0
+Runtime.activeMagnetTweens = setmetatable({}, { __mode = "k" })
+Runtime.lastFindAnywhereAt = 0
+Runtime.emptyTargetThrottle = {}
+Runtime.lastMagnetTick = 0
 local function IsEnemyReadyToPull(enemy)
 	return true
 end
 
+local enemyContainerPaths = {
+	ReplicatedStorage,
+	ReplicatedStorage:FindFirstChild("BonusMoments"),
+	ReplicatedStorage:FindFirstChild("Assets") and ReplicatedStorage.Assets:FindFirstChild("Models"),
+	ReplicatedStorage:FindFirstChild("EffectContainer"),
+}
+
+local function IsRealEnemyInstance(obj)
+	if not obj or not obj:IsA("Model") or obj == player.Character then
+		return false
+	end
+	if obj.Name == "MenuMarine" or obj.Name == "MenuPirate" or obj.Name == "DevBrosChilling" then
+		return false
+	end
+	if obj.Parent and obj.Parent.Name == "NPCs" then
+		return false
+	end
+
+	local hum = obj:FindFirstChildOfClass("Humanoid")
+	local hrp = obj:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.Health <= 0 then
+		return false
+	end
+
+	if obj:GetAttribute("ID") ~= nil or obj:GetAttribute("Level") ~= nil or obj:GetAttribute("WeaponName") ~= nil then
+		return true
+	end
+	if obj:FindFirstChild("Stun") or obj:FindFirstChild("Busy") or obj:FindFirstChild("CharacterReady") then
+		return true
+	end
+	if obj.Parent and obj.Parent.Name == "Enemies" then
+		return true
+	end
+
+	return false
+end
+
+local lastRestoreCulledAt = 0
+
+local function RestoreCulledEnemies(targetName)
+	-- Native Blox Fruits streaming handler:
+	-- Models in ReplicatedStorage have their shirt/pants/textures stripped until approached.
+	-- We let the engine stream naturally to preserve all character skins and textures!
+end
+
 local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
 	local now = os.clock()
-	if now - lastMagnetTick < 0.1 then
+	if now - Runtime.lastMagnetTick < 0.1 then
 		return
 	end
-	lastMagnetTick = now
+	Runtime.lastMagnetTick = now
+
+	RestoreCulledEnemies(targetMobName)
 
 	local enemiesFolder = workspace:FindFirstChild("Enemies")
 	if not enemiesFolder or not gatherPos or not myHrpPos then
@@ -3680,24 +4562,24 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
 						eHum.PlatformStand = true
 					end
 
-					if activeMagnetTweens[eHrp] then
-						activeMagnetTweens[eHrp]:Cancel()
-						activeMagnetTweens[eHrp] = nil
+					if Runtime.activeMagnetTweens[eHrp] then
+						Runtime.activeMagnetTweens[eHrp]:Cancel()
+						Runtime.activeMagnetTweens[eHrp] = nil
 					end
 
 					if cfg.BringMethod == "Tween" then
 						local distToGather = (eHrp.Position - gatherPos).Magnitude
 						if distToGather > 4 then
-							if not activeMagnetTweens[eHrp] then
+							if not Runtime.activeMagnetTweens[eHrp] then
 								local duration = math.clamp(distToGather / 400, 0.05, 0.25)
 								local tween = TweenService:Create(
 									eHrp,
 									TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
 									{ CFrame = gatherCFrame }
 								)
-								activeMagnetTweens[eHrp] = tween
+								Runtime.activeMagnetTweens[eHrp] = tween
 								tween.Completed:Connect(function()
-									activeMagnetTweens[eHrp] = nil
+									Runtime.activeMagnetTweens[eHrp] = nil
 									if eHrp and eHrp.Parent then
 										eHrp.CFrame = gatherCFrame
 									end
@@ -3719,13 +4601,13 @@ end
 local function UniversalEvasionTween(myHrp, targetPos, now)
 	ToggleFloat(true)
 	local targetDistance = (targetPos - myHrp.Position).Magnitude
-	if targetDistance > 80 then
-		if now - lastEvasionMoveAt >= cfg.EvasionTick then
-			lastEvasionMoveAt = now
-			TweenTo(CFrame.new(targetPos + Vector3.new(0, cfg.TweenHeight, 0), targetPos))
+	if now - lastEvasionMoveAt >= cfg.EvasionTick then
+		lastEvasionMoveAt = now
+		if targetDistance > 80 then
+			TweenTo(LookCFrame(targetPos, cfg.TweenHeight))
+		else
+			TweenTo(CFrame.new(targetPos + currentEvasionOffset, targetPos))
 		end
-	else
-		TweenTo(CFrame.new(targetPos + currentEvasionOffset, targetPos))
 	end
 end
 
@@ -3739,9 +4621,9 @@ local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
 		TweenTo(CFrame.new(npcPos))
 		return false
 	end
-	if activeTween then
-		activeTween:Cancel()
-		activeTween = nil
+	if Runtime.activeTween then
+		Runtime.activeTween:Cancel()
+		Runtime.activeTween = nil
 	end
 	local now = os.clock()
 	if now - lastQuestClaimAt > 1.5 then
@@ -3757,19 +4639,180 @@ local function ClaimQuestHandler(myHrp, profileQuest, profileStage, npcPos)
 	return true
 end
 
+SearchCache = {}
+
+function ClearSearchCache()
+	table.clear(SearchCache)
+end
+
+local function SearchEntities(filterOpts)
+	filterOpts = filterOpts or {}
+	local results = {}
+	local seen = {}
+	local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+	local originPos = filterOpts.Origin or (myHrp and myHrp.Position)
+	local radius = filterOpts.Radius
+	local aliveOnly = filterOpts.AliveOnly
+	local reqHitPart = filterOpts.RequireHitPart
+	local nameQuery = filterOpts.Name and string.lower(filterOpts.Name)
+	local exactName = filterOpts.ExactName
+	local attrFilter = filterOpts.Attribute
+	local limit = filterOpts.Limit or math.huge
+
+	local attrKey, attrVal = nil, nil
+	if type(attrFilter) == "string" then
+		attrKey = attrFilter
+	elseif type(attrFilter) == "table" then
+		attrKey = attrFilter.Key
+		attrVal = attrFilter.Value
+	end
+
+	local function isValidEntity(obj)
+		if not obj or seen[obj] or obj == player.Character then
+			return false
+		end
+		if filterOpts.Exclude and obj == filterOpts.Exclude then
+			return false
+		end
+		if enemyBlacklist[obj] and os.clock() < enemyBlacklist[obj] then
+			return false
+		end
+
+		if attrKey then
+			local hasAttr = false
+			pcall(function()
+				local val = obj:GetAttribute(attrKey)
+				if attrVal ~= nil then
+					hasAttr = (val == attrVal)
+				else
+					hasAttr = (val ~= nil)
+				end
+			end)
+			if not hasAttr then
+				return false
+			end
+		end
+
+		if exactName and obj.Name ~= exactName then
+			return false
+		end
+		if nameQuery and string.find(string.lower(obj.Name), nameQuery, 1, true) == nil then
+			return false
+		end
+
+		if aliveOnly then
+			local hum = obj:FindFirstChildOfClass("Humanoid")
+			if not hum or hum.Health <= 0 then
+				return false
+			end
+		end
+
+		local hitPart = reqHitPart and GetHitPart(obj)
+			or (obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart"))
+		if reqHitPart and not hitPart then
+			return false
+		end
+
+		if radius and originPos then
+			local pos = hitPart and hitPart.Position or GetSafePosition(obj)
+			if pos == Vector3.zero or (pos - originPos).Magnitude > radius then
+				return false
+			end
+		end
+
+		if filterOpts.CustomFilter and not filterOpts.CustomFilter(obj) then
+			return false
+		end
+
+		seen[obj] = true
+		return true, hitPart
+	end
+
+	if nameQuery then
+		RestoreCulledEnemies(nameQuery)
+	end
+
+	if Paths.Enemies then
+		for _, e in ipairs(Paths.Enemies:GetChildren()) do
+			local valid, hPart = isValidEntity(e)
+			if valid then
+				table.insert(results, e)
+				if #results >= limit then
+					return results
+				end
+			end
+		end
+	end
+
+	if Paths.Characters then
+		for _, c in ipairs(Paths.Characters:GetChildren()) do
+			local valid, hPart = isValidEntity(c)
+			if valid then
+				table.insert(results, c)
+				if #results >= limit then
+					return results
+				end
+			end
+		end
+	end
+
+	if radius and originPos and radius <= 600 then
+		for _, obj in ipairs(workspace:GetChildren()) do
+			if obj ~= Paths.Enemies and obj ~= Paths.Characters and (obj:IsA("Model") or obj:IsA("BasePart")) then
+				local valid, hPart = isValidEntity(obj)
+				if valid then
+					table.insert(results, obj)
+					if #results >= limit then
+						return results
+					end
+				end
+			end
+		end
+	end
+
+	if #results == 0 and filterOpts.DeepSearch then
+		local repTarget = ReplicatedStorage:FindFirstChild(filterOpts.Name or "")
+		if repTarget and isValidEntity(repTarget) then
+			table.insert(results, repTarget)
+		end
+		if #results == 0 then
+			for _, ent in ipairs(SafeGetInstancesByClass("Model")) do
+				if isValidEntity(ent) then
+					table.insert(results, ent)
+					if #results >= limit then
+						break
+					end
+				end
+			end
+		end
+		if #results == 0 and getnilinstances then
+			pcall(function()
+				for _, ent in ipairs(SafeGetNilInstances()) do
+					if ent:IsA("Model") and isValidEntity(ent) then
+						table.insert(results, ent)
+						if #results >= limit then
+							break
+						end
+					end
+				end
+			end)
+		end
+	end
+
+	return results
+end
 local function FindEntityAnywhere(mobName)
 	if not mobName then
 		return nil
 	end
 	local now = os.clock()
-	if now - lastFindAnywhereAt < 2.5 then
+	if now - Runtime.lastFindAnywhereAt < 2.5 then
 		return nil
 	end
-	lastFindAnywhereAt = now
+	Runtime.lastFindAnywhereAt = now
 
 	local nameLower = string.lower(mobName)
 
-	-- 1. Scan cepat folder Enemies
 	local enemiesFolder = workspace:FindFirstChild("Enemies")
 	if enemiesFolder then
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
@@ -3779,13 +4822,11 @@ local function FindEntityAnywhere(mobName)
 		end
 	end
 
-	-- 2. Scan cepat ReplicatedStorage (hanya direct children, tanpa memindai seluruh ribuan objek)
 	local repTarget = ReplicatedStorage:FindFirstChild(mobName)
 	if repTarget and IsEnemyVulnerable(repTarget, mobName) then
 		return repTarget
 	end
 
-	-- 3. Scan cepat workspace.Characters
 	local charactersFolder = workspace:FindFirstChild("Characters")
 	if charactersFolder then
 		for _, char in ipairs(charactersFolder:GetChildren()) do
@@ -3795,7 +4836,6 @@ local function FindEntityAnywhere(mobName)
 		end
 	end
 
-	-- 4. Nil instances murni untuk boss yang disimpan di nil space
 	if getnilinstances then
 		pcall(function()
 			for _, ent in ipairs(SafeGetNilInstances()) do
@@ -3857,7 +4897,7 @@ end
 local function GetTargetEnemy(mobName)
 	local throttleKey = mobName or "ANY_MOB"
 	local now = os.clock()
-	if emptyTargetThrottle[throttleKey] and (now - emptyTargetThrottle[throttleKey]) < 0.6 then
+	if Runtime.emptyTargetThrottle[throttleKey] and (now - Runtime.emptyTargetThrottle[throttleKey]) < 0.6 then
 		return nil
 	end
 
@@ -3885,9 +4925,9 @@ local function GetTargetEnemy(mobName)
 	result = closest
 
 	if not result then
-		emptyTargetThrottle[throttleKey] = now
+		Runtime.emptyTargetThrottle[throttleKey] = now
 	else
-		emptyTargetThrottle[throttleKey] = nil
+		Runtime.emptyTargetThrottle[throttleKey] = nil
 	end
 
 	return result
@@ -3972,7 +5012,7 @@ end
 local function GetSpawnedBoss(targetBossName)
 	local bossProfile = GetBossProfileByName(targetBossName)
 	local now = os.clock()
-	if emptyTargetThrottle[targetBossName] and (now - emptyTargetThrottle[targetBossName]) < 0.5 then
+	if Runtime.emptyTargetThrottle[targetBossName] and (now - Runtime.emptyTargetThrottle[targetBossName]) < 0.5 then
 		return nil, bossProfile
 	end
 
@@ -3996,9 +5036,9 @@ local function GetSpawnedBoss(targetBossName)
 	result = closest
 
 	if result then
-		emptyTargetThrottle[targetBossName] = nil
+		Runtime.emptyTargetThrottle[targetBossName] = nil
 	else
-		emptyTargetThrottle[targetBossName] = now
+		Runtime.emptyTargetThrottle[targetBossName] = now
 	end
 
 	return result, bossProfile
@@ -4018,14 +5058,13 @@ local function IsToolMatching(tool, wantedCategory)
 	return wantedCategory == "Melee" and meleeNames[tool.Name] == true
 end
 
-local lastDripMamaCheck, cachedDripMamaStatus = 0, "unknown"
 
 local function getDripMamaStatus()
 	local now = os.clock()
-	if now - lastDripMamaCheck < 4 then
-		return cachedDripMamaStatus
+	if now - Runtime.lastDripMamaCheck < 4 then
+		return Runtime.cachedDripMamaStatus
 	end
-	lastDripMamaCheck = now
+	Runtime.lastDripMamaCheck = now
 
 	local res = nil
 	pcall(function()
@@ -4035,22 +5074,22 @@ local function getDripMamaStatus()
 	if type(res) == "string" then
 		local left = string.match(res, "We still need to defeat <Color=Yellow>(%d+)<Color=/>")
 		if left then
-			cachedDripMamaStatus = left .. " left"
+			Runtime.cachedDripMamaStatus = left .. " left"
 		elseif
 			string.find(string.lower(res), "portal is already open")
 			or string.find(string.lower(res), "behind the house")
 		then
-			cachedDripMamaStatus = "spawned"
+			Runtime.cachedDripMamaStatus = "spawned"
 		elseif
 			string.find(string.lower(res), "we have defeated enough")
 			or string.find(string.lower(res), "do you want to open the portal")
 		then
-			cachedDripMamaStatus = "ready"
+			Runtime.cachedDripMamaStatus = "ready"
 		else
-			cachedDripMamaStatus = "unknown"
+			Runtime.cachedDripMamaStatus = "unknown"
 		end
 	end
-	return cachedDripMamaStatus
+	return Runtime.cachedDripMamaStatus
 end
 
 local function EquipWeapon(overrideCategory)
@@ -4100,8 +5139,6 @@ local function EnableBuso()
 end
 
 local lastSkillFiredAt = 0
-local skillKeys = { Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V, Enum.KeyCode.F }
-local skillIndex = 1
 
 local function TriggerSkills(key)
 	local now = os.clock()
@@ -4113,18 +5150,57 @@ local function TriggerSkills(key)
 				task.wait(0.1)
 				VirtualInputManager:SendKeyEvent(false, key, false, game)
 			end)
-			skillIndex = skillIndex + 1
-			if skillIndex > #skillKeys then
-				skillIndex = 1
+			Runtime.skillIndex = Runtime.skillIndex + 1
+			if Runtime.skillIndex > #Runtime.skillKeys then
+				Runtime.skillIndex = 1
 			end
 		end)
 	end
 end
 
 local lastExecuteAttackCall = 0
+local lastFruitM1Time = 0
+local fruitM1Combo = 0
+cachedShootGunFunc = nil
+
+local function IsAllyOrSameTeam(otherEntity)
+	if not otherEntity then
+		return false
+	end
+	local otherPlayer = game:GetService("Players"):GetPlayerFromCharacter(otherEntity)
+	if not otherPlayer or otherPlayer == player then
+		return false
+	end
+
+	-- 1. Same Team (Marines vs Marines cannot damage each other)
+	local myTeam = player.Team and player.Team.Name
+	local theirTeam = otherPlayer.Team and otherPlayer.Team.Name
+	if myTeam and theirTeam and myTeam == "Marines" and theirTeam == "Marines" then
+		return true
+	end
+
+	-- 2. Same Pirate Crew / Allies
+	local myData = player:FindFirstChild("Data")
+	local theirData = otherPlayer:FindFirstChild("Data")
+	local myCrew = myData and myData:FindFirstChild("CrewID") and myData.CrewID.Value
+	local theirCrew = theirData and theirData:FindFirstChild("CrewID") and theirData.CrewID.Value
+	if myCrew and theirCrew and myCrew ~= "" and theirCrew ~= "" and myCrew == theirCrew then
+		return true
+	end
+
+	-- 3. Target has PvP Disabled
+	if otherPlayer:GetAttribute("PvpDisabled") == true then
+		return true
+	end
+
+	return false
+end
+
 local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
 	local now = os.clock()
-	local minInterval = (attackSpeedMode == "Super Fast Attack") and 0 or 0.05
+	local minInterval = (attackSpeedMode == "Beta Fast Attack") and cfg.AttackIntervalBeta
+		or (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
+		or cfg.AttackIntervalFast
 	if now - lastExecuteAttackCall < minInterval then
 		return
 	end
@@ -4146,27 +5222,14 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
 	end
 
 	local weapon = myChar:FindFirstChildOfClass("Tool")
-	if forceNoEquip then
-		if not weapon then
-			return
-		end
-	else
-		weapon = cachedWeapon
-		if not weapon or weapon.Parent ~= myChar or not IsToolMatching(weapon, targetCategory) then
+	if not forceNoEquip then
+		if not weapon or not IsToolMatching(weapon, targetCategory) then
 			weapon = EquipWeapon(targetCategory)
-			if not weapon then
-				local bag = player:FindFirstChildOfClass("Backpack")
-				if bag then
-					for _, t in ipairs(bag:GetChildren()) do
-						if IsToolMatching(t, targetCategory) then
-							GetHumanoid():EquipTool(t)
-							weapon = t
-							break
-						end
-					end
-				end
-			end
 		end
+	end
+
+	if not weapon then
+		return
 	end
 
 	if weapon then
@@ -4181,137 +5244,218 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
 		local isGun = IsToolMatching(weapon, "Gun")
 		if isPhysical or isBloxFruit or isGun then
 			EnableBuso()
-			local hitTargets = {}
-			local seenTargets = {}
 
-			local function TryAddTarget(entity, allowedDist)
-				if not entity or entity == player.Character or seenTargets[entity] then
+			local attackRange = math.max(cfg.HitRadius or 60, 85)
+			local hitTargets = {}
+			local seenEntities = {}
+
+			local function IsAllyOrSameTeam(otherEntity)
+				if not otherEntity then
+					return false
+				end
+				local otherPlayer = game:GetService("Players"):GetPlayerFromCharacter(otherEntity)
+				if not otherPlayer or otherPlayer == player then
+					return false
+				end
+
+				-- 1. Same Team (Marines vs Marines)
+				local myTeam = player.Team and player.Team.Name
+				local theirTeam = otherPlayer.Team and otherPlayer.Team.Name
+				if myTeam and theirTeam and myTeam == "Marines" and theirTeam == "Marines" then
+					return true
+				end
+
+				-- 2. Same Pirate Crew / Allies
+				local myData = player:FindFirstChild("Data")
+				local theirData = otherPlayer:FindFirstChild("Data")
+				local myCrew = myData and myData:FindFirstChild("CrewID") and myData.CrewID.Value
+				local theirCrew = theirData and theirData:FindFirstChild("CrewID") and theirData.CrewID.Value
+				if myCrew and theirCrew and myCrew ~= "" and theirCrew ~= "" and myCrew == theirCrew then
+					return true
+				end
+
+				-- 3. Target has PvP Disabled
+				if otherPlayer:GetAttribute("PvpDisabled") == true then
+					return true
+				end
+
+				return false
+			end
+
+			local function TryAddTargetEntity(entity)
+				if not entity or entity == player.Character or seenEntities[entity] then
+					return
+				end
+				if IsAllyOrSameTeam(entity) then
 					return
 				end
 				if enemyBlacklist[entity] and os.clock() < enemyBlacklist[entity] then
 					return
 				end
-				local ePart = GetHitPart(entity)
-				if ePart then
-					local dist = (ePart.Position - myHrp.Position).Magnitude
-					if dist <= allowedDist then
-						seenTargets[entity] = true
-						table.insert(hitTargets, { EnemyModel = entity, HitPart = ePart })
-					end
+				local eHum = entity:FindFirstChildOfClass("Humanoid")
+				local eHrp = entity:FindFirstChild("HumanoidRootPart")
+				if not eHum or not eHrp or eHum.Health <= 0 then
+					return
+				end
+				if (eHrp.Position - myHrp.Position).Magnitude > attackRange then
+					return
+				end
+
+				local partToHit = entity:FindFirstChild("Head") or eHrp
+				if partToHit then
+					seenEntities[entity] = true
+					table.insert(hitTargets, { entity, partToHit })
 				end
 			end
 
-			-- 1. Prioritaskan currentTargetInstance jika valid
 			if currentTargetInstance then
-				TryAddTarget(currentTargetInstance, cfg.HitRadius + 40)
+				TryAddTargetEntity(currentTargetInstance)
 			end
 
-			-- 2. Universal Radius Attack: Jika belum ada target atau multi-mob aktif, pindai Enemies, Characters, dan workspace
-			if #hitTargets == 0 or isMultiMobDamage then
-				local candidates = {}
-				if Paths.Enemies then
-					for _, e in ipairs(Paths.Enemies:GetChildren()) do
-						table.insert(candidates, e)
-					end
-				end
-				if Paths.Characters then
-					for _, c in ipairs(Paths.Characters:GetChildren()) do
-						table.insert(candidates, c)
-					end
-				end
-				-- Cek direct workspace children untuk pohon/kaktus/props liar yang bisa diserang
-				for _, obj in ipairs(workspace:GetChildren()) do
-					if
-						obj ~= Paths.Enemies
-						and obj ~= Paths.Characters
-						and (obj:IsA("Model") or obj:IsA("BasePart"))
-					then
-						table.insert(candidates, obj)
-					end
-				end
-
-				for _, entity in ipairs(candidates) do
-					TryAddTarget(entity, cfg.HitRadius)
-					if not isMultiMobDamage and #hitTargets > 0 then
+			local enemiesFolder = Paths and Paths.Enemies or workspace:FindFirstChild("Enemies")
+			if enemiesFolder then
+				for _, entity in ipairs(enemiesFolder:GetChildren()) do
+					TryAddTargetEntity(entity)
+					if #hitTargets >= 25 then
 						break
 					end
 				end
 			end
 
-			if #hitTargets > 0 then
-				local primaryDict = hitTargets[1]
-				local primaryModel = primaryDict.EnemyModel
-				local primaryHrp = primaryModel
-					and (
-						primaryModel:FindFirstChild("HumanoidRootPart")
-						or primaryModel:FindFirstChildWhichIsA("BasePart", true)
-					)
+			-- Scan other players in Characters folder & Players service for PvP Auto Attack
+			if #hitTargets < 25 then
+				local charsFolder = Paths and Paths.Characters or workspace:FindFirstChild("Characters")
+				if charsFolder then
+					for _, charModel in ipairs(charsFolder:GetChildren()) do
+						if charModel ~= myChar and charModel ~= player.Character then
+							TryAddTargetEntity(charModel)
+							if #hitTargets >= 25 then
+								break
+							end
+						end
+					end
+				end
+			end
 
-				local primaryPart = primaryDict and primaryDict.HitPart
-				local tPos = primaryPart and primaryPart.Position or (myHrp.Position + myHrp.CFrame.LookVector * 10)
+			if #hitTargets < 25 then
+				for _, otherPlayer in ipairs(game:GetService("Players"):GetPlayers()) do
+					if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character ~= myChar then
+						TryAddTargetEntity(otherPlayer.Character)
+						if #hitTargets >= 25 then
+							break
+						end
+					end
+				end
+			end
+
+			if #hitTargets > 0 then
+				local primaryTargetTuple = hitTargets[1]
+				local primaryModel = primaryTargetTuple[1]
+				local primaryPart = primaryTargetTuple[2]
+				local targetHead = primaryPart
+
+				local tPos = targetHead.Position
 				local dir = (tPos - myHrp.Position).Unit
 
 				if isBloxFruit then
 					pcall(function()
-						local remote = weapon:FindFirstChild("LegacyRemoteEvent")
-							or weapon:FindFirstChild("RemoteEvent")
-
-						local mousePosInst = weapon:FindFirstChild("MousePos") or weapon:FindFirstChild("Mouse")
-						if remote and remote:IsA("RemoteEvent") and weapon:FindFirstChild("LeftClickRemote") then
-							local combo = Random.new():NextInteger(1, 4)
-							weapon.LeftClickRemote:FireServer(dir, combo)
-
-							remote:FireServer(true)
-							if mousePosInst and not mousePosInst:IsA("Vector3Value") then
-								remote:FireServer(CFrame.new(tPos))
-							else
-								remote:FireServer(tPos)
+						local leftClick = weapon:FindFirstChild("LeftClickRemote")
+						if leftClick and leftClick:IsA("RemoteEvent") then
+							if now - lastFruitM1Time >= 0.22 then
+								lastFruitM1Time = now
+								fruitM1Combo = (fruitM1Combo % 3) + 1
+								leftClick:FireServer(dir, fruitM1Combo)
 							end
-							remote:FireServer(false)
+						else
+							local remote = weapon:FindFirstChild("LegacyRemoteEvent")
+								or weapon:FindFirstChild("RemoteEvent")
+							local mousePosInst = weapon:FindFirstChild("MousePos") or weapon:FindFirstChild("Mouse")
+							if remote and remote:IsA("RemoteEvent") then
+								local combo = Random.new():NextInteger(1, 4)
+								remote:FireServer(true)
+								if mousePosInst and not mousePosInst:IsA("Vector3Value") then
+									remote:FireServer(CFrame.new(tPos))
+								else
+									remote:FireServer(tPos)
+								end
+								remote:FireServer(false)
+							end
 						end
 					end)
 				end
 
 				if isGun then
-					local hum = myChar:FindFirstChildOfClass("Humanoid")
-					local hiddenHumRemote = hum and hum:FindFirstChild("")
-					if hiddenHumRemote and hiddenHumRemote:IsA("RemoteFunction") then
-						pcall(function()
-							hiddenHumRemote:InvokeServer("TAP", tPos)
-						end)
-					end
+					pcall(function()
+						local shootPos = targetHead and targetHead.Position
+							or (primaryPart and primaryPart.Position)
+							or (myHrp.Position + myHrp.CFrame.LookVector * 20)
+
+						if not cachedShootGunFunc and getgc then
+							for _, obj in ipairs(getgc(true)) do
+								if type(obj) == "function" and not (isexecutorclosure and isexecutorclosure(obj)) then
+									local info = debug.getinfo(obj)
+									if info and info.name == "shootGun" then
+										cachedShootGunFunc = obj
+										break
+									end
+								end
+							end
+						end
+
+						if cachedShootGunFunc and weapon then
+							weapon.Enabled = true
+							weapon:SetAttribute("LocalShotsLeft", 10)
+							weapon:SetAttribute("IsReloading_Client", nil)
+
+							local fakeInput = {
+								UserInputType = Enum.UserInputType.MouseButton1,
+								Position = Vector3.zero,
+							}
+							cachedShootGunFunc(weapon, fakeInput)
+						end
+					end)
 				end
 
 				if isPhysical then
 					pcall(function()
-						if RegisterAttackEvent then
-							local combo = Random.new():NextInteger(1, 4)
-							RegisterAttackEvent:FireServer(0, combo)
+						local secret = GetRealtimeSessionSecret()
+							or tostring(player.UserId):sub(2, 4) .. tostring(coroutine.running()):sub(11, 15)
+						local encMethod = GetEncryptedRegisterHit()
+						local encSeedKey = GetEncryptedSeedKey(GetRealtimeNetSeed())
+						local targetRemote = cloneref and shadowRemote and cloneref(shadowRemote) or shadowRemote
+
+						fruitM1Combo = (fruitM1Combo % 4) + 1
+
+						if Runtime.RegisterAttackEvent then
+							Runtime.RegisterAttackEvent:FireServer(0, fruitM1Combo)
 						end
 
-						local primaryPartToHit = GetHitPart(primaryDict.EnemyModel) or primaryPart
-						if RegisterHitEvent and primaryPartToHit then
-							local additionalHits = {}
-							if isMultiMobDamage and #hitTargets > 1 then
-								for j = 2, #hitTargets do
-									local enemyObj = hitTargets[j]
-									local enemyModel = enemyObj.EnemyModel
-									local partToHit = enemyObj.HitPart or GetHitPart(enemyModel)
-									if enemyModel and partToHit then
-										table.insert(additionalHits, { enemyModel, partToHit })
-									end
+						local renv = getrenv and getrenv() or _G
+						if renv and renv._G and type(renv._G.SendHitsToServer) == "function" and targetHead then
+							pcall(function()
+								renv._G.SendHitsToServer(targetHead, hitTargets)
+							end)
+						end
+
+						local additionalHits = {}
+						if #hitTargets > 1 then
+							for j = 2, #hitTargets do
+								local enemyObj = hitTargets[j]
+								local enemyModel = enemyObj[1]
+								local partToHit = enemyObj[2]
+									or (enemyModel and enemyModel:FindFirstChild("HumanoidRootPart"))
+								if enemyModel and partToHit then
+									table.insert(additionalHits, { enemyModel, partToHit })
 								end
 							end
+						end
 
-							local seed = GetRealtimeNetSeed()
-							local secret = GetRealtimeSessionSecret()
-							local args = {
-								primaryPartToHit,
-								additionalHits,
-								seed,
-								secret,
-							}
-							RegisterHitEvent:FireServer(unpack(args))
+						if Runtime.RegisterHitEvent and targetHead then
+							Runtime.RegisterHitEvent:FireServer(targetHead, additionalHits, {}, secret)
+						end
+
+						if targetRemote and shadowId and targetHead then
+							targetRemote:FireServer(encMethod, encSeedKey, targetHead, additionalHits)
 						end
 					end)
 				end
@@ -4321,10 +5465,11 @@ local function ExecuteAttack(myChar, myHrp, forceNoEquip, targetMobName)
 end
 local function AttackThread(generation)
 	task.spawn(function()
-		while ScriptContext.Running and generation == workerGeneration do
-			if enabled then
+		while ScriptContext.Running and generation == State.WorkerGen do
+			if isAutoFarm then
 				local now = os.clock()
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
+				local interval = (attackSpeedMode == "Beta Fast Attack") and cfg.AttackIntervalBeta
+					or (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 					or cfg.AttackIntervalFast
 				local myChar = GetCharacter()
 				local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -4342,7 +5487,6 @@ local function AttackThread(generation)
 							lastAttackAt = now
 						end
 					elseif myHrp then
-						-- Real-time instant retarget jika target sebelumnya sudah mati/hilang
 						local p = GetQuestProfile()
 						local newT = GetTargetEnemy(p and p.Mob or nil)
 						if newT then
@@ -4357,7 +5501,7 @@ local function AttackThread(generation)
 				end
 			end
 
-			if enabled and attackSpeedMode == "Super Fast Attack" then
+			if isAutoFarm and (attackSpeedMode == "Super Fast Attack" or attackSpeedMode == "Beta Fast Attack") then
 				task.wait()
 			else
 				task.wait(cfg.ThreadSleep)
@@ -4513,7 +5657,7 @@ local function GetBestHazeMob()
 end
 
 local function StartAutoHaze()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 	ToggleFloat(true)
 
 	local Sea3PatrolLocations = {
@@ -4530,7 +5674,7 @@ local function StartAutoHaze()
 	local PATROL_INTERVAL = 8
 
 	task.spawn(function()
-		while cfg.isAutoHaze and ScriptContext.Running and generation == workerGeneration do
+		while cfg.isAutoHaze and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("AutoHaze") then
 				task.wait(1)
 				break
@@ -4553,8 +5697,14 @@ local function StartAutoHaze()
 	end)
 
 	local hazeBringConn
+	local lastHazeBringTick = 0
 	hazeBringConn = RunService.Heartbeat:Connect(function()
-		if not cfg.isAutoHaze or not ScriptContext.Running or generation ~= workerGeneration then
+		local now = os.clock()
+		if now - lastHazeBringTick < 0.1 then
+			return
+		end
+		lastHazeBringTick = now
+		if not cfg.isAutoHaze or not ScriptContext.Running or generation ~= State.WorkerGen then
 			if hazeBringConn then
 				hazeBringConn:Disconnect()
 			end
@@ -4578,7 +5728,7 @@ local function StartAutoHaze()
 	ScriptContext:AddConnection(hazeBringConn)
 
 	task.spawn(function()
-		while cfg.isAutoHaze and ScriptContext.Running and generation == workerGeneration do
+		while cfg.isAutoHaze and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("AutoHaze") then
 				task.wait(1)
 				break
@@ -4653,7 +5803,7 @@ local function StartAutoHaze()
 					if targetDistance > cfg.BringRadius then
 						isReadyToAttack = false
 						ToggleFloat(true)
-						TweenTo(CFrame.new(tHrp.Position + Vector3.new(0, cfg.TweenHeight, 0), tHrp.Position))
+						TweenTo(LookCFrame(tHrp.Position, cfg.TweenHeight))
 					else
 						isReadyToAttack = true
 						UniversalEvasionTween(myHrp, tHrp.Position, now)
@@ -4668,9 +5818,9 @@ local function StartAutoHaze()
 			task.wait(cfg.ThreadSleep)
 		end
 		ToggleFloat(false)
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
 	end)
 end
@@ -4756,8 +5906,7 @@ local function SetupEnemyRealtimeListeners()
 	end
 
 	enemySpawnConn = enemiesFolder.ChildAdded:Connect(function(v)
-		-- Real-time instant retarget saat musuh baru spawn
-		table.clear(emptyTargetThrottle)
+		table.clear(Runtime.emptyTargetThrottle)
 		lastTargetRefreshAt = 0
 
 		if cfg.isAutoHaze then
@@ -4779,7 +5928,7 @@ local function SetupEnemyRealtimeListeners()
 		if currentTargetInstance == v then
 			currentTargetInstance = nil
 			lastTargetRefreshAt = 0
-			table.clear(emptyTargetThrottle)
+			table.clear(Runtime.emptyTargetThrottle)
 		end
 	end)
 	ScriptContext:AddConnection(enemyRemoveConn)
@@ -4901,9 +6050,17 @@ local function GetBestMaterialMob()
 		if currentSea == 1 then
 			requiredSea = 1
 			mobTargets = {
-				{ Name = "Fishman Warriors", Mob = "Fishman Warrior", MobPos = Vector3.new(60878, 19, 1543) },
+				{
+					Name = "Fishman Warriors",
+					Mob = "Fishman Warrior",
+					MobPos = Vector3.new(61401.476562, 25.217861, 1630.696655),
+				},
 				{ Name = "Fishman Commandos", Mob = "Fishman Commando", MobPos = Vector3.new(61891, 19, 1470) },
-				{ Name = "Fishman Lord", Mob = "Fishman Lord", MobPos = Vector3.new(6112, 19, 1567) },
+				{
+					Name = "Fishman Lord",
+					Mob = "Fishman Lord",
+					MobPos = Vector3.new(61401.476562, 25.217861, 1630.696655),
+				},
 			}
 		elseif currentSea == 3 then
 			requiredSea = 3
@@ -5012,7 +6169,7 @@ local function GetBestCakeMob()
 end
 
 local function StartAutoBone()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 	ToggleFloat(true)
 
 	local defaultHauntedFallback =
@@ -5020,7 +6177,7 @@ local function StartAutoBone()
 	local activeHauntedMobInfo = GetBestHauntedMob() or defaultHauntedFallback
 
 	task.spawn(function()
-		while isAutoBone and ScriptContext.Running and generation == workerGeneration do
+		while isAutoBone and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
 				task.wait(1)
 				break
@@ -5043,8 +6200,14 @@ local function StartAutoBone()
 	end)
 
 	local boneBringConn
+	local lastBoneBringTick = 0
 	boneBringConn = RunService.Heartbeat:Connect(function()
-		if not isAutoBone or not ScriptContext.Running or generation ~= workerGeneration then
+		local now = os.clock()
+		if now - lastBoneBringTick < 0.1 then
+			return
+		end
+		lastBoneBringTick = now
+		if not isAutoBone or not ScriptContext.Running or generation ~= State.WorkerGen then
 			if boneBringConn then
 				boneBringConn:Disconnect()
 			end
@@ -5070,7 +6233,7 @@ local function StartAutoBone()
 	ScriptContext:AddConnection(boneBringConn)
 
 	task.spawn(function()
-		while isAutoBone and ScriptContext.Running and generation == workerGeneration do
+		while isAutoBone and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
 				task.wait(1)
 				break
@@ -5149,11 +6312,11 @@ local function StartAutoBone()
 					if tHrp then
 						local mobProfile = GetMobProfileByName(targetEnemy.Name)
 
-						local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+						local centerPos = tHrp.Position
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -5166,9 +6329,7 @@ local function StartAutoBone()
 					isReadyToAttack = false
 					local distToSpawn = (myHrp.Position - targetMobInfo.MobPos).Magnitude
 					if distToSpawn > 80 then
-						TweenTo(
-							CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0), targetMobInfo.MobPos)
-						)
+						TweenTo(LookCFrame(targetMobInfo.MobPos, cfg.TweenHeight))
 					else
 						TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
 					end
@@ -5180,13 +6341,13 @@ local function StartAutoBone()
 end
 
 local function StartAutoMaterialFarm()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 	ToggleFloat(true)
 
 	local activeMaterialMobInfo = GetBestMaterialMob()
 
 	task.spawn(function()
-		while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
+		while isAutoMaterial and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
 				task.wait(1)
 				break
@@ -5210,8 +6371,14 @@ local function StartAutoMaterialFarm()
 	end)
 
 	local materialBringConn
+	local lastMaterialBringTick = 0
 	materialBringConn = RunService.Heartbeat:Connect(function()
-		if not isAutoMaterial or not ScriptContext.Running or generation ~= workerGeneration then
+		local now = os.clock()
+		if now - lastMaterialBringTick < 0.1 then
+			return
+		end
+		lastMaterialBringTick = now
+		if not isAutoMaterial or not ScriptContext.Running or generation ~= State.WorkerGen then
 			if materialBringConn then
 				materialBringConn:Disconnect()
 			end
@@ -5244,7 +6411,7 @@ local function StartAutoMaterialFarm()
 	ScriptContext:AddConnection(materialBringConn)
 
 	task.spawn(function()
-		while isAutoMaterial and ScriptContext.Running and generation == workerGeneration do
+		while isAutoMaterial and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
 				task.wait(1)
 				break
@@ -5397,7 +6564,13 @@ local function StartAutoCakePrince()
 	end)
 
 	local cakeBringConn
+	local lastCakeBringTick = 0
 	cakeBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastCakeBringTick < 0.1 then
+			return
+		end
+		lastCakeBringTick = now
 		if not isAutoCakePrince or not ScriptContext.Running or generation ~= cakePrinceWorkerGeneration then
 			if cakeBringConn then
 				cakeBringConn:Disconnect()
@@ -5526,7 +6699,7 @@ local function StartAutoCakePrince()
 					if tHrp then
 						ToggleFloat(true)
 						local mobProfile = GetMobProfileByName(targetEnemy.Name)
-						local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+						local centerPos = tHrp.Position
 
 						if cakeBossSpawned then
 							centerPos = tHrp.Position
@@ -5534,7 +6707,7 @@ local function StartAutoCakePrince()
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -5550,12 +6723,7 @@ local function StartAutoCakePrince()
 					if distToSpawn > 80 then
 						if now - lastEvasionMoveAt >= cfg.EvasionTick then
 							lastEvasionMoveAt = now
-							TweenTo(
-								CFrame.new(
-									targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0),
-									targetMobInfo.MobPos
-								)
-							)
+							TweenTo(LookCFrame(targetMobInfo.MobPos, cfg.TweenHeight))
 						end
 					else
 						TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
@@ -5620,7 +6788,13 @@ local function StartAutoDoughKing()
 	end)
 
 	local doughBringConn
+	local lastDoughBringTick = 0
 	doughBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastDoughBringTick < 0.1 then
+			return
+		end
+		lastDoughBringTick = now
 		if not isAutoDoughKing or not ScriptContext.Running or generation ~= doughKingWorkerGeneration then
 			if doughBringConn then
 				doughBringConn:Disconnect()
@@ -5749,7 +6923,7 @@ local function StartAutoDoughKing()
 					if tHrp then
 						ToggleFloat(true)
 						local mobProfile = GetMobProfileByName(targetEnemy.Name)
-						local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+						local centerPos = tHrp.Position
 
 						if cakeDimension then
 							centerPos = tHrp.Position
@@ -5757,7 +6931,7 @@ local function StartAutoDoughKing()
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -5775,7 +6949,7 @@ local function StartAutoDoughKing()
 						if distToDim > 80 then
 							if now - lastEvasionMoveAt >= cfg.EvasionTick then
 								lastEvasionMoveAt = now
-								TweenTo(CFrame.new(dimPos + Vector3.new(0, cfg.TweenHeight, 0), dimPos))
+								TweenTo(LookCFrame(dimPos, cfg.TweenHeight))
 							end
 						else
 							TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
@@ -5786,12 +6960,7 @@ local function StartAutoDoughKing()
 						if distToSpawn > 80 then
 							if now - lastEvasionMoveAt >= cfg.EvasionTick then
 								lastEvasionMoveAt = now
-								TweenTo(
-									CFrame.new(
-										targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0),
-										targetMobInfo.MobPos
-									)
-								)
+								TweenTo(LookCFrame(targetMobInfo.MobPos, cfg.TweenHeight))
 							end
 						else
 							TweenTo(CFrame.new(targetMobInfo.MobPos + currentEvasionOffset, targetMobInfo.MobPos))
@@ -5957,9 +7126,9 @@ end
 function ScriptContext:StopAutoBerry()
 	cfg.isAutoBerry = false
 	cfg.autoBerryWorker = cfg.autoBerryWorker + 1
-	if activeTween then
-		activeTween:Cancel()
-		activeTween = nil
+	if Runtime.activeTween then
+		Runtime.activeTween:Cancel()
+		Runtime.activeTween = nil
 	end
 	ToggleFloat(false)
 end
@@ -6052,13 +7221,13 @@ function ScriptContext:SpinFruitCousin()
 end
 
 local function StartAutoFarm()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 
 	ToggleFloat(true)
 	AttackThread(generation)
 
 	task.spawn(function()
-		while enabled and ScriptContext.Running and generation == workerGeneration do
+		while isAutoFarm and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
 				task.wait(1)
 				break
@@ -6107,9 +7276,7 @@ local function StartAutoFarm()
 								local targetDistance = (bHrp.Position - myHrp.Position).Magnitude
 
 								if targetDistance > 80 then
-									TweenTo(
-										CFrame.new(bHrp.Position + Vector3.new(0, cfg.TweenHeight, 0), bHrp.Position)
-									)
+									TweenTo(LookCFrame(bHrp.Position, cfg.TweenHeight))
 									lastEvasionMoveAt = now
 								else
 									if now - lastEvasionMoveAt >= cfg.EvasionTick then
@@ -6128,9 +7295,9 @@ local function StartAutoFarm()
 						if (myHrp.Position - bossProfile.NPC).Magnitude > 8 then
 							TweenTo(CFrame.new(bossProfile.NPC))
 						else
-							if activeTween then
-								activeTween:Cancel()
-								activeTween = nil
+							if Runtime.activeTween then
+								Runtime.activeTween:Cancel()
+								Runtime.activeTween = nil
 							end
 						end
 					end
@@ -6180,9 +7347,9 @@ local function StartAutoFarm()
 						TweenTo(CFrame.new(profile.NPC))
 						return
 					end
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
 					end
 					pcall(function()
 						CommF_:InvokeServer("StartQuest", profile.Quest, profile.Stage)
@@ -6254,13 +7421,13 @@ local function StartAutoFarm()
 				currentTargetInstance = nil
 				isReadyToAttack = false
 			end
-			task.wait()
+			task.wait(cfg.ThreadSleep)
 		end
 	end)
 end
 
 local function StopAutoFarm()
-	enabled = false
+	isAutoFarm = false
 	isReadyToAttack = false
 	StopAllActivities()
 	cachedWeapon = nil
@@ -6275,24 +7442,35 @@ local function StopAutoFarm()
 	lastTargetHealthChangeAt = 0
 end
 
+lastSafePlayerPos = nil
+
 ScriptContext:AddConnection(RunService.Stepped:Connect(function()
 	if ScriptContext.Running then
 		local c = player.Character
 		if c then
 			local hrp = c:FindFirstChild("HumanoidRootPart")
 			local hasFloat = hrp and hrp:FindFirstChild("AutofarmBv") ~= nil
+
+			-- Track last known valid (non-NaN, above-ground) position for recovery
+			if hrp then
+				local p = hrp.Position
+				local valid = (p.X == p.X) and (p.Y == p.Y) and (p.Z == p.Z) and p.Y > -300
+				if valid then
+					lastSafePlayerPos = p
+				end
+			end
 			if
-				activeTween
+				Runtime.activeTween
 				or hasFloat
 				or isTweeningToPlayer
 				or isAutoTorch
-				or enabled
+				or isAutoFarm
 				or isAutoRaidKill
 				or isAutoBone
 				or isAutoMaterial
 				or isAutoDungeon
 				or farmNearestEnabled
-				or autoKillVolcano
+				or State.AutoKillVolcano
 				or isAutoCakePrince
 				or cfg.isAutoBerry
 			then
@@ -6303,7 +7481,63 @@ ScriptContext:AddConnection(RunService.Stepped:Connect(function()
 						p.CanCollide = false
 					end
 				end
+
+				-- Neutralize anomalous / NaN velocity to prevent void fall
+				if hrp then
+					local vel = hrp.AssemblyLinearVelocity
+					local isNan = (vel.X ~= vel.X) or (vel.Y ~= vel.Y) or (vel.Z ~= vel.Z)
+					local pos = hrp.Position
+					local posNan = (pos.X ~= pos.X) or (pos.Y ~= pos.Y) or (pos.Z ~= pos.Z)
+
+					if isNan or posNan then
+						-- NaN poisoning detected: purge physics objects and reset cleanly
+						for _, child in ipairs(hrp:GetChildren()) do
+							if child:IsA("BodyVelocity") or child:IsA("BodyGyro") then
+								child:Destroy()
+							end
+						end
+						local safePos = lastSafePlayerPos or Vector3.new(0, 50, 0)
+						hrp.CFrame = CFrame.new(safePos)
+						hrp.AssemblyLinearVelocity = Vector3.zero
+						hrp.AssemblyAngularVelocity = Vector3.zero
+					elseif vel.Y < -200 or vel.Magnitude > 300 then
+						hrp.AssemblyLinearVelocity = Vector3.zero
+						hrp.AssemblyAngularVelocity = Vector3.zero
+					end
+				end
 			end
+		end
+	end
+end))
+
+ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(dt)
+	if not ScriptContext.Running or not cfg.cframeSpeed then
+		return
+	end
+	if
+		Runtime.activeTween
+		or isAutoFarm
+		or isAutoTorch
+		or isAutoBone
+		or isAutoMaterial
+		or isAutoDungeon
+		or farmNearestEnabled
+		or State.AutoKillVolcano
+		or isAutoCakePrince
+		or isAutoDoughKing
+		or cfg.isAutoBerry
+	then
+		return
+	end
+
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hrp and hum and hum.Health > 0 and not hum.Sit then
+		local moveDir = hum.MoveDirection
+		if moveDir.Magnitude > 0 then
+			local step = moveDir.Unit * ((cfg.cframeSpeedValue or 50) * dt)
+			hrp.CFrame = hrp.CFrame + step
 		end
 	end
 end))
@@ -6320,8 +7554,8 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 	lastHeartbeatTick = now
 
 	if cfg.autoBoat then
-		currentBoat = GetBoat()
-		if not currentBoat then
+		State.CurrentBoat = GetBoat()
+		if not State.CurrentBoat then
 			local dealer = GetNearestBoatDealer()
 			if dealer then
 				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
@@ -6332,34 +7566,34 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 					if dist > 20 then
 						TweenTo(CFrame.new(dealerPos + Vector3.new(0, cfg.TweenHeight, 0)))
 					else
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 						BuyBoat()
 					end
 				end
 			else
-				if activeTween then
-					activeTween:Cancel()
-					activeTween = nil
+				if Runtime.activeTween then
+					Runtime.activeTween:Cancel()
+					Runtime.activeTween = nil
 				end
 			end
 		else
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
-			BoardBoat(currentBoat)
+			BoardBoat(State.CurrentBoat)
 		end
 	end
 
-	if cfg.autoSail and currentBoat then
-		currentIsland = GetNearestIsland()
-		if currentIsland then
-			local boatSeat = currentBoat:FindFirstChild("VehicleSeat")
+	if cfg.autoSail and State.CurrentBoat then
+		State.CurrentIsland = GetNearestIsland()
+		if State.CurrentIsland then
+			local boatSeat = State.CurrentBoat:FindFirstChild("VehicleSeat")
 			if boatSeat then
-				local targetPosition = currentIsland.HumanoidRootPart.Position
+				local targetPosition = State.CurrentIsland.HumanoidRootPart.Position
 				TweenTo(CFrame.new(targetPosition))
 			end
 		end
@@ -6397,7 +7631,7 @@ ScriptContext:AddConnection(RunService.Heartbeat:Connect(function(deltaTime)
 		end
 	end
 
-	if cfg.autoFruit and #fruitWaypoints > 0 then
+	if cfg.autoFruit and #State.FruitWaypoints > 0 then
 		CollectNearestFruit()
 	end
 	if cfg.autoChest then
@@ -6460,7 +7694,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-	while task.wait() do
+	while task.wait(0.5) do
 		if not ScriptContext.Running then
 			break
 		end
@@ -6486,82 +7720,151 @@ task.spawn(function()
 end)
 
 local raidWorkerGeneration = 0
+local raidTrackedIslandNum = 1
+local raidSpawnedEnemiesSeen = false
+local raidIslandCleared = false
+local lastRaidWaitSpawnTick = 0
 
-local function GetTargetRaidIsland()
-	local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-	local raidMap = ScriptContext:GetRaidMap()
-	if not myHrp or not raidMap then
-		return nil, 0
+local function GetRealRaidIslandPosition(islandModel)
+	if not islandModel then
+		return Vector3.zero
 	end
+	local cf, _ = islandModel:GetBoundingBox()
+	return cf.Position
+end
 
-	local currLocStr = tostring(player:GetAttribute("CurrentLocation") or "")
-	local exactLocStr = tostring(player:GetAttribute("ExactLocation") or "")
+local function GetLiveRaidStatus()
+	local char = GetCharacter()
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local myHrp = char and char:FindFirstChild("HumanoidRootPart")
+
+	-- 1. ABSOLUTE FIRST CHECK: Player Death or Respawn in Normal Overworld
+	local isDead = (not char or not hum or hum.Health <= 0)
+	local isOutsideRaid = (not myHrp or myHrp.Position.X < 60000)
 	local isRaiding = (player:GetAttribute("IslandRaiding") == true)
-		or string.match(currLocStr, "Island%s*%d+") ~= nil
-		or string.match(exactLocStr, "Island%s*%d+") ~= nil
-	if not isRaiding then
-		return nil, 0
+
+	local pGui = player:FindFirstChild("PlayerGui")
+	local topHUD = pGui and pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("TopHUDList")
+	local raidTimer = topHUD and topHUD:FindFirstChild("RaidTimer")
+	local hasTimer = raidTimer and raidTimer.Visible == true
+	local timerText = hasTimer and raidTimer.Text or ""
+
+	local isEnded = false
+	if isDead or isOutsideRaid or (not isRaiding and not hasTimer) then
+		isEnded = true
 	end
 
-	local currentNum = tonumber(string.match(currLocStr, "%d+")) or tonumber(string.match(exactLocStr, "%d+")) or 1
-	local nextNum = currentNum + 1
+	if isEnded then
+		raidTrackedIslandNum = 1
+		raidSpawnedEnemiesSeen = false
+		raidIslandCleared = false
+		lastRaidWaitSpawnTick = 0
+		return {
+			Active = false,
+			Ended = true,
+			IslandNumber = 1,
+			CurrentIsland = nil,
+			NextIsland = nil,
+			Enemies = {},
+			EnemiesCount = 0,
+			TimeLeft = "",
+		}
+	end
 
+	local raidMap = ScriptContext:GetRaidMap()
 	local islandMap = {}
-	for _, island in ipairs(raidMap:GetChildren()) do
-		local nameLower = string.lower(island.Name)
-		if string.find(nameLower, "island") or string.find(nameLower, "raid") then
-			local numStr = string.match(island.Name, "%d+")
-			local islandNum = numStr and tonumber(numStr) or 0
-			if islandNum > 0 then
-				islandMap[islandNum] = island
+	if raidMap then
+		for i = 1, 5 do
+			local isl = raidMap:FindFirstChild("RaidIsland" .. i) or raidMap:FindFirstChild("Island" .. i)
+			if isl then
+				islandMap[i] = isl
 			end
 		end
 	end
 
-	local currentIsland = islandMap[currentNum]
-	local nextIsland = islandMap[nextNum]
-
-	if currentIsland then
-		local cDist = (myHrp.Position - GetSafePosition(currentIsland)).Magnitude
-
-		local hasEnemies = false
-		local enemiesFolder = workspace:FindFirstChild("Enemies")
-		if enemiesFolder then
-			for _, v in ipairs(enemiesFolder:GetChildren()) do
-				if v:FindFirstChildOfClass("Humanoid") and v:FindFirstChildOfClass("Humanoid").Health > 0 then
-					hasEnemies = true
-					break
+	-- 2. Detect player's own current island using exact BoundingBox center from RaidMap
+	local detectedIslandNum = nil
+	local closestDist = math.huge
+	if myHrp and raidMap then
+		for num, isl in pairs(islandMap) do
+			local realCenter = GetRealRaidIslandPosition(isl)
+			local dist = (myHrp.Position - realCenter).Magnitude
+			if dist < closestDist then
+				closestDist = dist
+				if dist <= 800 then
+					detectedIslandNum = num
 				end
 			end
 		end
-
-		if not hasEnemies and nextIsland then
-			return nextIsland, nextNum
-		end
-
-		if cDist > 150 then
-			return currentIsland, currentNum
-		elseif nextIsland then
-			return nextIsland, nextNum
-		else
-			return currentIsland, currentNum
-		end
-	elseif nextIsland then
-		return nextIsland, nextNum
 	end
 
-	local closestIsland, closestNum, closestDist = nil, 0, math.huge
-	for num, island in pairs(islandMap) do
-		local dist = (myHrp.Position - GetSafePosition(island)).Magnitude
-		if dist < closestDist then
-			closestDist = dist
-			closestIsland = island
-			closestNum = num
+	-- Fallback to game's CurrentLocation attribute if between islands
+	local currLoc = tostring(player:GetAttribute("CurrentLocation") or "")
+	local locNum = tonumber(string.match(currLoc, "Island%s*(%d+)"))
+
+	local resolvedIslandNum = detectedIslandNum or locNum or raidTrackedIslandNum or 1
+	if resolvedIslandNum ~= raidTrackedIslandNum then
+		raidTrackedIslandNum = resolvedIslandNum
+		raidSpawnedEnemiesSeen = false
+		raidIslandCleared = false
+		lastRaidWaitSpawnTick = os.clock()
+	end
+
+	local currentIslandModel = islandMap[raidTrackedIslandNum] or islandMap[1]
+	local nextIslandModel = islandMap[raidTrackedIslandNum + 1]
+
+	-- 3. Filter active enemies specifically belonging to player's current island in RaidMap
+	local activeEnemies = {}
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+	if enemiesFolder and currentIslandModel then
+		local islandCenter = GetRealRaidIslandPosition(currentIslandModel)
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+			if eHum and eHum.Health > 0 and eHrp and eHrp.Position.X > 60000 then
+				local distToIsland = (eHrp.Position - islandCenter).Magnitude
+				if distToIsland <= 850 then
+					table.insert(activeEnemies, enemy)
+				end
+			end
 		end
 	end
 
-	if closestIsland then
-		return closestIsland, closestNum
+	local enemyCount = #activeEnemies
+	if enemyCount > 0 then
+		raidSpawnedEnemiesSeen = true
+		raidIslandCleared = false
+	elseif raidSpawnedEnemiesSeen and enemyCount == 0 then
+		raidIslandCleared = true
+	end
+
+	return {
+		Active = true,
+		Ended = false,
+		IslandNumber = raidTrackedIslandNum,
+		CurrentIsland = currentIslandModel,
+		NextIsland = nextIslandModel,
+		Enemies = activeEnemies,
+		EnemiesCount = enemyCount,
+		EnemiesSeen = raidSpawnedEnemiesSeen,
+		Cleared = raidIslandCleared,
+		TimeLeft = timerText,
+	}
+end
+
+local function GetTargetRaidIsland()
+	local status = GetLiveRaidStatus()
+	if status.Ended then
+		return nil, 0
+	end
+
+	-- Only advance to next island if current island was cleared of enemies
+	if (status.Cleared or status.EnemiesCount == 0) and status.NextIsland then
+		return status.NextIsland, status.IslandNumber + 1
+	end
+
+	if status.CurrentIsland then
+		return status.CurrentIsland, status.IslandNumber
 	end
 
 	return nil, 0
@@ -6574,7 +7877,7 @@ local function StartAutoRaid()
 
 	task.spawn(function()
 		while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
-			if isReadyToAttack and isAutoRaidAttack then
+			if isReadyToAttack and isAutoRaidAttack and not GetLiveRaidStatus().Ended then
 				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 					or cfg.AttackIntervalFast
 				local myChar = GetCharacter()
@@ -6596,7 +7899,13 @@ local function StartAutoRaid()
 	end)
 
 	local raidBringConn
+	local lastRaidBringTick = 0
 	raidBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastRaidBringTick < 0.1 then
+			return
+		end
+		lastRaidBringTick = now
 		if not isAutoRaidKill or not ScriptContext.Running or generation ~= raidWorkerGeneration then
 			if raidBringConn then
 				raidBringConn:Disconnect()
@@ -6612,7 +7921,7 @@ local function StartAutoRaid()
 		local myChar = GetCharacter()
 		local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-		if isReadyToAttack and isAutoRaidBring then
+		if isReadyToAttack and isAutoRaidBring and not GetLiveRaidStatus().Ended then
 			local target = currentTargetInstance
 			local tHrp = target
 				and (target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart", true))
@@ -6636,6 +7945,21 @@ local function StartAutoRaid()
 					return
 				end
 
+				local raidStatus = GetLiveRaidStatus()
+				if raidStatus.Ended then
+					isReadyToAttack = false
+					currentTargetInstance = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
+					end
+					ToggleFloat(false)
+					task.wait(1)
+					return
+				end
+
+				ToggleFloat(true)
+
 				local now = os.clock()
 				if now - lastEvasionTime >= cfg.EvasionTick then
 					lastEvasionTime = now
@@ -6649,9 +7973,9 @@ local function StartAutoRaid()
 				local raidMap = ScriptContext:GetRaidMap()
 
 				if not raidMap then
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
 					end
 					ToggleFloat(false)
 					currentTargetInstance = nil
@@ -6663,32 +7987,22 @@ local function StartAutoRaid()
 
 				if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
 					local closest = nil
+					local shortestDist = math.huge
 
-					local shortestDist = 1500
-					if enemiesFolder then
-						for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-							if enemy.Name == "PropHitboxPlaceholder" and IsEnemyVulnerable(enemy) then
-								closest = enemy
-								break
-							end
-						end
-
-						if not closest then
-							for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-								if IsEnemyVulnerable(enemy) then
-									local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-										or enemy:FindFirstChildWhichIsA("BasePart", true)
-									if eHrp then
-										local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-										if dist < shortestDist then
-											shortestDist = dist
-											closest = enemy
-										end
-									end
+					for _, enemy in ipairs(raidStatus.Enemies) do
+						if IsEnemyVulnerable(enemy) then
+							local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+								or enemy:FindFirstChildWhichIsA("BasePart", true)
+							if eHrp then
+								local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+								if dist < shortestDist then
+									shortestDist = dist
+									closest = enemy
 								end
 							end
 						end
 					end
+
 					targetEnemy = closest
 					currentTargetInstance = targetEnemy
 					if targetEnemy then
@@ -6728,7 +8042,7 @@ local function StartAutoRaid()
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -6747,22 +8061,22 @@ local function StartAutoRaid()
 					if isAutoRaidNextIsland and (now - raidEmptyTimer >= 1) then
 						local activeIsland, activeIslandNum = GetTargetRaidIsland()
 						if activeIsland then
-							local iPos = GetSafePosition(activeIsland)
+							local iPos = GetRealRaidIslandPosition(activeIsland)
 							local dist = (myHrp.Position - iPos).Magnitude
 
 							if dist > 15000 then
-								if activeTween then
-									activeTween:Cancel()
-									activeTween = nil
+								if Runtime.activeTween then
+									Runtime.activeTween:Cancel()
+									Runtime.activeTween = nil
 								end
 								ToggleFloat(true)
 								return
 							end
 
 							if activeIslandNum >= 5 and dist <= 150 then
-								if activeTween then
-									activeTween:Cancel()
-									activeTween = nil
+								if Runtime.activeTween then
+									Runtime.activeTween:Cancel()
+									Runtime.activeTween = nil
 								end
 								ToggleFloat(true)
 								return
@@ -6774,9 +8088,9 @@ local function StartAutoRaid()
 								TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
 							end
 						else
-							if activeTween then
-								activeTween:Cancel()
-								activeTween = nil
+							if Runtime.activeTween then
+								Runtime.activeTween:Cancel()
+								Runtime.activeTween = nil
 							end
 							ToggleFloat(true)
 						end
@@ -6791,11 +8105,11 @@ local function StartAutoRaid()
 end
 
 local function StartFarmNearest()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 	ToggleFloat(true)
 
 	task.spawn(function()
-		while farmNearestEnabled and ScriptContext.Running and generation == workerGeneration do
+		while farmNearestEnabled and ScriptContext.Running and generation == State.WorkerGen do
 			local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 				or cfg.AttackIntervalFast
 			local myChar = GetCharacter()
@@ -6814,8 +8128,14 @@ local function StartFarmNearest()
 	end)
 
 	local nearestBringConn
+	local lastNearestBringTick = 0
 	nearestBringConn = RunService.Heartbeat:Connect(function()
-		if not farmNearestEnabled or not ScriptContext.Running or generation ~= workerGeneration then
+		local now = os.clock()
+		if now - lastNearestBringTick < 0.1 then
+			return
+		end
+		lastNearestBringTick = now
+		if not farmNearestEnabled or not ScriptContext.Running or generation ~= State.WorkerGen then
 			if nearestBringConn then
 				nearestBringConn:Disconnect()
 			end
@@ -6840,7 +8160,7 @@ local function StartFarmNearest()
 	ScriptContext:AddConnection(nearestBringConn)
 
 	task.spawn(function()
-		while farmNearestEnabled and ScriptContext.Running and generation == workerGeneration do
+		while farmNearestEnabled and ScriptContext.Running and generation == State.WorkerGen do
 			local ok, err = pcall(function()
 				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 				if not myHrp then
@@ -6896,7 +8216,7 @@ local function StartFarmNearest()
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -7005,7 +8325,13 @@ local function StartAutoDungeon()
 	end)
 
 	local dungeonBringConn
+	local lastDungeonBringTick = 0
 	dungeonBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastDungeonBringTick < 0.1 then
+			return
+		end
+		lastDungeonBringTick = now
 		if not isAutoDungeon or not ScriptContext.Running or generation ~= dungeonWorkerGeneration then
 			if dungeonBringConn then
 				dungeonBringConn:Disconnect()
@@ -7043,9 +8369,9 @@ local function StartAutoDungeon()
 				if not isDungeon then
 					isReadyToAttack = false
 					currentTargetInstance = nil
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
 					end
 					return
 				end
@@ -7103,9 +8429,9 @@ local function StartAutoDungeon()
 
 				if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
 					if currentTargetInstance then
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 						currentTargetInstance = nil
 					end
@@ -7160,15 +8486,15 @@ local function StartAutoDungeon()
 							currentTargetInstance = nil
 							targetEnemy = nil
 							isReadyToAttack = false
-							if activeTween then
-								activeTween:Cancel()
-								activeTween = nil
+							if Runtime.activeTween then
+								Runtime.activeTween:Cancel()
+								Runtime.activeTween = nil
 							end
 							return
 						end
 
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -7191,22 +8517,22 @@ local function StartAutoDungeon()
 								end
 								TweenTo(CFrame.new(exitPos))
 							else
-								if activeTween then
-									activeTween:Cancel()
-									activeTween = nil
+								if Runtime.activeTween then
+									Runtime.activeTween:Cancel()
+									Runtime.activeTween = nil
 								end
 								myHrp.CFrame = CFrame.new(exitPos)
 							end
 						else
-							if activeTween then
-								activeTween:Cancel()
-								activeTween = nil
+							if Runtime.activeTween then
+								Runtime.activeTween:Cancel()
+								Runtime.activeTween = nil
 							end
 						end
 					else
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 					end
 				end
@@ -7217,11 +8543,11 @@ local function StartAutoDungeon()
 end
 
 local function StartAutoKillVolcano()
-	local generation = workerGeneration
+	local generation = State.WorkerGen
 	ToggleFloat(true)
 
 	task.spawn(function()
-		while autoKillVolcano and ScriptContext.Running and generation == workerGeneration do
+		while State.AutoKillVolcano and ScriptContext.Running and generation == State.WorkerGen do
 			if isReadyToAttack then
 				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 					or cfg.AttackIntervalFast
@@ -7244,8 +8570,14 @@ local function StartAutoKillVolcano()
 	end)
 
 	local volcanoBringConn
+	local lastVolcanoBringTick = 0
 	volcanoBringConn = RunService.Heartbeat:Connect(function()
-		if not autoKillVolcano or generation ~= workerGeneration then
+		local now = os.clock()
+		if now - lastVolcanoBringTick < 0.1 then
+			return
+		end
+		lastVolcanoBringTick = now
+		if not State.AutoKillVolcano or generation ~= State.WorkerGen then
 			if volcanoBringConn then
 				volcanoBringConn:Disconnect()
 				volcanoBringConn = nil
@@ -7266,7 +8598,7 @@ local function StartAutoKillVolcano()
 	ScriptContext:AddConnection(volcanoBringConn)
 
 	task.spawn(function()
-		while autoKillVolcano and ScriptContext.Running and generation == workerGeneration do
+		while State.AutoKillVolcano and ScriptContext.Running and generation == State.WorkerGen do
 			local ok, err = pcall(function()
 				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 				if not myHrp then
@@ -7322,7 +8654,7 @@ local function StartAutoKillVolcano()
 
 						local targetDistance = (centerPos - myHrp.Position).Magnitude
 						if targetDistance > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
@@ -7333,9 +8665,9 @@ local function StartAutoKillVolcano()
 				else
 					currentTargetInstance = nil
 					isReadyToAttack = false
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
 					end
 				end
 			end)
@@ -7386,9 +8718,9 @@ local function StartAutoTorch()
 										local touched = SafeTouch(torch, hrp)
 										if touched then
 											litTorches[i] = true
-											if activeTween then
-												activeTween:Cancel()
-												activeTween = nil
+											if Runtime.activeTween then
+												Runtime.activeTween:Cancel()
+												Runtime.activeTween = nil
 											end
 											task.wait(0.5)
 										end
@@ -7413,6 +8745,7 @@ local function StartAutoTorch()
 	end)
 end
 
+autoFarmMagnetWorkerGen = 0
 local autoFactoryWorker = 0
 
 local function StartAutoFactory()
@@ -7456,11 +8789,11 @@ local function StartAutoFactory()
 							lastEvasionMoveAt = 0
 						end
 
-						local centerPos = mobProfile and mobProfile.MobPos or tHrp.Position
+						local centerPos = tHrp.Position
 						local dist = (hrp.Position - centerPos).Magnitude
 
 						if dist > 80 then
-							TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 						else
 							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
 						end
@@ -7479,9 +8812,9 @@ local function StartAutoFactory()
 					end
 				else
 					if not cfg.isTeleportingToIsland then
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 						ToggleFloat(false)
 					end
@@ -7497,10 +8830,468 @@ local function StartAutoFactory()
 	end)
 end
 
+local function FindMagnetEnemies()
+	local results = {}
+	local myChar = GetCharacter()
+
+	local function checkMagnetEnemy(obj)
+		if not obj or not obj:IsA("Model") or obj == myChar then
+			return
+		end
+		if obj:GetAttribute("MagnetEnemy") == true then
+			local eHum = obj:FindFirstChildOfClass("Humanoid")
+			local eHrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart", true)
+			if eHum and eHrp and eHum.Health > 0 then
+				table.insert(results, obj)
+			end
+		end
+	end
+
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+	if enemiesFolder then
+		for _, e in ipairs(enemiesFolder:GetChildren()) do
+			checkMagnetEnemy(e)
+		end
+	end
+
+	for _, container in ipairs(enemyContainerPaths) do
+		if container then
+			for _, obj in ipairs(container:GetChildren()) do
+				checkMagnetEnemy(obj)
+			end
+		end
+	end
+
+	local bonusFolder = game:GetService("ReplicatedStorage"):FindFirstChild("BonusMoments")
+	if bonusFolder then
+		for _, sub in ipairs(bonusFolder:GetChildren()) do
+			if sub:IsA("Folder") or sub:IsA("Model") then
+				for _, obj in ipairs(sub:GetChildren()) do
+					checkMagnetEnemy(obj)
+				end
+			end
+		end
+	end
+
+	return results
+end
+
+local function BuildAutoFarmMagnetRoute()
+	local routes = {}
+	local sea1QuestData = Quests and Quests.Sea1
+
+	if not sea1QuestData then
+		return routes
+	end
+
+	local islandList = {}
+	for islandName, islandCF in pairs(Islands and Islands.Sea1 or {}) do
+		if typeof(islandCF) == "CFrame" then
+			table.insert(islandList, {
+				Name = islandName,
+				CFrame = islandCF,
+			})
+		end
+	end
+
+	table.sort(islandList, function(a, b)
+		return a.Name < b.Name
+	end)
+
+	for index, island in ipairs(islandList) do
+		routes[index] = {
+			Name = island.Name,
+			CFrame = island.CFrame,
+			Points = {},
+			Checked = {},
+		}
+	end
+
+	local function getNearestIslandIndex(point)
+		local bestIndex = nil
+		local bestDistance = math.huge
+
+		for index, island in ipairs(islandList) do
+			local distance = (island.CFrame.Position - point).Magnitude
+			if distance < bestDistance then
+				bestDistance = distance
+				bestIndex = index
+			end
+		end
+
+		return bestIndex
+	end
+
+	local seen = {}
+
+	for questName, questEntries in pairs(sea1QuestData) do
+		if type(questEntries) == "table" then
+			for _, entry in ipairs(questEntries) do
+				local mobName = entry and entry.Mob
+				local mobPos = entry and entry.MobPos
+
+				if mobName and typeof(mobPos) == "Vector3" then
+					local anchorPos = entry.NPC
+					if typeof(anchorPos) ~= "Vector3" then
+						anchorPos = mobPos
+					end
+
+					local islandIndex = getNearestIslandIndex(anchorPos)
+					local route = islandIndex and routes[islandIndex]
+
+					if route then
+						local key = string.lower(tostring(mobName))
+							.. "|"
+							.. string.format("%.2f|%.2f|%.2f", mobPos.X, mobPos.Y, mobPos.Z)
+
+						if not seen[key] then
+							seen[key] = true
+							table.insert(route.Points, {
+								Key = key,
+								Mob = mobName,
+								MobPos = mobPos,
+								Quest = questName,
+							})
+						end
+					end
+				end
+			end
+		end
+	end
+
+	local filtered = {}
+	for _, route in ipairs(routes) do
+		if #route.Points > 0 then
+			table.insert(filtered, route)
+		end
+	end
+
+	table.sort(filtered, function(a, b)
+		local ai = math.huge
+		local bi = math.huge
+
+		for i, island in ipairs(islandList) do
+			if island.Name == a.Name then
+				ai = i
+			end
+			if island.Name == b.Name then
+				bi = i
+			end
+		end
+
+		return ai < bi
+	end)
+
+	for _, route in ipairs(filtered) do
+		table.sort(route.Points, function(a, b)
+			if string.lower(tostring(a.Mob)) == string.lower(tostring(b.Mob)) then
+				return a.Key < b.Key
+			end
+			return string.lower(tostring(a.Mob)) < string.lower(tostring(b.Mob))
+		end)
+	end
+
+	return filtered
+end
+
+local function ScanRenderedMagnetEnemies(route, renderRadius)
+	local folder = workspace:FindFirstChild("Enemies")
+	if not folder or not route then
+		return {}
+	end
+
+	local radius = renderRadius or 180
+	local found = {}
+	local children = folder:GetChildren()
+
+	for _, point in ipairs(route.Points or {}) do
+		for _, enemy in ipairs(children) do
+			if enemy:IsA("Model")
+				and string.lower(enemy.Name) == string.lower(tostring(point.Mob))
+			then
+				local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+					or enemy:FindFirstChildWhichIsA("BasePart", true)
+				local eHum = enemy:FindFirstChildOfClass("Humanoid")
+
+				if eHrp and eHum and eHum.Health > 0
+					and (eHrp.Position - point.MobPos).Magnitude <= radius
+				then
+					found[point.Key] = enemy
+					break
+				end
+			end
+		end
+	end
+
+	return found
+end
+
+local function StartAutoFarmMagnet()
+	autoFarmMagnetWorkerGen = autoFarmMagnetWorkerGen + 1
+	local gen = autoFarmMagnetWorkerGen
+	ToggleFloat(true)
+
+	task.spawn(function()
+		while cfg.isAutoFarmMagnet and ScriptContext.Running and gen == autoFarmMagnetWorkerGen do
+			local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
+				or cfg.AttackIntervalFast
+			local myChar = GetCharacter()
+			local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+			if myHrp and currentTargetInstance then
+				ExecuteAttack(myChar, myHrp, false, currentTargetInstance.Name)
+			end
+
+			if interval <= 0 then
+				task.wait()
+			else
+				task.wait(interval)
+			end
+		end
+	end)
+
+	local magnetBringConn
+	local lastMagnetBringTick = 0
+	magnetBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastMagnetBringTick < 0.1 then
+			return
+		end
+		lastMagnetBringTick = now
+		if not cfg.isAutoFarmMagnet or not ScriptContext.Running or gen ~= autoFarmMagnetWorkerGen then
+			if magnetBringConn then
+				magnetBringConn:Disconnect()
+				magnetBringConn = nil
+			end
+			return
+		end
+
+		local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+		if not myHrp then
+			return
+		end
+
+		local magnetMobs = FindMagnetEnemies()
+		local target = currentTargetInstance
+		local gatherPos = target and GetSafePosition(target)
+
+		if not gatherPos or gatherPos == Vector3.zero then
+			gatherPos = myHrp.Position
+		end
+
+		if gatherPos and gatherPos ~= Vector3.zero then
+			for _, enemy in ipairs(magnetMobs) do
+				local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+					or enemy:FindFirstChildWhichIsA("BasePart", true)
+				local eHum = enemy:FindFirstChildOfClass("Humanoid")
+
+				if eHrp and eHum and eHum.Health > 0 then
+					local dist = (eHrp.Position - myHrp.Position).Magnitude
+					if dist <= cfg.BringRadius then
+						if eHrp.CanCollide then
+							eHrp.CanCollide = false
+						end
+						if eHum.PlatformStand == false then
+							eHum.PlatformStand = true
+						end
+
+						local gatherCF = CFrame.new(gatherPos)
+						if cfg.BringMethod == "Tween" then
+							local d = (eHrp.Position - gatherPos).Magnitude
+							if d > 4 then
+								if not Runtime.activeMagnetTweens[eHrp] then
+									local dur = math.clamp(d / 400, 0.05, 0.25)
+									local tween = TweenService:Create(
+										eHrp,
+										TweenInfo.new(dur, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+										{ CFrame = gatherCF }
+									)
+									Runtime.activeMagnetTweens[eHrp] = tween
+									tween.Completed:Connect(function()
+										Runtime.activeMagnetTweens[eHrp] = nil
+										if eHrp and eHrp.Parent then
+											eHrp.CFrame = gatherCF
+										end
+									end)
+									tween:Play()
+								end
+							else
+								eHrp.CFrame = gatherCF
+							end
+						else
+							eHrp.CFrame = gatherCF
+						end
+					end
+				end
+			end
+		end
+	end)
+	ScriptContext:AddConnection(magnetBringConn)
+
+	task.spawn(function()
+		local routes = BuildAutoFarmMagnetRoute()
+		local routeIndex = 1
+		local pointIndex = 1
+		local routeWaitUntil = 0
+		local spawnedCheckDone = false
+
+		while cfg.isAutoFarmMagnet and ScriptContext.Running and gen == autoFarmMagnetWorkerGen do
+			local ok, err = pcall(function()
+				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+				if not myHrp then
+					task.wait()
+					return
+				end
+
+				local now = os.clock()
+				local magnetMobs = FindMagnetEnemies()
+
+				-- Keep any rendered magnet enemy inside workspace.Enemies.
+				local enemiesFolder = workspace:FindFirstChild("Enemies")
+				if enemiesFolder then
+					for _, m in ipairs(magnetMobs) do
+						if m.Parent ~= enemiesFolder then
+							m:SetAttribute("DisableDistanceCulling", true)
+							pcall(function()
+								m.Parent = enemiesFolder
+							end)
+						end
+					end
+				end
+
+				-- Existing rendered enemies always take priority.
+				if #magnetMobs > 0 then
+					currentTargetInstance = magnetMobs[1]
+					local target = currentTargetInstance
+					local tHrp = target:FindFirstChild("HumanoidRootPart")
+						or target:FindFirstChildWhichIsA("BasePart", true)
+
+					if tHrp then
+						local centerPos = GetSafePosition(tHrp)
+						local dist = (centerPos - myHrp.Position).Magnitude
+
+						if now - lastEvasionMoveAt >= cfg.EvasionTick then
+							lastEvasionMoveAt = now
+							if dist > 80 then
+								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+							else
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+							end
+						end
+
+						isReadyToAttack = (centerPos - myHrp.Position).Magnitude <= cfg.MaxPullRange
+					end
+
+					-- Keep route cursor where it is while mobs are being farmed.
+					spawnedCheckDone = false
+					routeWaitUntil = 0
+					return
+				end
+
+				currentTargetInstance = nil
+				isReadyToAttack = false
+
+				if #routes == 0 then
+					task.wait(0.5)
+					return
+				end
+
+				if routeIndex > #routes then
+					routeIndex = 1
+					pointIndex = 1
+					for _, route in ipairs(routes) do
+						table.clear(route.Checked)
+					end
+				end
+
+				local route = routes[routeIndex]
+				if not route then
+					routeIndex = 1
+					pointIndex = 1
+					return
+				end
+
+				-- Once one enemy from an island is streamed in, scan the whole
+				-- island immediately. A and B loaded from the same island are
+				-- both marked as checked so the movement stays deterministic.
+				if spawnedCheckDone and #route.Points > 0 then
+					local rendered = ScanRenderedMagnetEnemies(route, 220)
+					for _, point in ipairs(route.Points) do
+						if rendered[point.Key] then
+							route.Checked[point.Key] = true
+						end
+					end
+					spawnedCheckDone = false
+				end
+
+				-- Skip every point that was already rendered/processed.
+				while pointIndex <= #route.Points
+					and route.Checked[route.Points[pointIndex].Key]
+				do
+					pointIndex = pointIndex + 1
+				end
+
+				-- Finished this island; move to the next one without randomness.
+				if pointIndex > #route.Points then
+					routeIndex = routeIndex + 1
+					pointIndex = 1
+					routeWaitUntil = 0
+					spawnedCheckDone = false
+					return
+				end
+
+				local point = route.Points[pointIndex]
+				local targetPos = point.MobPos
+				local distance = (myHrp.Position - targetPos).Magnitude
+
+				if distance > 70 then
+					routeWaitUntil = 0
+					spawnedCheckDone = false
+					TweenTo(LookCFrame(targetPos, cfg.TweenHeight))
+					return
+				end
+
+				-- At MobPos: wait only ~0.3s for streaming/render.
+				if routeWaitUntil == 0 then
+					routeWaitUntil = os.clock() + 0.3
+					return
+				end
+
+				if os.clock() < routeWaitUntil then
+					return
+				end
+
+				-- Check workspace.Enemies, mark all matching points on this
+				-- island as processed. Missing mobs are skipped immediately.
+				local rendered = ScanRenderedMagnetEnemies(route, 220)
+				for _, routePoint in ipairs(route.Points) do
+					if rendered[routePoint.Key] then
+						route.Checked[routePoint.Key] = true
+					end
+				end
+
+				route.Checked[point.Key] = true
+				pointIndex = pointIndex + 1
+				routeWaitUntil = 0
+				spawnedCheckDone = true
+			end)
+
+			if not ok then
+				warn("[Auto Farm Magnet Error]: " .. tostring(err))
+				task.wait(0.1)
+			end
+
+			task.wait(cfg.ThreadSleep)
+		end
+
+		StopAllActivities()
+	end)
+end
+
 local function StartStandaloneAutoAttackThread()
 	task.spawn(function()
 		while ScriptContext.Running do
-			if isAutoAttackEnabled and not (enabled and isReadyToAttack) then
+			if isAutoAttackEnabled and not (isAutoFarm and isReadyToAttack) then
 				local now = os.clock()
 				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 					or cfg.AttackIntervalFast
@@ -7513,20 +9304,44 @@ local function StartStandaloneAutoAttackThread()
 						local target = currentTargetInstance
 						local tHum = target and target:FindFirstChildOfClass("Humanoid")
 						if not target or not target.Parent or not tHum or tHum.Health <= 0 then
+							local minDist = math.max(cfg.HitRadius or 60, 85)
+
+							local function checkCandidate(entity)
+								if not entity or entity == myChar or entity == player.Character then
+									return
+								end
+								if IsAllyOrSameTeam(entity) then
+									return
+								end
+								local eHrp = entity:FindFirstChild("HumanoidRootPart")
+									or entity:FindFirstChildWhichIsA("BasePart", true)
+								local eHum = entity:FindFirstChildOfClass("Humanoid")
+								if eHrp and eHum and eHum.Health > 0 then
+									local d = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+									if d < minDist then
+										minDist = d
+										target = entity
+									end
+								end
+							end
+
 							local enemiesFolder = workspace:FindFirstChild("Enemies")
 							if enemiesFolder then
-								local minDist = cfg.HitRadius + 40
 								for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-									local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-										or enemy:FindFirstChildWhichIsA("BasePart", true)
-									local eHum = enemy:FindFirstChildOfClass("Humanoid")
-									if eHrp and eHum and eHum.Health > 0 then
-										local d = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-										if d < minDist then
-											minDist = d
-											target = enemy
-										end
-									end
+									checkCandidate(enemy)
+								end
+							end
+
+							local charsFolder = workspace:FindFirstChild("Characters")
+							if charsFolder then
+								for _, c in ipairs(charsFolder:GetChildren()) do
+									checkCandidate(c)
+								end
+							end
+
+							for _, otherP in ipairs(game:GetService("Players"):GetPlayers()) do
+								if otherP ~= player and otherP.Character then
+									checkCandidate(otherP.Character)
 								end
 							end
 						end
@@ -7536,14 +9351,17 @@ local function StartStandaloneAutoAttackThread()
 							and target:FindFirstChildOfClass("Humanoid")
 							and target:FindFirstChildOfClass("Humanoid").Health > 0
 						then
-							ExecuteAttack(myChar, myHrp, true, target.Name)
+							ExecuteAttack(myChar, myHrp, false, target.Name)
 							lastAttackAt = now
 						end
 					end
 				end
 			end
 
-			if isAutoAttackEnabled and attackSpeedMode == "Super Fast Attack" then
+			if
+				isAutoAttackEnabled
+				and (attackSpeedMode == "Super Fast Attack" or attackSpeedMode == "Beta Fast Attack")
+			then
 				task.wait()
 			else
 				task.wait(cfg.ThreadSleep)
@@ -7617,15 +9435,15 @@ local function StartAutoSeaBeast()
 end
 
 local function StartAutoEliteHunter()
-	eliteHunterWorkerGen = eliteHunterWorkerGen + 1
-	local gen = eliteHunterWorkerGen
+	State.EliteHunterGen = State.EliteHunterGen + 1
+	local gen = State.EliteHunterGen
 
 	local currentEliteEnemy = nil
 	local currentEliteLocation = nil
 	local spawnIndex = 1
 
 	task.spawn(function()
-		while isAutoEliteHunter and ScriptContext.Running and gen == eliteHunterWorkerGen do
+		while isAutoEliteHunter and ScriptContext.Running and gen == State.EliteHunterGen do
 			if isReadyToAttack then
 				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
 					or cfg.AttackIntervalFast
@@ -7646,8 +9464,14 @@ local function StartAutoEliteHunter()
 	end)
 
 	local eliteBringConn
+	local lastEliteBringTick = 0
 	eliteBringConn = RunService.Heartbeat:Connect(function()
-		if not isAutoEliteHunter or not ScriptContext.Running or gen ~= eliteHunterWorkerGen then
+		local now = os.clock()
+		if now - lastEliteBringTick < 0.1 then
+			return
+		end
+		lastEliteBringTick = now
+		if not isAutoEliteHunter or not ScriptContext.Running or gen ~= State.EliteHunterGen then
 			if eliteBringConn then
 				eliteBringConn:Disconnect()
 			end
@@ -7666,7 +9490,7 @@ local function StartAutoEliteHunter()
 	task.spawn(function()
 		local lastEliteCheck = 0
 
-		while isAutoEliteHunter and ScriptContext.Running and gen == eliteHunterWorkerGen do
+		while isAutoEliteHunter and ScriptContext.Running and gen == State.EliteHunterGen do
 			local ok, err = pcall(function()
 				local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
 				if not myHrp then
@@ -7760,11 +9584,13 @@ local function StartAutoEliteHunter()
 						if centerPos ~= Vector3.zero then
 							ToggleFloat(true)
 							local targetDistance = (centerPos - myHrp.Position).Magnitude
-							if targetDistance > 80 then
-								TweenTo(CFrame.new(centerPos + Vector3.new(0, cfg.TweenHeight, 0), centerPos))
+							if now - lastEvasionMoveAt >= cfg.EvasionTick then
 								lastEvasionMoveAt = now
-							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								if targetDistance > 80 then
+									TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+								else
+									TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								end
 							end
 							isReadyToAttack = targetDistance <= cfg.MaxPullRange
 						end
@@ -7805,9 +9631,9 @@ local function StartAutoEliteHunter()
 					currentTargetInstance = nil
 					isReadyToAttack = false
 					if not cfg.isTeleportingToIsland then
-						if activeTween then
-							activeTween:Cancel()
-							activeTween = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
 						end
 						ToggleFloat(false)
 					end
@@ -7834,7 +9660,84 @@ local Lonum = loadstring(
 getgenv().LonumUNCPassed = false
 getgenv().UNCSupportReport = {}
 
-Lonum.UNC(function(uncReport)
+Lonum.UNC({
+	Tests = {
+		"Drawing",
+		"require",
+		"checkcaller",
+		"getnamecallmethod",
+		"hookmetamethod",
+		"hookfunction",
+		"newcclosure",
+		"getgenv",
+		"getrenv",
+		"getfenv",
+		"getsenv",
+		"getgc",
+		"filtergc",
+		"getinstances",
+		"getnilinstances",
+		"getloadedmodules",
+		"getrunningscripts",
+		"getscripts",
+		"gethui",
+		"cloneref",
+		"compareinstances",
+		"getrawmetatable",
+		"setrawmetatable",
+		"sethiddenproperty",
+		"gethiddenproperty",
+		"setscriptable",
+		"isscriptable",
+		"setreadonly",
+		"isreadonly",
+		"getconnections",
+		"firetouchinterest",
+		"fireproximityprompt",
+		"setrenderproperty",
+		"getrenderproperty",
+		"isrenderobj",
+		"cleardrawcache",
+		"readfile",
+		"writefile",
+		"appendfile",
+		"loadfile",
+		"isfile",
+		"isfolder",
+		"makefolder",
+		"listfiles",
+		"queue_on_teleport",
+		"setclipboard",
+		"restorefunction",
+		"clonefunction",
+		"iscclosure",
+		"islclosure",
+		"isexecutorclosure",
+		"getfunctionhash",
+		"getscriptbytecode",
+		"getscriptclosure",
+		"getscriptfromthread",
+		"getcallingscript",
+		"getcallbackvalue",
+		"decompile",
+		"firesignal",
+		"replicatesignal",
+		"setfpscap",
+		"debug.getinfo",
+		"debug.getconstant",
+		"debug.getconstants",
+		"debug.getupvalue",
+		"debug.getupvalues",
+		"debug.setupvalue",
+		"debug.setconstant",
+		"debug.getstack",
+		"debug.setstack",
+	},
+	MinimumRate = 60,
+	AutoClose = true,
+	CloseDelay = 1.5,
+	Title = "Wait, Load Script... (Make sure you see UNC Test!)",
+	Callback = function(uncReport)
 	getgenv().LonumUNCPassed = true
 	getgenv().UNCSupportReport = uncReport or getgenv().LonumUNCSupport or {}
 
@@ -7921,7 +9824,8 @@ Lonum.UNC(function(uncReport)
 			print("[UNC Warning]: custom require not supported, game modules accessed via Roblox native require.")
 		end
 	end
-end)
+	end
+})
 
 while not getgenv().LonumUNCPassed do
 	task.wait(0.1)
@@ -7960,11 +9864,111 @@ Tabs = {
 	Status = Window:CreateTab("Status"),
 	Settings = Window:CreateTab("Settings"),
 }
+DEV_USER_ID = {
+	[10899280539] = true,
+	[10289245854] = true,
+	["10899280539"] = true,
+	["10289245854"] = true,
+}
+
+currentUid = player and player.UserId
+if DEV_USER_ID[currentUid] or DEV_USER_ID[tostring(currentUid)] then
+	Tabs.Developers = Window:CreateTab("Developers")
+	Tabs.Developers:CreateSection("Auto Farm")
+
+	devEnemyList = {}
+	seenEnemies = {}
+
+	for _, boss in ipairs(BOSSES) do
+		if boss.Name and not seenEnemies[boss.Name] then
+			seenEnemies[boss.Name] = true
+			table.insert(devEnemyList, "[Boss] " .. boss.Name)
+		end
+	end
+
+	for _, seaTable in pairs(Quests) do
+		for _, stageList in pairs(seaTable) do
+			for _, p in ipairs(stageList) do
+				local label = p.Mob or p.Name
+				if label and not seenEnemies[label] then
+					seenEnemies[label] = true
+					table.insert(devEnemyList, label)
+				end
+			end
+		end
+	end
+
+	table.sort(devEnemyList)
+
+	selectedDevEnemy = devEnemyList[1] or ""
+	Tabs.Developers:CreateDropdown({
+		Name = "Select Enemy / Boss",
+		Options = devEnemyList,
+		CurrentOption = { selectedDevEnemy },
+		MultipleOptions = false,
+		Flag = "DevEnemySelectDrop",
+		Callback = function(Option)
+			selectedDevEnemy = Option[1]
+		end,
+	})
+
+	Tabs.Developers:CreateButton({
+		Name = "Set New Position",
+		Callback = function()
+			local myHrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+			if not myHrp then
+				if getgenv().LonumObject then
+					getgenv().LonumObject:Notify({
+						Title = "Dev Tool Error",
+						Content = "HumanoidRootPart not found!",
+						Duration = 3,
+					})
+				end
+				return
+			end
+
+			local newPos = myHrp.Position
+			local cleanName = string.gsub(selectedDevEnemy, "^%[Boss%]%s*", "")
+			local updated = false
+
+			for _, boss in ipairs(BOSSES) do
+				if boss.Name == cleanName then
+					boss.NPC = newPos
+					boss.MobPos = newPos
+					updated = true
+					break
+				end
+			end
+
+			for _, sea in ipairs({ SEA1, SEA2, SEA3 }) do
+				for _, p in ipairs(sea) do
+					if p.Mob == cleanName or p.Name == cleanName then
+						p.MobPos = newPos
+						updated = true
+					end
+				end
+			end
+
+			local posString = string.format("Vector3.new(%.2f, %.2f, %.2f)", newPos.X, newPos.Y, newPos.Z)
+			print(string.format("[Dev Tool] Set New Position for %s: %s", cleanName, posString))
+
+			useUnc("setclipboard", { posString })
+
+			if getgenv().LonumObject then
+				getgenv().LonumObject:Notify({
+					Title = "Position Updated",
+					Content = string.format("%s set to %s (Copied!)", cleanName, posString),
+					Duration = 4,
+				})
+			end
+		end,
+	})
+end
 
 do
 	Tabs.Quests:CreateSection("Auto Get Swords (Auto Kill Boss)")
 
-	local swordBosses = {
+	swordBosses = {
 		{ "Saber", "Saber Expert" },
 		{ "Pole", "Thunder God" },
 		{ "Saw", "The Saw" },
@@ -8021,7 +10025,7 @@ do
 	end
 
 	Tabs.Quests:CreateSection("Special Quests")
-	local specialQuests = {
+	specialQuests = {
 		{ "Auto Quest Sea Bartilo", "BartiloQuestProgress" },
 		{ "Auto Quest Sea 3", "ZQuestProgress" },
 		{ "Auto Buy Haki Colors", "activateColor" },
@@ -8096,7 +10100,7 @@ for _, name in ipairs(melees1) do
 		Name = "Buy " .. name,
 		Callback = function()
 			pcall(function()
-				game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Buy" .. string.gsub(name, " ", ""))
+				NavigateAndBuyMelee(name)
 			end)
 		end,
 	})
@@ -8110,7 +10114,7 @@ for _, name in ipairs(melees2) do
 		Name = "Buy " .. name,
 		Callback = function()
 			pcall(function()
-				game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Buy" .. string.gsub(name, " ", ""))
+				NavigateAndBuyMelee(name)
 			end)
 		end,
 	})
@@ -8190,7 +10194,7 @@ Tabs.Sea3:CreateToggle({
 	Flag = "ToggleAutoTorch",
 	Callback = function(Value)
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoRaidKill = false
 			isAutoBone = false
 			if FarmToggle then
@@ -8248,6 +10252,147 @@ Tabs.Sea1:CreateToggle({
 							end
 						end
 					end)
+				end
+			end)
+		end
+	end,
+})
+Tabs.Sea1:CreateToggle({
+	Name = "Auto Grappling Hook",
+	CurrentValue = false,
+	Flag = "ToggleAutoGrapplingHook",
+	Callback = function(Value)
+		cfg.isAutoGrapplingHook = Value
+		if Value then
+			task.spawn(function()
+				local bmRemote = game:GetService("ReplicatedStorage")
+					:WaitForChild("Remotes")
+					:WaitForChild("BonusMomentsRemoteFunction")
+				local netFolder = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
+				local useZipline = netFolder:WaitForChild("RE/UseZipline")
+				local guideRemote = netFolder:WaitForChild("RF/BonusMomentsGuide")
+
+				while cfg.isAutoGrapplingHook do
+					local success, err = pcall(function()
+						local myChar = GetCharacter()
+						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+						if not myHrp then
+							task.wait(0.5)
+							return
+						end
+
+						local hookPickup = workspace:FindFirstChild("GroundPickupGrapplingHook")
+						if hookPickup then
+							local ropePart = hookPickup:FindFirstChild("Rope")
+							local hookPart = hookPickup:FindFirstChild("hook.001")
+							local prompt = hookPart and hookPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+							if ropePart and ropePart:IsA("BasePart") then
+								local dist = (myHrp.Position - ropePart.Position).Magnitude
+								if dist > 15 then
+									TweenTo(CFrame.new(ropePart.Position + Vector3.new(0, 3, 0)))
+									task.wait(0.3)
+								end
+							end
+
+							if prompt then
+								SafeProximity(prompt, myHrp)
+								task.wait(0.5)
+							end
+						end
+
+						local throwPos = Vector3.new(-1278.500977, 74.385216, -249.276627)
+						local distToThrow = (myHrp.Position - throwPos).Magnitude
+						if distToThrow > 10 then
+							TweenTo(CFrame.new(throwPos))
+							local startTime = os.clock()
+							while
+								cfg.isAutoGrapplingHook
+								and (myHrp.Position - throwPos).Magnitude > 10
+								and (os.clock() - startTime < 10)
+							do
+								task.wait(0.1)
+							end
+						end
+						task.wait(0.3)
+
+						local throwArgs = {
+							"Zipline Repair",
+							"Throw",
+							"Grappling Hook",
+							{
+								Type = "AimData",
+								Origin = CFrame.new(
+									-1283.0609130859375,
+									74.38521575927734,
+									-263.3216552734375,
+									-0.7788268327713013,
+									0,
+									0.6272390484809875,
+									0,
+									1.0000001192092896,
+									-0,
+									-0.6272390484809875,
+									0,
+									-0.7788268327713013
+								),
+								Target = Vector3.new(-1482.841064453125, 78.08488464355469, -15.25970458984375),
+								InitialVelocity = Vector3.new(
+									-135.9412841796875,
+									146.5705108642578,
+									168.79486083984375
+								),
+								Arc = {
+									ArcLength = 340.6257979931375,
+									AimDegrees = 20,
+									HighestPointOffsetY = 54.791302827463625,
+									HighestPoint = Vector3.new(
+										-1486.3323974609375,
+										129.176513671875,
+										-10.924606323242188
+									),
+									TargetOffsetX = 318.5072021484375,
+									GroundPoint = Vector3.new(
+										-1486.3323974609375,
+										74.38521575927734,
+										-10.924606323242188
+									),
+									GroundPointOffsetX = 324.0734015001714,
+									TargetOffsetY = 3.6996688842773438,
+								},
+							},
+						}
+						bmRemote:InvokeServer(unpack(throwArgs))
+						task.wait(1.5)
+
+						local jungleMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Jungle")
+						local ziplinePair = jungleMap and jungleMap:FindFirstChild("ZiplinePair")
+						local ziplineObj = ziplinePair and ziplinePair:FindFirstChild("zipline")
+						if ziplinePair and ziplineObj then
+							useZipline:FireServer(ziplinePair, ziplineObj)
+						end
+						task.wait(2)
+
+						guideRemote:InvokeServer("InteractQuestGiver", "JungleQuest")
+						task.wait(0.5)
+
+						cfg.isAutoGrapplingHook = false
+						if Window and Window.Flags and Window.Flags["ToggleAutoGrapplingHook"] then
+							Window.Flags["ToggleAutoGrapplingHook"]:Set(false)
+						end
+						if getgenv().LonumObject then
+							getgenv().LonumObject:Notify({
+								Title = "Auto Grappling Hook",
+								Content = "Quest Zipline Repair successfully completed!",
+								Duration = 5,
+							})
+						end
+					end)
+
+					if not success then
+						warn("[Auto Grappling Hook Error]: " .. tostring(err))
+						task.wait(2)
+					end
 				end
 			end)
 		end
@@ -8366,7 +10511,9 @@ Tabs.Sea1:CreateToggle({
 						end
 
 						local foundTarget = false
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Colosseum")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not cfg.isAutoCrowd then
 								break
 							end
@@ -8444,7 +10591,9 @@ Tabs.Sea1:CreateToggle({
 						end
 
 						if not foundTarget then
-							for _, obj in ipairs(workspace:GetDescendants()) do
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Magma")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
 								if not cfg.isAutoMagmaEvent then
 									break
 								end
@@ -8496,7 +10645,9 @@ Tabs.Sea1:CreateToggle({
 						end
 
 						local foundPipe = false
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not cfg.isAutoFountainPipe then
 								break
 							end
@@ -8552,7 +10703,9 @@ Tabs.Sea1:CreateToggle({
 						end
 
 						local foundWire = false
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not cfg.isAutoFountainWire then
 								break
 							end
@@ -8610,7 +10763,9 @@ Tabs.Sea1:CreateToggle({
 							return
 						end
 
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Windmill")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not getgenv().AutoWindmill then
 								break
 							end
@@ -8711,7 +10866,9 @@ Tabs.Sea1:CreateToggle({
 							return
 						end
 
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Jungle")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not getgenv().AutoThievingMonkey then
 								break
 							end
@@ -8815,7 +10972,9 @@ Tabs.Sea1:CreateToggle({
 							return
 						end
 
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Desert")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not getgenv().AutoPricklyHarvest then
 								break
 							end
@@ -8867,7 +11026,9 @@ Tabs.Sea1:CreateToggle({
 							return
 						end
 
-						for _, obj in ipairs(workspace:GetDescendants()) do
+						local map = workspace:FindFirstChild("Map")
+						local searchFolder = (map and map:FindFirstChild("Snow")) or workspace
+						for _, obj in ipairs(searchFolder:GetChildren()) do
 							if not getgenv().AutoSnowman then
 								break
 							end
@@ -9419,7 +11580,7 @@ Tabs.Sea2:CreateToggle({
 	Flag = "ToggleAutoFactory",
 	Callback = function(Value)
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoRaidKill = false
 			isAutoBone = false
 			isAutoTorch = false
@@ -9570,7 +11731,7 @@ Tabs.Settings:CreateKeybind({
 
 Tabs.Settings:CreateSection("UNC Engine Optimizations")
 Tabs.Settings:CreateToggle({
-	Name = "FPS Boost)",
+	Name = "FPS Boost",
 	CurrentValue = false,
 	Flag = "UNC_FPSBoost",
 	Callback = function(Value)
@@ -9578,30 +11739,86 @@ Tabs.Settings:CreateToggle({
 			if Value then
 				SmartSetProperty(game.Lighting, "Technology", 2)
 				pcall(function()
-					game.Lighting.GlobalShadows = false
+					local l = game:GetService("Lighting")
+					l.GlobalShadows = false
+					l.FogEnd = 9e9
+					l.EnvironmentDiffuseScale = 0
+					l.EnvironmentSpecularScale = 0
 				end)
 				pcall(function()
-					game.Lighting.FogEnd = 9e9
+					local t = workspace.Terrain
+					t.WaterWaveSize = 0
+					t.WaterWaveSpeed = 0
+					t.WaterReflectance = 0
+					t.WaterTransparency = 1
 				end)
+				for _, v in ipairs(game:GetService("Lighting"):GetDescendants()) do
+					if
+						v:IsA("BlurEffect")
+						or v:IsA("SunRaysEffect")
+						or v:IsA("ColorCorrectionEffect")
+						or v:IsA("BloomEffect")
+						or v:IsA("DepthOfFieldEffect")
+						or v:IsA("Atmosphere")
+					then
+						pcall(function()
+							v.Enabled = false
+						end)
+					end
+				end
 				for _, v in ipairs(workspace:GetDescendants()) do
 					if v:IsA("BasePart") then
 						pcall(function()
 							v.Material = Enum.Material.SmoothPlastic
+							v.CastShadow = false
 						end)
 					elseif v:IsA("Texture") or v:IsA("Decal") then
 						pcall(function()
 							v.Transparency = 1
+						end)
+					elseif
+						v:IsA("ParticleEmitter")
+						or v:IsA("Trail")
+						or v:IsA("Beam")
+						or v:IsA("Sparkles")
+						or v:IsA("Fire")
+						or v:IsA("Smoke")
+					then
+						pcall(function()
+							v.Enabled = false
 						end)
 					end
 				end
 			else
 				SmartSetProperty(game.Lighting, "Technology", 3)
 				pcall(function()
-					game.Lighting.GlobalShadows = true
+					local l = game:GetService("Lighting")
+					l.GlobalShadows = true
+					l.FogEnd = 10000
+					l.EnvironmentDiffuseScale = 1
+					l.EnvironmentSpecularScale = 1
 				end)
 				pcall(function()
-					game.Lighting.FogEnd = 10000
+					local t = workspace.Terrain
+					t.WaterWaveSize = 0.15
+					t.WaterWaveSpeed = 10
+					t.WaterReflectance = 1
+					t.WaterTransparency = 0.3
 				end)
+				for _, v in ipairs(game:GetService("Lighting"):GetDescendants()) do
+					if
+						v:IsA("BlurEffect")
+						or v:IsA("SunRaysEffect")
+						or v:IsA("ColorCorrectionEffect")
+						or v:IsA("BloomEffect")
+						or v:IsA("DepthOfFieldEffect")
+						or v:IsA("Atmosphere")
+					then
+						pcall(function()
+							v.Enabled = true
+						end)
+					end
+				end
 			end
 		end)
 	end,
@@ -9748,8 +11965,8 @@ FarmToggle = Tabs.Main:CreateToggle({
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
-		enabled = Value
-		if enabled then
+		isAutoFarm = Value
+		if isAutoFarm then
 			StartAutoFarm()
 		else
 			StopAutoFarm()
@@ -9773,22 +11990,53 @@ Tabs.Main:CreateToggle({
 	Callback = function(Value)
 		farmNearestEnabled = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
 
 			StartFarmNearest()
 		else
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
+			StopAllActivities()
+		end
+	end,
+})
+Tabs.Main:CreateToggle({
+	Name = "Auto Farm Magnet",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarmMagnet",
+	Callback = function(Value)
+		cfg.isAutoFarmMagnet = Value
+		if Value then
+			isAutoFarm = false
+			farmNearestEnabled = false
+			isAutoBone = false
+			isAutoMaterial = false
+			isAutoCakePrince = false
+			isAutoDoughKing = false
+			if FarmToggle then
+				FarmToggle:Set(false)
+			end
+
+			autoFarmMagnetWorkerGen = autoFarmMagnetWorkerGen + 1
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
+			end
+			isReadyToAttack = false
+			currentTargetInstance = nil
+			StartAutoFarmMagnet()
+		else
+			autoFarmMagnetWorkerGen = autoFarmMagnetWorkerGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -9812,7 +12060,7 @@ Tabs.Main:CreateToggle({
 	Callback = function(Value)
 		cfg.isAutoBerry = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
@@ -9882,22 +12130,22 @@ Tabs.Sea3:CreateToggle({
 	Callback = function(Value)
 		isAutoBone = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			FarmToggle:Set(false)
 			isAutoMaterial = false
 
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
 			lastTargetPos = nil
 			StartAutoBone()
 		else
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -9910,7 +12158,7 @@ Tabs.Sea3:CreateToggle({
 	Callback = function(Value)
 		isAutoCakePrince = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoBone = false
 			isAutoMaterial = false
 			if FarmToggle then
@@ -9919,9 +12167,9 @@ Tabs.Sea3:CreateToggle({
 
 			cakePrinceWorkerGeneration = cakePrinceWorkerGeneration + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
@@ -9943,7 +12191,7 @@ Tabs.Sea3:CreateToggle({
 		isAutoDoughKing = Value
 		isAutodoughKing = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoBone = false
 			isAutoMaterial = false
 			if FarmToggle then
@@ -9952,9 +12200,9 @@ Tabs.Sea3:CreateToggle({
 
 			doughKingWorkerGeneration = doughKingWorkerGeneration + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
@@ -9977,24 +12225,24 @@ Tabs.Sea3:CreateToggle({
 	Callback = function(Value)
 		isAutoEliteHunter = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoBone = false
 			isAutoMaterial = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
 
-			eliteHunterWorkerGen = eliteHunterWorkerGen + 1
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			State.EliteHunterGen = State.EliteHunterGen + 1
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
 			StartAutoEliteHunter()
 		else
 			isEliteHunterActive = false
-			eliteHunterWorkerGen = eliteHunterWorkerGen + 1
+			State.EliteHunterGen = State.EliteHunterGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -10009,9 +12257,9 @@ Tabs.Main:CreateToggle({
 		isReadyToAttack = false
 		currentTargetInstance = nil
 		lastTargetPos = nil
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
 	end,
 })
@@ -10136,23 +12384,23 @@ Tabs.Main:CreateToggle({
 	Callback = function(Value)
 		isAutoMaterial = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoBone = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
 			lastTargetPos = nil
 			StartAutoMaterialFarm()
 		else
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -10170,16 +12418,16 @@ Tabs.Main:CreateDropdown({
 		isReadyToAttack = false
 		currentTargetInstance = nil
 		lastTargetPos = nil
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
 	end,
 })
 
 Tabs.Main:CreateDropdown({
 	Name = "Attack Speed",
-	Options = { "Fast Attack", "Super Fast Attack" },
+	Options = { "Fast Attack", "Super Fast Attack", "Beta Fast Attack" },
 	CurrentOption = { "Fast Attack" },
 	MultipleOptions = false,
 	Flag = "AtkSpeedDrop",
@@ -10324,9 +12572,9 @@ Tabs.Sea3:CreateToggle({
 		autoChest = state
 
 		if not state then
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			return
 		end
@@ -10407,11 +12655,11 @@ Tabs.Sea3:CreateToggle({
 	CurrentValue = false,
 	Flag = "ToggleKitsuneEmber",
 	Callback = function(Value)
-		AutoEmber = Value
+		State.AutoEmber = Value
 
 		if Value then
 			task.spawn(function()
-				while AutoEmber do
+				while State.AutoEmber do
 					local char = GetCharacter()
 					local myHrp = char and char:FindFirstChild("HumanoidRootPart")
 
@@ -10564,16 +12812,16 @@ Tabs.Sea3:CreateToggle({
 				end
 				return
 			end
-			enabled = false
+			isAutoFarm = false
 			isAutoRaidKill = false
 			isAutoBone = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 			StartAutoHaze()
 		else
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -10584,24 +12832,24 @@ Tabs.Travel:CreateToggle({
 	CurrentValue = false,
 	Flag = "AutoKillEnemy",
 	Callback = function(Value)
-		autoKillVolcano = Value
+		State.AutoKillVolcano = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			if FarmToggle then
 				FarmToggle:Set(false)
 			end
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 
-			if activeTween then
-				activeTween:Cancel()
-				activeTween = nil
+			if Runtime.activeTween then
+				Runtime.activeTween:Cancel()
+				Runtime.activeTween = nil
 			end
 			isReadyToAttack = false
 			currentTargetInstance = nil
 
 			StartAutoKillVolcano()
 		else
-			workerGeneration = workerGeneration + 1
+			State.WorkerGen = State.WorkerGen + 1
 			StopAllActivities()
 		end
 	end,
@@ -10687,10 +12935,10 @@ Tabs.Travel:CreateToggle({
 						CFrame.lookAt(myHrp.Position, Vector3.new(volcanoRockPos.X, myHrp.Position.Y, volcanoRockPos.Z))
 					if bg then
 						bg.CFrame = lookCFrame
-					elseif not activeTween then
+					elseif not Runtime.activeTween then
 						myHrp.CFrame = lookCFrame
 					end
-					for _, keyCode in ipairs(skillKeys) do
+					for _, keyCode in ipairs(Runtime.skillKeys) do
 						local skillName = keyCode.Name
 
 						if not IsCooldown(skillName) then
@@ -10744,9 +12992,9 @@ Tabs.Travel:CreateToggle({
 	Flag = "AutoChestEnabled",
 	Callback = function(Value)
 		cfg.autoChest = Value
-		if not Value and activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if not Value and Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 			ToggleFloat(false)
 		end
 	end,
@@ -10758,9 +13006,9 @@ Tabs.Travel:CreateToggle({
 	Flag = "AutoFruitEnabled",
 	Callback = function(Value)
 		cfg.autoFruit = Value
-		if not Value and activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if not Value and Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 			ToggleFloat(false)
 		end
 	end,
@@ -10928,10 +13176,32 @@ Tabs.Settings:CreateSlider({
 	Callback = function(Value)
 		cfg.TweenSpeed = Value
 
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
+		if Runtime.activeTween then
+			Runtime.activeTween:Cancel()
+			Runtime.activeTween = nil
 		end
+	end,
+})
+
+Tabs.Settings:CreateSection("CFrame Speed (Undetected)")
+
+Tabs.Settings:CreateToggle({
+	Name = "CFrame WalkSpeed",
+	CurrentValue = cfg.cframeSpeed,
+	Flag = "CFrameWalkSpeedToggle",
+	Callback = function(Value)
+		cfg.cframeSpeed = Value
+	end,
+})
+
+Tabs.Settings:CreateSlider({
+	Name = "CFrame Speed Magnitude",
+	Range = { 10, 250 },
+	Increment = 5,
+	CurrentValue = cfg.cframeSpeedValue,
+	Flag = "CFrameSpeedMagSlider",
+	Callback = function(Value)
+		cfg.cframeSpeedValue = Value
 	end,
 })
 
@@ -10986,7 +13256,7 @@ Tabs.Dungeon:CreateToggle({
 	Callback = function(Value)
 		isAutoDungeon = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoRaidKill = false
 			isAutoBone = false
 			if FarmToggle then
@@ -11027,7 +13297,19 @@ Tabs.Dungeon:CreateToggle({
 	end,
 })
 
-local islandOptions = GetIslandLocations()
+local function GetCurrentSeaIslands()
+	local _, seaNum = GetCurrentSea()
+	local seaKey = (seaNum == 3 and "Sea3") or (seaNum == 2 and "Sea2") or "Sea1"
+	local options = {}
+	local seaTable = Islands[seaKey] or Islands["Sea1"]
+	for name, _ in pairs(seaTable) do
+		table.insert(options, name)
+	end
+	table.sort(options)
+	return options
+end
+
+islandOptions = GetCurrentSeaIslands()
 
 Tabs.Travel:CreateButton({
 	Name = "Open Fruit Dealer",
@@ -11055,11 +13337,11 @@ Tabs.Travel:CreateButton({
 	end,
 })
 
-local selectedIslandToTeleport = ""
+selectedIslandToTeleport = islandOptions[1] or ""
 Tabs.Travel:CreateDropdown({
 	Name = "Select Island",
 	Options = islandOptions,
-	CurrentOption = { islandOptions[1] or "" },
+	CurrentOption = { selectedIslandToTeleport },
 	MultipleOptions = false,
 	Flag = "TeleportIslandDrop",
 	Callback = function(Option)
@@ -11067,8 +13349,8 @@ Tabs.Travel:CreateDropdown({
 	end,
 })
 
-local isTeleportingToIsland = false
-local teleportIslandWorker = 0
+isTeleportingToIsland = false
+teleportIslandWorker = 0
 Tabs.Travel:CreateToggle({
 	Name = "Auto Teleport",
 	CurrentValue = false,
@@ -11082,7 +13364,8 @@ Tabs.Travel:CreateToggle({
 			return
 		end
 
-		if selectedIslandToTeleport == "" or selectedIslandToTeleport == "No islands found (Error)" then
+		local targetCFrame = GetIslandCFrame(selectedIslandToTeleport)
+		if not targetCFrame then
 			if getgenv().LonumObject then
 				getgenv().LonumObject:Notify({
 					Title = "Teleport Failed",
@@ -11094,17 +13377,17 @@ Tabs.Travel:CreateToggle({
 			return
 		end
 
-		enabled = false
+		isAutoFarm = false
 		isAutoBone = false
 		isAutoMaterial = false
 		isAutoCakePrince = false
 		isAutoDoughKing = false
 		isAutodoughKing = false
 		isAutoEliteHunter = false
-		autoKillVolcano = false
+		State.AutoKillVolcano = false
 		cfg.autoSeaBeast = false
 		cfg.isTeleportingToIsland = true
-		workerGeneration = workerGeneration + 1
+		State.WorkerGen = State.WorkerGen + 1
 		if FarmToggle then
 			FarmToggle:Set(false)
 		end
@@ -11113,43 +13396,38 @@ Tabs.Travel:CreateToggle({
 		teleportIslandWorker = teleportIslandWorker + 1
 		local gen = teleportIslandWorker
 
-		local origin = workspace:FindFirstChild("_WorldOrigin")
-		local locations = origin and origin:FindFirstChild("Locations")
-		local targetIsland = locations and locations:FindFirstChild(selectedIslandToTeleport)
+		local safeCFrame = targetCFrame * CFrame.new(0, 80, 0)
+		if getgenv().LonumObject then
+			getgenv().LonumObject:Notify({
+				Title = "Teleportasi Dimulai",
+				Content = "Terbang menuju " .. selectedIslandToTeleport .. ". Matikan toggle untuk berhenti.",
+				Duration = 3,
+				Image = 4483362458,
+			})
+		end
 
-		if targetIsland then
-			local targetCFrame = targetIsland:IsA("Model") and targetIsland:GetPivot() or targetIsland.CFrame
-			local safeCFrame = targetCFrame * CFrame.new(0, 150, 0)
-
-			if getgenv().LonumObject then
-				getgenv().LonumObject:Notify({
-					Title = "Teleportasi Dimulai",
-					Content = "Terbang menuju " .. selectedIslandToTeleport .. ". Matikan toggle untuk berhenti.",
-					Duration = 3,
-					Image = 4483362458,
-				})
-			end
-
-			task.spawn(function()
-				while isTeleportingToIsland and ScriptContext.Running and gen == teleportIslandWorker do
-					local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
-					if hrp then
-						ToggleFloat(true)
-						local dist = (hrp.Position - safeCFrame.Position).Magnitude
-						if dist > 50 then
-							if not isTeleporting and not activeTween then
-								TweenTo(safeCFrame)
-							end
-						else
-							isTeleportingToIsland = false
-							cfg.isTeleportingToIsland = false
-							StopAllActivities()
+		task.spawn(function()
+			while isTeleportingToIsland and ScriptContext.Running and gen == teleportIslandWorker do
+				local hrp = GetCharacter() and GetCharacter():FindFirstChild("HumanoidRootPart")
+				if hrp then
+					ToggleFloat(true)
+					local dist = (hrp.Position - safeCFrame.Position).Magnitude
+					if dist > 35 then
+						if not isTeleporting and not Runtime.activeTween then
+							TweenTo(safeCFrame)
+						end
+					else
+						isTeleportingToIsland = false
+						cfg.isTeleportingToIsland = false
+						StopAllActivities()
+						if Window and Window.Flags and Window.Flags["ToggleTeleportIsland"] then
+							Window.Flags["ToggleTeleportIsland"]:Set(false)
 						end
 					end
-					task.wait(0.2)
 				end
-			end)
-		end
+				task.wait(0.2)
+			end
+		end)
 	end,
 })
 
@@ -11196,7 +13474,7 @@ Tabs.PVP:CreateToggle({
 	Callback = function(Value)
 		isTweeningToPlayer = Value
 		if Value then
-			enabled = false
+			isAutoFarm = false
 			isAutoRaidKill = false
 			isAutoBone = false
 			if FarmToggle then
@@ -11218,12 +13496,16 @@ Tabs.PVP:CreateToggle({
 					and targetPlayer.Character
 					and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 				then
+					local playerInfo = GetPlayerDisplayInfo(targetPlayer)
+					if playerInfo and (playerInfo.IsFriendly or playerInfo.IsSameMarine) then
+						return
+					end
 					local tHrp = targetPlayer.Character.HumanoidRootPart
 					TweenTo(tHrp.CFrame * CFrame.new(0, cfg.TweenHeight, 0))
 				else
-					if activeTween then
-						activeTween:Cancel()
-						activeTween = nil
+					if Runtime.activeTween then
+						Runtime.activeTween:Cancel()
+						Runtime.activeTween = nil
 					end
 				end
 			end)
@@ -11301,13 +13583,17 @@ Tabs.PVP:CreateToggle({
 					and targetPlayer.Character
 					and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 				then
+					local playerInfo = GetPlayerDisplayInfo(targetPlayer)
+					if playerInfo and (playerInfo.IsFriendly or playerInfo.IsSameMarine) then
+						return
+					end
 					local tHrp = targetPlayer.Character.HumanoidRootPart
 					local bg = myHrp:FindFirstChild("BodyGyroClip")
 					local lookCFrame =
 						CFrame.lookAt(myHrp.Position, Vector3.new(tHrp.Position.X, myHrp.Position.Y, tHrp.Position.Z))
 					if bg then
 						bg.CFrame = lookCFrame
-					elseif not activeTween then
+					elseif not Runtime.activeTween then
 						myHrp.CFrame = lookCFrame
 					end
 				end
@@ -11344,13 +13630,13 @@ local function GetCurrentScriptTask()
 	if farmNearestEnabled then
 		return "Farm Nearest"
 	end
-	if autoKillVolcano then
+	if State.AutoKillVolcano then
 		return "Auto Volcano"
 	end
 	if isAutoMaterial then
 		return "Auto Material (" .. tostring(selectedMaterialTarget) .. ")"
 	end
-	if enabled then
+	if isAutoFarm then
 		return "Auto Farm Level"
 	end
 	return "Idle"
@@ -11365,7 +13651,7 @@ Tabs.Status:CreateToggle({
 		getgenv().ESPPlayers = Value
 	end,
 })
-HandleESP(game:GetService("Players"), "ESP_Player", Color3.fromRGB(255, 255, 255), "ESPPlayers")
+HandlePlayerESP("ESPPlayers")
 
 Tabs.Status:CreateToggle({
 	Name = "ESP Chests",
@@ -11375,11 +13661,12 @@ Tabs.Status:CreateToggle({
 		getgenv().ESPChests = Value
 	end,
 })
-HandleESP(function()
+HandleUniversalESP(function()
 	local chests = {}
-	for _, v in ipairs(workspace:GetDescendants()) do
-		if string.find(string.lower(v.Name), "chest") and v:IsA("Model") then
-			table.insert(chests, v)
+	local chestFolder = workspace:FindFirstChild("ChestModels")
+	if chestFolder then
+		for _, c in ipairs(chestFolder:GetChildren()) do
+			table.insert(chests, c)
 		end
 	end
 	return chests
@@ -11393,7 +13680,7 @@ Tabs.Status:CreateToggle({
 		getgenv().ESPFruits = Value
 	end,
 })
-HandleESP(function()
+HandleUniversalESP(function()
 	local fruits = {}
 	for _, v in ipairs(workspace:GetChildren()) do
 		if IsFruitEntity(v) then
@@ -11403,32 +13690,197 @@ HandleESP(function()
 	return fruits
 end, "ESP_Fruit", Color3.fromRGB(255, 0, 100), "ESPFruits")
 
+local function GetServerStirsAndWeather()
+	local data = {
+		StirsText = "None / Inactive",
+		WeatherText = "Clear Sky",
+		ActiveAwakenedBoss = nil,
+		MagnetEvent = nil,
+		SystemText = "FPS: - | Ping: - | Mem: -",
+	}
+
+	pcall(function()
+		local stats = game:GetService("Stats")
+		local ping = "0"
+		pcall(function()
+			local perfStats = stats:FindFirstChild("Network") and stats.Network:FindFirstChild("ServerStatsItem")
+			local dataPing = perfStats and perfStats:FindFirstChild("Data Ping")
+			ping = dataPing and tostring(math.floor(dataPing:GetValue())) or "0"
+		end)
+		local mem = math.floor(stats:GetTotalMemoryUsageMb())
+		local fps = math.floor(1 / game:GetService("RunService").RenderStepped:Wait())
+		data.SystemText = string.format("FPS: %d | Ping: %dms | Mem: %dMB", fps, tonumber(ping) or 0, mem)
+	end)
+
+	pcall(function()
+		local Net = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
+			and game:GetService("ReplicatedStorage").Modules:FindFirstChild("Net")
+		local hintRemote = Net and Net:FindFirstChild("RF/RequestNextRaidHint")
+		if hintRemote then
+			local res = hintRemote:InvokeServer()
+			if res and type(res) == "table" then
+				local bossName = tostring(res.Boss or "Boss")
+				local islandName = tostring(res.Island or "Island")
+				local state = tostring(res.State or "Scheduled")
+				local seconds = tonumber(res.Seconds) or 0
+				local mins = math.max(1, math.ceil(seconds / 60))
+
+				if state == "Arming" then
+					data.StirsText = string.format("[Arming] %s about to stir on %s", bossName, islandName)
+				elseif state == "Deferred" then
+					data.StirsText = string.format("[Deferred] %s waiting on %s", bossName, islandName)
+				elseif state == "Armed" or state == "Triggered" then
+					data.StirsText = string.format("[Active] %s on %s", bossName, islandName)
+					data.ActiveAwakenedBoss = bossName
+				else
+					data.StirsText = string.format("%s on %s in ~%dm", bossName, islandName, mins)
+				end
+			end
+		end
+
+		local function checkAwakenedModel(e)
+			if not e or not e:IsA("Model") then
+				return false
+			end
+			local hum = e:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				if
+					e:GetAttribute("IsAwakened")
+					or e:GetAttribute("Awakened")
+					or e:GetAttribute("BossPrimed")
+					or e:FindFirstChild("BossHealthBar")
+				then
+					data.ActiveAwakenedBoss = e.Name
+					local statusPrefix = "[Boss]"
+					data.StirsText = string.format(
+						"%s %s (HP: %d/%d)",
+						statusPrefix,
+						e.Name,
+						math.floor(hum.Health),
+						math.floor(hum.MaxHealth)
+					)
+					return true
+				end
+			end
+			return false
+		end
+
+		local enemiesFolder = workspace:FindFirstChild("Enemies")
+		local foundAwakened = false
+		if enemiesFolder then
+			for _, e in ipairs(enemiesFolder:GetChildren()) do
+				if checkAwakenedModel(e) then
+					foundAwakened = true
+					break
+				end
+			end
+		end
+
+		-- Check unrendered / culled models in ReplicatedStorage containers
+		if not foundAwakened then
+			for _, container in ipairs(enemyContainerPaths) do
+				if container then
+					for _, e in ipairs(container:GetChildren()) do
+						if checkAwakenedModel(e) then
+							foundAwakened = true
+							break
+						end
+					end
+				end
+				if foundAwakened then
+					break
+				end
+			end
+		end
+
+		local weatherEvents = {}
+		local celestialCd = workspace:GetAttribute("CelestialEventCountdown")
+		local celestialActive = workspace:GetAttribute("CelestialEventActive")
+		local lightningTime = workspace:GetAttribute("LightningEventTimeLeft")
+		local corruptedTime = workspace:GetAttribute("CorruptedEventTimeLeft")
+		local seaTheme = workspace.Terrain and workspace.Terrain:GetAttribute("SeaTheme") or "Default"
+
+		if celestialActive then
+			table.insert(weatherEvents, "Celestial Surge (Active)")
+		elseif celestialCd and celestialCd > 0 then
+			table.insert(weatherEvents, string.format("Celestial Surge (%ds)", math.floor(celestialCd)))
+		end
+
+		if lightningTime and lightningTime > 0 then
+			table.insert(weatherEvents, string.format("Lightning Event (%ds)", math.floor(lightningTime)))
+		end
+
+		if corruptedTime and corruptedTime > 0 then
+			table.insert(weatherEvents, string.format("Corrupted Event (%ds)", math.floor(corruptedTime)))
+		end
+
+		if seaTheme and seaTheme ~= "Default" then
+			table.insert(weatherEvents, "Theme: " .. tostring(seaTheme))
+		end
+
+		if #weatherEvents > 0 then
+			data.WeatherText = table.concat(weatherEvents, " | ")
+		else
+			data.WeatherText = "Clear Sky"
+		end
+
+		local magnetTokensFolder = workspace:FindFirstChild("_WorldOrigin")
+			and workspace._WorldOrigin:FindFirstChild("InteractiveEffects")
+			and workspace._WorldOrigin.InteractiveEffects:FindFirstChild("MagnetEventTokens")
+		local magnetCfg = game.ReplicatedStorage:FindFirstChild("EventConfig")
+			and game.ReplicatedStorage.EventConfig:FindFirstChild("MagnetEvent26")
+
+		if magnetCfg then
+			local ok, cfgData = pcall(function()
+				return require(magnetCfg)
+			end)
+			if ok and cfgData and cfgData.ENABLED then
+				local tokenCount = 0
+				if magnetTokensFolder then
+					for _, f in ipairs(magnetTokensFolder:GetChildren()) do
+						tokenCount = tokenCount + #f:GetChildren()
+					end
+				end
+				if tokenCount > 0 then
+					data.MagnetEvent = string.format("Active (%d Tokens)", tokenCount)
+				else
+					data.MagnetEvent = "Inactive"
+				end
+			else
+				data.MagnetEvent = "Inactive"
+			end
+		else
+			data.MagnetEvent = "Inactive"
+		end
+	end)
+
+	return data
+end
+
 task.spawn(function()
 	while ScriptContext.Running do
 		pcall(function()
-			local Net = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
-				and game:GetService("ReplicatedStorage").Modules:FindFirstChild("Net")
-			local hintRemote = Net and Net:FindFirstChild("RF/RequestNextRaidHint")
+			local info = GetServerStirsAndWeather()
+			getgenv().lastStirsText = info.StirsText
+			getgenv().lastWeatherText = info.WeatherText
+			getgenv().lastMagnetEventText = info.MagnetEvent or "Inactive"
+			getgenv().lastSystemText = info.SystemText
+			getgenv().lastAwakenedBossData = info
 
-			if hintRemote then
-				local res = hintRemote:InvokeServer()
-				if res and type(res) == "table" and res.Boss then
-					local bossName = tostring(res.Boss)
-					local islandName = tostring(res.Island or "Unknown")
-					local state = tostring(res.State or "Unknown")
-					local seconds = tonumber(res.Seconds) or 0
-					local mins = math.floor(seconds / 60)
-					local secs = seconds % 60
-					local timeStr = string.format("%02d:%02d", mins, secs)
-
-					local bText = string.format("%s (%s) [%s - %s]", bossName, islandName, state, timeStr)
-					getgenv().lastAwakenedBossText = bText
-				else
-					getgenv().lastAwakenedBossText = "None / Inactive"
-				end
+			if SystemLabel and SystemLabel.SetText then
+				SystemLabel:SetText("System: " .. info.SystemText)
+			end
+			if StirsLabel and StirsLabel.SetText then
+				StirsLabel:SetText("Stirs: " .. info.StirsText)
+			end
+			if WeatherLabel and WeatherLabel.SetText then
+				WeatherLabel:SetText("Weather: " .. info.WeatherText)
+			end
+			if MagnetEventLabel and MagnetEventLabel.SetText then
+				MagnetEventLabel:SetText("Magnet Event: " .. (info.MagnetEvent or "Inactive"))
 			end
 		end)
-		task.wait(0.2)
+		task.wait(1.5)
 	end
 end)
 
@@ -11594,10 +14046,8 @@ Tabs.Misc:CreateToggle({
 		getgenv().AutoStoreFruit = Value
 		task.spawn(function()
 			while getgenv().AutoStoreFruit do
-				task.wait(1)
+				task.wait(1.5)
 				pcall(function()
-					local CommF_ = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-						and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
 					if CommF_ then
 						local bag = player:FindFirstChildOfClass("Backpack")
 						local char = player.Character
@@ -11735,7 +14185,9 @@ getgenv().HUD_Config = getgenv().HUD_Config
 		ShowMoon = true,
 		ShowBlueMoon = true,
 		ShowCakePrince = true,
-		ShowAwakenedBoss = true,
+		ShowStirs = true,
+		ShowWeather = true,
+		ShowMagnetEvent = true,
 	}
 
 Tabs.Status:CreateToggle({
@@ -11756,10 +14208,31 @@ Tabs.Status:CreateToggle({
 					and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("CommF_")
 
 				while isDebugActive and ScriptContext.Running and gen == debugWorker do
-					local phaseNum = Lighting:GetAttribute("MoonPhase") or 0
+					local phaseName = "Moon: 0/5"
+					pcall(function()
+						local sky = game:GetService("Lighting"):FindFirstChildOfClass("Sky")
+							or game:GetService("Lighting"):FindFirstChild("Sky")
+						if sky and sky.MoonTextureId then
+							local tid = tostring(sky.MoonTextureId)
+							if string.find(tid, "9709149431") then
+								phaseName = "Moon: 5/5 (Full Moon)"
+							elseif string.find(tid, "9709149052") then
+								phaseName = "Moon: 4/5"
+							elseif string.find(tid, "9709143733") then
+								phaseName = "Moon: 3/5"
+							elseif string.find(tid, "9709150401") then
+								phaseName = "Moon: 2/5"
+							elseif string.find(tid, "9709149680") then
+								phaseName = "Moon: 1/5"
+							else
+								phaseName = "Moon: 0/5"
+							end
+						else
+							local phaseNum = Lighting:GetAttribute("MoonPhase") or 0
+							phaseName = MoonPhases[phaseNum] or (tostring(phaseNum) .. " (Unknown)")
+						end
+					end)
 					local isBlueMoon = Lighting:GetAttribute("IsBlueMoon") or false
-
-					local phaseName = MoonPhases[phaseNum] or (tostring(phaseNum) .. " (Unknown)")
 					local blueMoonStatus = isBlueMoon and "✅ Active" or "❌ Inactive"
 
 					if os.clock() - lastCakeCheck > 1 then
@@ -11796,10 +14269,16 @@ Tabs.Status:CreateToggle({
 					if getgenv().HUD_Config.ShowCakePrince then
 						table.insert(hudLines, "Cake Prince: " .. tostring(lastCakeStatus))
 					end
-					if getgenv().HUD_Config.ShowAwakenedBoss then
+					if getgenv().HUD_Config.ShowStirs then
+						table.insert(hudLines, "Stirs: " .. tostring(getgenv().lastStirsText or "None / Inactive"))
+					end
+					if getgenv().HUD_Config.ShowWeather then
+						table.insert(hudLines, "Weather: " .. tostring(getgenv().lastWeatherText or "Clear Sky"))
+					end
+					if getgenv().HUD_Config.ShowMagnetEvent then
 						table.insert(
 							hudLines,
-							"Awakened Boss: " .. tostring(getgenv().lastAwakenedBossText or "Checking...")
+							"Magnet Event: " .. tostring(getgenv().lastMagnetEventText or "Inactive")
 						)
 					end
 
@@ -11848,11 +14327,27 @@ Tabs.Status:CreateToggle({
 	end,
 })
 Tabs.Status:CreateToggle({
-	Name = "HUD: Next Awakened Boss",
+	Name = "HUD: Stirs",
 	CurrentValue = true,
-	Flag = "HUD_ShowAwakenedBoss",
+	Flag = "HUD_ShowStirs",
 	Callback = function(v)
-		getgenv().HUD_Config.ShowAwakenedBoss = v
+		getgenv().HUD_Config.ShowStirs = v
+	end,
+})
+Tabs.Status:CreateToggle({
+	Name = "HUD: Weather",
+	CurrentValue = true,
+	Flag = "HUD_ShowWeather",
+	Callback = function(v)
+		getgenv().HUD_Config.ShowWeather = v
+	end,
+})
+Tabs.Status:CreateToggle({
+	Name = "HUD: Magnet Event",
+	CurrentValue = true,
+	Flag = "HUD_ShowMagnetEvent",
+	Callback = function(v)
+		getgenv().HUD_Config.ShowMagnetEvent = v
 	end,
 })
 
