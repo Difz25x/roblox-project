@@ -323,7 +323,65 @@ end
 --=========================================
 -- SUNC CHECKER & ENVIRONMENT VALIDATION
 --=========================================
-function Lonum.UNC(callback)
+function Lonum.UNC(options)
+	options = options or {}
+
+	-- Universal UNC checker arguments:
+	-- Lonum:UNC({
+	--     Tests = {"getgenv", "hookfunction", "request"},
+	--     MinimumRate = 80,
+	--     AutoClose = true,
+	--     CloseDelay = 1.5,
+	--     Title = "UNC Checker",
+	--     Callback = function(results) end
+	-- })
+	--
+	-- Backwards compatible:
+	-- Lonum:UNC(function(results) end)
+
+	if type(options) == "function" then
+		options = {
+			Callback = options
+		}
+	end
+
+	local callback = options.Callback
+	local tests = options.Tests or options.UNC or options.Functions
+
+	if type(tests) ~= "table" or #tests == 0 then
+		tests = {
+			"checkcaller",
+			"getnamecallmethod",
+			"hookmetamethod",
+			"hookfunction",
+			"newcclosure",
+			"getgenv",
+			"getrenv",
+			"getfenv",
+			"getgc",
+			"getnilinstances",
+			"sethiddenproperty",
+			"setreadonly",
+			"getconnections",
+			"firetouchinterest",
+			"queue_on_teleport",
+			"debug.getinfo",
+			"debug.getupvalues",
+			"debug.setupvalue",
+			"readfile",
+			"writefile",
+			"isfile",
+			"isfolder",
+			"makefolder",
+			"require",
+		}
+	end
+
+	local minimumRate = math.clamp(tonumber(options.MinimumRate or options.MinRate or 80) or 80, 0, 100)
+	local autoClose = options.AutoClose ~= false
+	local closeDelay = math.max(tonumber(options.CloseDelay or 1.5) or 1.5, 0)
+	local title = options.Title or "Wait, Load Script... (Make sure you see UNC Test!)"
+
 	local targetParent = GetSafeParent()
 
 	local UNCGui = Instance.new("ScreenGui")
@@ -348,7 +406,6 @@ function Lonum.UNC(callback)
 	TopBar.Parent = MainFrame
 	Instance.new("UICorner", TopBar).CornerRadius = Lonum.Theme.CornerRadius
 
-	-- Fix bottom rounded corners of topbar
 	local Fix = Instance.new("Frame")
 	Fix.Size = UDim2.new(1, 0, 0, 10)
 	Fix.Position = UDim2.new(0, 0, 1, -10)
@@ -360,7 +417,7 @@ function Lonum.UNC(callback)
 	TitleLbl.Size = UDim2.new(1, -20, 1, 0)
 	TitleLbl.Position = UDim2.new(0, 10, 0, 0)
 	TitleLbl.BackgroundTransparency = 1
-	TitleLbl.Text = "Wait, Load Script... (Make sure you see UNC Test!)"
+	TitleLbl.Text = title
 	TitleLbl.TextColor3 = Lonum.Theme.TextTitle
 	TitleLbl.Font = Lonum.Theme.FontBold
 	TitleLbl.TextSize = 14
@@ -403,7 +460,6 @@ function Lonum.UNC(callback)
 	UIListLayout.Padding = UDim.new(0, 5)
 	UIListLayout.Parent = ScrollFrame
 
-	-- Buttons (hidden initially)
 	local ButtonsFrame = Instance.new("Frame")
 	ButtonsFrame.Size = UDim2.new(1, -20, 0, 35)
 	ButtonsFrame.Position = UDim2.new(0, 10, 1, -45)
@@ -434,45 +490,73 @@ function Lonum.UNC(callback)
 	end
 
 	task.spawn(function()
-		local tests = {
-			"checkcaller",
-			"getnamecallmethod",
-			"hookmetamethod",
-			"hookfunction",
-			"newcclosure",
-			"clonefunction",
-			"getgenv",
-			"getrenv",
-			"getfenv",
-			"getsenv",
-			"getgc",
-			"getinstances",
-			"getinstancesbyclass",
-			"getnilinstances",
-			"sethiddenproperty",
-			"gethiddenproperty",
-			"setscriptable",
-			"setreadonly",
-			"getconnections",
-			"firetouchinterest",
-			"fireproximityprompt",
-			"gethui",
-			"queue_on_teleport",
-			"debug.getinfo",
-			"debug.getupvalues",
-			"debug.setupvalue",
-			"readfile",
-			"writefile",
-			"isfile",
-			"isfolder",
-			"makefolder",
-			"Drawing",
-			"require",
-		}
-
 		local passed = 0
 		local fails = 0
 		local logBuffer = ""
+		local results = {}
+
+		local function resolvePath(root, path)
+			local current = root
+			for _, key in ipairs(string.split(path, ".")) do
+				if type(current) == "table" and current[key] ~= nil then
+					current = current[key]
+				else
+					return false, nil
+				end
+			end
+			return current ~= nil, current
+		end
+
+		local function testFunction(funcName)
+			local found = false
+			local value = nil
+
+			-- 1. getgenv first
+			local okEnv, env = pcall(getgenv)
+			if okEnv and type(env) == "table" then
+				found, value = resolvePath(env, funcName)
+			end
+
+			-- 2. normal executor environment
+			if not found then
+				local okEnv2, env2 = pcall(getfenv)
+				if okEnv2 and type(env2) == "table" then
+					found, value = resolvePath(env2, funcName)
+				end
+			end
+
+			-- 3. global environment
+			if not found then
+				local okGlobal, global = pcall(function()
+					return _G
+				end)
+				if okGlobal and type(global) == "table" then
+					found, value = resolvePath(global, funcName)
+				end
+			end
+
+			-- 4. Lua expression fallback for dotted globals / built-ins
+			if not found and type(loadstring) == "function" then
+				local okLoad, chunk = pcall(loadstring, "return " .. funcName)
+				if okLoad and type(chunk) == "function" then
+					local okCall, result = pcall(chunk)
+					if okCall and result ~= nil then
+						found = true
+						value = result
+					end
+				end
+			end
+
+			-- A checker result should represent an actual callable API when possible.
+			if found and value ~= nil then
+				local valueType = type(value)
+				if valueType ~= "function" and valueType ~= "table" then
+					found = false
+				end
+			end
+
+			return found
+		end
 
 		local function logAndPrint(txt, state)
 			local icon = state and "✅" or "❌"
@@ -483,36 +567,13 @@ function Lonum.UNC(callback)
 		end
 
 		for i, funcName in ipairs(tests) do
+			funcName = tostring(funcName)
+
 			ProgFill.Size = UDim2.new(i / #tests, 0, 1, 0)
 			InfoLbl.Text = "Testing: " .. funcName .. " (" .. i .. "/" .. #tests .. ")"
 
-			local path = string.split(funcName, ".")
-			local envObj = getgenv()
-			local found = true
-
-			-- Quick check if function exists in executor environment
-			for _, k in ipairs(path) do
-				if type(envObj) == "table" and envObj[k] ~= nil then
-					envObj = envObj[k]
-				else
-					found = false
-					break
-				end
-			end
-
-			-- Certain built-ins validation
-			if not found then
-				-- if not in getgenv, maybe normal lua environment check
-				local ok, res = pcall(function()
-					return loadstring("return " .. funcName)()
-				end)
-				if ok and res ~= nil then
-					found = true
-				end
-			end
-
-			getgenv().LonumUNCSupport = getgenv().LonumUNCSupport or {}
-			getgenv().LonumUNCSupport[funcName] = found
+			local found = testFunction(funcName)
+			results[funcName] = found
 
 			if found then
 				passed = passed + 1
@@ -527,7 +588,7 @@ function Lonum.UNC(callback)
 			end
 		end
 
-		local Rate = math.floor((passed / #tests) * 100)
+		local Rate = #tests > 0 and math.floor((passed / #tests) * 100) or 0
 		local summary = "🟢 Passed: "
 			.. passed
 			.. " | 🔴 Failed: "
@@ -541,25 +602,36 @@ function Lonum.UNC(callback)
 		logBuffer = logBuffer .. "\n" .. summary
 		print(summary)
 
+		results.Passed = passed
+		results.Failed = fails
+		results.Rate = Rate
+		results.RequiredRate = minimumRate
+		results.Success = Rate >= minimumRate
+
+		getgenv().LonumUNCSupport = results
 		ButtonsFrame.Visible = true
 
 		BtnCopy.MouseButton1Click:Connect(function()
-			if setclipboard then
-				setclipboard(logBuffer)
+			if type(setclipboard) == "function" then
+				pcall(setclipboard, logBuffer)
 			end
 		end)
 
-		if Rate >= 80 then
-			task.wait(1.5)
-			UNCGui:Destroy()
+		if Rate >= minimumRate then
+			if autoClose then
+				task.wait(closeDelay)
+				if UNCGui.Parent then
+					UNCGui:Destroy()
+				end
+			end
+
 			if type(callback) == "function" then
-				callback(getgenv().LonumUNCSupport)
+				pcall(callback, results)
 			end
 		else
-			TitleLbl.Text = "Failed: Executor must support >= 80% UNC"
+			TitleLbl.Text = "Failed: Executor must meet " .. minimumRate .. "% UNC"
 			TitleLbl.TextColor3 = Color3.fromRGB(255, 59, 59)
 
-			-- Change UI to show Kick/Bypass
 			BtnCopy.Size = UDim2.new(0.3, -5, 0, 35)
 
 			local BtnKick = Instance.new("TextButton")
@@ -585,13 +657,15 @@ function Lonum.UNC(callback)
 			Instance.new("UICorner", BtnBypass).CornerRadius = Lonum.Theme.CornerRadius
 
 			BtnKick.MouseButton1Click:Connect(function()
-				game.Players.LocalPlayer:Kick("Executor does not meet the 80% UNC requirements.")
+				game.Players.LocalPlayer:Kick("Executor does not meet the required UNC requirements.")
 			end)
 
 			BtnBypass.MouseButton1Click:Connect(function()
-				UNCGui:Destroy()
+				if UNCGui.Parent then
+					UNCGui:Destroy()
+				end
 				if type(callback) == "function" then
-					callback(getgenv().LonumUNCSupport)
+					pcall(callback, results)
 				end
 			end)
 		end
