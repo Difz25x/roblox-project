@@ -1,17 +1,79 @@
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
+local UNC = {}
+do
+	local function resolve(names)
+		local genv = (type(getgenv) == "function" and getgenv()) or _G
+		local renv = (type(getrenv) == "function" and getrenv()) or {}
+		local fenv = getfenv and getfenv() or {}
+
+		for _, name in ipairs(names) do
+			local fn = rawget(genv, name)
+				or rawget(fenv, name)
+				or rawget(renv, name)
+				or _G[name]
+				or (shared and shared[name])
+			if type(fn) == "function" then
+				return fn
+			end
+			if type(syn) == "table" and type(syn[name]) == "function" then
+				return syn[name]
+			end
+			if type(fluxus) == "table" and type(fluxus[name]) == "function" then
+				return fluxus[name]
+			end
+		end
+		return nil
+	end
+
+	UNC.cloneref = resolve({ "cloneref", "clonereference" })
+	UNC.set_thread_identity =
+		resolve({ "set_thread_identity", "setthreadidentity", "setidentity", "set_thread_context" })
+	UNC.gethui = resolve({ "gethui" })
+	UNC.writefile = resolve({ "writefile" })
+	UNC.readfile = resolve({ "readfile" })
+	UNC.isfile = resolve({ "isfile" })
+	UNC.isfolder = resolve({ "isfolder" })
+	UNC.makefolder = resolve({ "makefolder" })
+	UNC.setclipboard = resolve({ "setclipboard", "toclipboard", "set_clipboard" })
+end
+
+local function SetThreadIdentity(level)
+	if UNC.set_thread_identity then
+		pcall(UNC.set_thread_identity, level or 7)
+	end
+end
+
+local function safeGetService(serviceName)
+	local service = game:GetService(serviceName)
+	if UNC.cloneref then
+		local ok, ref = pcall(UNC.cloneref, service)
+		if ok and ref then
+			return ref
+		end
+	end
+	return service
+end
+
+local TweenService = safeGetService("TweenService")
+local UserInputService = safeGetService("UserInputService")
+local HttpService = safeGetService("HttpService")
+local Players = safeGetService("Players")
 
 local function GetSafeParent()
-	if gethui and type(gethui) == "function" then
-		local success, result = pcall(gethui)
+	SetThreadIdentity(7)
+
+	if UNC.gethui then
+		local success, result = pcall(UNC.gethui)
 		if success and result then
-			return result
+			local okRef, ref = pcall(function()
+				return UNC.cloneref and UNC.cloneref(result) or result
+			end)
+			return (okRef and ref) or result
 		end
 	end
 
 	local success, coreGui = pcall(function()
-		return game:GetService("CoreGui")
+		local cg = game:GetService("CoreGui")
+		return UNC.cloneref and UNC.cloneref(cg) or cg
 	end)
 	if success and coreGui then
 		local robloxGui = coreGui:FindFirstChild("RobloxGui")
@@ -21,24 +83,22 @@ local function GetSafeParent()
 		return coreGui
 	end
 
-	return game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	local lp = (Players and Players.LocalPlayer) or game:GetService("Players").LocalPlayer
+	return lp:WaitForChild("PlayerGui")
 end
 
 local Lonum = {}
 Lonum.__index = Lonum
 
---=========================================
--- THEME & SETTINGS
---=========================================
 Lonum.Theme = {
-	MainBackground = Color3.fromRGB(20, 20, 25), -- #141419
-	SidebarBackground = Color3.fromRGB(15, 15, 20), -- #0f0f14
-	ElementBackground = Color3.fromRGB(30, 30, 35), -- #1e1e23
-	Accent = Color3.fromRGB(85, 120, 255), -- #5578ff
-	TextTitle = Color3.fromRGB(255, 255, 255), -- #ffffff
-	TextNormal = Color3.fromRGB(200, 200, 200), -- #c8c8c8
-	TextDim = Color3.fromRGB(150, 150, 150), -- #969696
-	CornerRadius = UDim.new(0, 10), -- Standard rounded
+	MainBackground = Color3.fromRGB(20, 20, 25),
+	SidebarBackground = Color3.fromRGB(15, 15, 20),
+	ElementBackground = Color3.fromRGB(30, 30, 35),
+	Accent = Color3.fromRGB(85, 120, 255),
+	TextTitle = Color3.fromRGB(255, 255, 255),
+	TextNormal = Color3.fromRGB(200, 200, 200),
+	TextDim = Color3.fromRGB(150, 150, 150),
+	CornerRadius = UDim.new(0, 10),
 	Font = Enum.Font.GothamMedium,
 	FontBold = Enum.Font.GothamBold,
 }
@@ -49,9 +109,6 @@ local configData = {}
 local currentConfigFolder = "Lonum_Data"
 local currentConfigFile = "default_config.json"
 
---=========================================
--- UTILITIES
---=========================================
 local function MakeDraggable(topBar, targetFrame)
 	local dragging, dragInput, dragStart, startPos
 
@@ -95,36 +152,37 @@ local function MakeDraggable(topBar, targetFrame)
 end
 
 function Lonum:SaveConfig()
-	if writefile and HttpService then
+	SetThreadIdentity(7)
+	local wf = UNC.writefile
+	if wf and HttpService then
 		local success, encoded = pcall(function()
 			return HttpService:JSONEncode(configData)
 		end)
-		if success then
-			if not isfolder(currentConfigFolder) and makefolder then
-				makefolder(currentConfigFolder)
+		if success and encoded then
+			local folder = currentConfigFolder
+			if UNC.isfolder and UNC.makefolder and not UNC.isfolder(folder) then
+				pcall(UNC.makefolder, folder)
 			end
-			pcall(function()
-				writefile(currentConfigFolder .. "/" .. currentConfigFile, encoded)
-			end)
+			pcall(wf, folder .. "/" .. currentConfigFile, encoded)
 		end
 	end
 end
 
 function Lonum:LoadConfig()
-	if readfile and isfile and isfile(currentConfigFolder .. "/" .. currentConfigFile) then
+	SetThreadIdentity(7)
+	local rf = UNC.readfile
+	local inf = UNC.isfile
+	if rf and inf and inf(currentConfigFolder .. "/" .. currentConfigFile) then
 		local success, decoded = pcall(function()
-			local content = readfile(currentConfigFolder .. "/" .. currentConfigFile)
+			local content = rf(currentConfigFolder .. "/" .. currentConfigFile)
 			return HttpService:JSONDecode(content)
 		end)
-		if success and decoded then
+		if success and type(decoded) == "table" then
 			configData = decoded
 		end
 	end
 end
 
---=========================================
--- FLOATING HUD (DEBUG MENU)
---=========================================
 local function GenerateRandomName()
 	local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	local name = ""
@@ -136,6 +194,7 @@ local function GenerateRandomName()
 end
 
 function Lonum:CreateFloatingHUD(options)
+	SetThreadIdentity(7)
 	options = options or {}
 	local Title = options.Title or "Server Live Status"
 
@@ -166,7 +225,6 @@ function Lonum:CreateFloatingHUD(options)
 	HUDStroke.Transparency = 0.95
 	HUDStroke.Parent = HUDFrame
 
-	-- Header
 	local Header = Instance.new("Frame")
 	Header.Size = UDim2.new(1, 0, 0, 30)
 	Header.BackgroundTransparency = 1
@@ -204,7 +262,6 @@ function Lonum:CreateFloatingHUD(options)
 	DotCorner.CornerRadius = UDim.new(1, 0)
 	DotCorner.Parent = PulseDot
 
-	-- Pulse Animation
 	task.spawn(function()
 		while PulseDot.Parent do
 			TweenService:Create(
@@ -233,21 +290,17 @@ function Lonum:CreateFloatingHUD(options)
 	ContentLayout.Padding = UDim.new(0, 6)
 	ContentLayout.Parent = ContentContainer
 
-	-- Auto Resize HUD
 	ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		local h = 38 + ContentLayout.AbsoluteContentSize.Y + 12
 		TweenService:Create(HUDFrame, TweenInfo.new(0.2), { Size = UDim2.new(0, 420, 0, h) }):Play()
 	end)
 
 	local HUDObj = {}
-	-- Rows Data
 	local rowCache = {}
 
-	-- UpdateText accepts one key/value row per line.
 	function HUDObj:UpdateText(newText)
 		local lines = string.split(newText, "\n")
 
-		-- Hide unused rows
 		for i = #lines + 1, #rowCache do
 			rowCache[i].Frame.Visible = false
 		end
@@ -263,7 +316,6 @@ function Lonum:CreateFloatingHUD(options)
 				valStr = line
 			end
 
-			-- Cleanup string
 			keyStr = keyStr:gsub("^%s+", ""):gsub("%s+$", "")
 			valStr = valStr:gsub("^%s+", ""):gsub("%s+$", "")
 
@@ -301,7 +353,6 @@ function Lonum:CreateFloatingHUD(options)
 			row.Frame.Visible = true
 			row.Left.Text = keyStr
 
-			-- Color values based on common status keywords.
 			if string.find(string.lower(valStr), "✅") or string.find(string.lower(valStr), "spawned") then
 				row.Right.TextColor3 = Color3.fromRGB(0, 230, 118)
 			elseif string.find(string.lower(valStr), "❌") or string.find(string.lower(valStr), "inactive") then
@@ -320,28 +371,13 @@ function Lonum:CreateFloatingHUD(options)
 	return HUDObj
 end
 
---=========================================
--- SUNC CHECKER & ENVIRONMENT VALIDATION
---=========================================
 function Lonum.UNC(options)
+	SetThreadIdentity(7)
 	options = options or {}
-
-	-- Universal UNC checker arguments:
-	-- Lonum:UNC({
-	--     Tests = {"getgenv", "hookfunction", "request"},
-	--     MinimumRate = 80,
-	--     AutoClose = true,
-	--     CloseDelay = 1.5,
-	--     Title = "UNC Checker",
-	--     Callback = function(results) end
-	-- })
-	--
-	-- Backwards compatible:
-	-- Lonum:UNC(function(results) end)
 
 	if type(options) == "function" then
 		options = {
-			Callback = options
+			Callback = options,
 		}
 	end
 
@@ -511,13 +547,11 @@ function Lonum.UNC(options)
 			local found = false
 			local value = nil
 
-			-- 1. getgenv first
 			local okEnv, env = pcall(getgenv)
 			if okEnv and type(env) == "table" then
 				found, value = resolvePath(env, funcName)
 			end
 
-			-- 2. normal executor environment
 			if not found then
 				local okEnv2, env2 = pcall(getfenv)
 				if okEnv2 and type(env2) == "table" then
@@ -525,7 +559,6 @@ function Lonum.UNC(options)
 				end
 			end
 
-			-- 3. global environment
 			if not found then
 				local okGlobal, global = pcall(function()
 					return _G
@@ -535,7 +568,6 @@ function Lonum.UNC(options)
 				end
 			end
 
-			-- 4. Lua expression fallback for dotted globals / built-ins
 			if not found and type(loadstring) == "function" then
 				local okLoad, chunk = pcall(loadstring, "return " .. funcName)
 				if okLoad and type(chunk) == "function" then
@@ -547,7 +579,6 @@ function Lonum.UNC(options)
 				end
 			end
 
-			-- A checker result should represent an actual callable API when possible.
 			if found and value ~= nil then
 				local valueType = type(value)
 				if valueType ~= "function" and valueType ~= "table" then
@@ -612,8 +643,9 @@ function Lonum.UNC(options)
 		ButtonsFrame.Visible = true
 
 		BtnCopy.MouseButton1Click:Connect(function()
-			if type(setclipboard) == "function" then
-				pcall(setclipboard, logBuffer)
+			local clip = UNC.setclipboard or setclipboard
+			if type(clip) == "function" then
+				pcall(clip, logBuffer)
 			end
 		end)
 
@@ -672,10 +704,8 @@ function Lonum.UNC(options)
 	end)
 end
 
---=========================================
--- WINDOW CREATION
---=========================================
 function Lonum:CreateWindow(options)
+	SetThreadIdentity(7)
 	options = options or {}
 	local Title = options.Name or "Lonum Library"
 	local Subtitle = options.Subtitle or "Made by Difzz"
@@ -695,7 +725,6 @@ function Lonum:CreateWindow(options)
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ScreenGui.Parent = targetParent
 
-	-- MOBILE TOGGLE BUTTON (Cross-Platform Fallback)
 	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 	local MobileBtn = Instance.new("TextButton")
@@ -711,9 +740,8 @@ function Lonum:CreateWindow(options)
 	MobileBtn.AutoButtonColor = false
 	MobileBtn.Parent = ScreenGui
 
-	-- Always show mobile button if requested or if on touch device
 	if not isMobile then
-		MobileBtn.Visible = true -- You can set this to false if you only want it on Mobile
+		MobileBtn.Visible = true
 	end
 
 	local MobileCorner = Instance.new("UICorner")
@@ -730,7 +758,7 @@ function Lonum:CreateWindow(options)
 
 	local MainFrame = Instance.new("Frame")
 	MainFrame.Name = "MainFrame"
-	MainFrame.Size = UDim2.new(0.65, 0, 0.7, 0) -- Responsive Scale Size
+	MainFrame.Size = UDim2.new(0.65, 0, 0.7, 0)
 	MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 	MainFrame.BackgroundColor3 = Lonum.Theme.MainBackground
@@ -758,10 +786,9 @@ function Lonum:CreateWindow(options)
 	MainCorner.CornerRadius = Lonum.Theme.CornerRadius
 	MainCorner.Parent = MainFrame
 
-	-- SIDEBAR
 	local Sidebar = Instance.new("Frame")
 	Sidebar.Name = "Sidebar"
-	Sidebar.Size = UDim2.new(0.3, 0, 1, 0) -- Responsive Width
+	Sidebar.Size = UDim2.new(0.3, 0, 1, 0)
 	Sidebar.BackgroundColor3 = Lonum.Theme.SidebarBackground
 	Sidebar.BorderSizePixel = 0
 	Sidebar.Parent = MainFrame
@@ -792,7 +819,6 @@ function Lonum:CreateWindow(options)
 
 	MakeDraggable(Sidebar, MainFrame)
 
-	-- HEADER
 	local Header = Instance.new("Frame")
 	Header.Size = UDim2.new(1, 0, 0, 65)
 	Header.BackgroundTransparency = 1
@@ -827,7 +853,6 @@ function Lonum:CreateWindow(options)
 	SubLabel.TextXAlignment = Enum.TextXAlignment.Left
 	SubLabel.Parent = Header
 
-	-- TAB CONTAINER IN SIDEBAR
 	local TabContainer = Instance.new("ScrollingFrame")
 	TabContainer.Name = "TabContainer"
 	TabContainer.Size = UDim2.new(1, 0, 1, -65)
@@ -851,7 +876,6 @@ function Lonum:CreateWindow(options)
 		TabContainer.CanvasSize = UDim2.new(0, 0, 0, TabListLayout.AbsoluteContentSize.Y + 30)
 	end)
 
-	-- CONTENT AREA
 	local ContentArea = Instance.new("Frame")
 	ContentArea.Name = "ContentArea"
 	ContentArea.Size = UDim2.new(0.7, 0, 1, 0)
@@ -864,9 +888,6 @@ function Lonum:CreateWindow(options)
 		Tabs = {},
 	}
 
-	--=========================================
-	-- TAB CREATION
-	--=========================================
 	function WindowObj:CreateTab(tabName)
 		local TabButton = Instance.new("TextButton")
 		TabButton.Name = tabName
@@ -962,7 +983,6 @@ function Lonum:CreateWindow(options)
 			self.CurrentTab = tabName
 		end
 
-		-- ELEMENTS BUILDER
 		function TabObj:CreateSection(name)
 			local SecLabel = Instance.new("TextLabel")
 			SecLabel.Size = UDim2.new(1, 0, 0, 30)
@@ -1031,7 +1051,6 @@ function Lonum:CreateWindow(options)
 				ColLayout.Padding = UDim.new(0, 8)
 				ColLayout.Parent = ColFrame
 
-				-- Dummy builder functions inside each column
 				local ColObj = { Frame = ColFrame }
 
 				function ColObj:CreateSection(name)
@@ -1248,8 +1267,6 @@ function Lonum:CreateWindow(options)
 
 			local State = defaultVal
 
-			-- Sinkronisasikan state konfigurasi awal secara aman HANYA JIKA aktif
-			-- Mencegah "false" callbacks merusak workerGeneration skrip saat loading
 			if options.Callback and State == true then
 				pcall(function()
 					options.Callback(State)
@@ -1379,7 +1396,6 @@ function Lonum:CreateWindow(options)
 
 			local Value = defaultVal
 
-			-- Sinkronisasikan state konfigurasi awal secara aman
 			sValLabel.Text = tostring(Value)
 			if options.Callback then
 				pcall(function()
@@ -1519,7 +1535,6 @@ function Lonum:CreateWindow(options)
 				selected = configData[flag]
 			end
 
-			-- Initial state sync
 			dValue.Text = selected .. " ▾"
 			if options.Callback then
 				pcall(function()
@@ -1544,7 +1559,7 @@ function Lonum:CreateWindow(options)
 				if optCount == 0 then
 					return 42
 				end
-				local visibleOpts = math.min(optCount, 4) -- Limit to showing max 4 items at once
+				local visibleOpts = math.min(optCount, 4)
 				return 42 + (visibleOpts * 35)
 			end
 
@@ -1556,7 +1571,7 @@ function Lonum:CreateWindow(options)
 				end
 				for _, opt in ipairs(newOpts or {}) do
 					local oBtn = Instance.new("TextButton")
-					oBtn.Size = UDim2.new(1, -8, 0, 35) -- Leave space for scrollbar
+					oBtn.Size = UDim2.new(1, -8, 0, 35)
 					oBtn.BackgroundColor3 = Lonum.Theme.ElementBackground
 					oBtn.Text = "    " .. opt
 					oBtn.TextColor3 = Lonum.Theme.TextDim
@@ -1644,7 +1659,6 @@ function Lonum:CreateWindow(options)
 			local defaultVal = options.CurrentValue or Enum.KeyCode.K
 
 			if configData[flag] ~= nil then
-				-- Parse from string (JSON save) to Enum
 				local success, result = pcall(function()
 					return Enum.KeyCode[configData[flag]]
 				end)
@@ -1653,12 +1667,10 @@ function Lonum:CreateWindow(options)
 				end
 			end
 
-			-- Update master key
 			if flag == "ToggleUIKeybind" then
 				Lonum.ToggleKey = defaultVal
 			end
 
-			-- Initial state sync
 			if options.Callback then
 				pcall(function()
 					options.Callback(defaultVal)
@@ -1740,7 +1752,6 @@ function Lonum:CreateWindow(options)
 						TweenService:Create(kBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(50, 50, 55) })
 							:Play()
 
-						-- Prevent binding to critical system keys
 						if key ~= Enum.KeyCode.Escape and key ~= Enum.KeyCode.Unknown then
 							Fire(key)
 						else
@@ -1754,16 +1765,14 @@ function Lonum:CreateWindow(options)
 		return TabObj
 	end
 
-	-- Mobile Button Click Toggle
 	MobileBtn.Activated:Connect(function()
 		MainFrame.Visible = not MainFrame.Visible
 	end)
 
-	-- Toggle UI Visibility Logic (Keyboard)
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
-		end -- Don't trigger if typing in chat
+		end
 		if input.KeyCode == Lonum.ToggleKey then
 			MainFrame.Visible = not MainFrame.Visible
 		end
@@ -1772,10 +1781,8 @@ function Lonum:CreateWindow(options)
 	return WindowObj
 end
 
---=========================================
--- NOTIFICATION SYSTEM
---=========================================
 function Lonum:Notify(options)
+	SetThreadIdentity(7)
 	options = options or {}
 	local Title = options.Title or "Notification"
 	local Content = options.Content or "..."
@@ -1867,14 +1874,12 @@ function Lonum:Notify(options)
 	nText.AutomaticSize = Enum.AutomaticSize.Y
 	nText.Parent = nFrame
 
-	-- Animate In
 	TweenService:Create(
 		nFrame,
 		TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		{ Position = UDim2.new(0, 0, 0, 0) }
 	):Play()
 
-	-- Auto Destroy
 	task.spawn(function()
 		task.wait(Duration)
 		local tweenOut = TweenService:Create(
