@@ -71,11 +71,8 @@ do
 	-- 4. Wait for Map / Dungeon attribute
 	local tMap = os.clock()
 	while
-		not (
-			workspace:GetAttribute("MAP")
-			or workspace:GetAttribute("Map")
-			or isDungeonWorld()
-		) and (os.clock() - tMap < 45)
+		not (workspace:GetAttribute("MAP") or workspace:GetAttribute("Map") or isDungeonWorld())
+		and (os.clock() - tMap < 45)
 	do
 		task.wait(0.2)
 	end
@@ -218,6 +215,8 @@ local cfg = {
 	isAutoMaterial = false,
 	isTeleporting = false,
 	isAutoEliteHunter = false,
+	isAutoTyrant = false,
+	isAutoTyrantEliteQuest = true,
 	isBossHunterEnabled = false,
 	isEliteHunterActive = false,
 	isReadyToAttack = false,
@@ -227,6 +226,8 @@ local cfg = {
 	isAutoAttackEnabled = false,
 	isAutoSpinBones = false,
 	isAutoBone = false,
+	isAutoSoulReaper = false,
+	soulReaperWorkerGeneration = 0,
 	isAutoNextIsland = false,
 	isAutoDungeonNext = false,
 	isAutoDungeonBring = false,
@@ -252,7 +253,7 @@ local cfg = {
 
 	UsePortal = false,
 	AutoExecute = false,
-	BringMethod = "Tween",
+	isBringMob = true,
 
 	TweenSpeed = 300,
 	BringRadius = 350,
@@ -269,7 +270,7 @@ local cfg = {
 	AttackIntervalSuper = 0.11,
 	AttackIntervalBeta = 0.10,
 	EvasionMoveInterval = 0.45,
-	ThreadSleep = 0.05,
+	ThreadSleep = 0.08,
 
 	StuckTimeout = 3,
 
@@ -365,6 +366,14 @@ local Runtime = {
 		Sea2 = 4442272183,
 		Sea3 = 7449423635,
 	},
+	CombatCache = {
+		NetModule = nil,
+		GlobalModule = nil,
+		NativeHitThread = nil,
+		RegisterAttack = nil,
+		RegisterHit = nil,
+		NetObject = nil,
+	},
 }
 local syn = getgenv and getgenv().syn or nil
 FarmToggle = nil
@@ -375,16 +384,16 @@ local GetCurrentSea = nil
 
 Sea3Portals = {
 	Turtle = {
-		Outer = Vector3.new(-12463.6025, 378.3270, -7566.0830),
-		Inner = Vector3.new(-5060.4116, 318.5020, -3193.2248),
+		Outer = Vector3.new(-5060.4116, 318.5020, -3193.2248),
+		Inner = Vector3.new(-12463.6025, 378.3270, -7566.0830),
 	},
 	Hydra = {
-		Outer = Vector3.new(5650.9477, 1017.2747, -350.3791),
-		Inner = Vector3.new(-5027.0302, 318.5020, -3206.7036),
+		Outer = Vector3.new(-5027.0302, 318.5020, -3206.7036),
+		Inner = Vector3.new(5650.9477, 1017.2747, -350.3791),
 	},
 	Tiki = {
-		Outer = Vector3.new(-16799.0918, 84.3227997, 291.072845),
-		Inner = Vector3.new(-5097.13184, 318.502014, -3178.39844),
+		Outer = Vector3.new(-5097.13184, 318.502014, -3178.39844),
+		Inner = Vector3.new(-16799.0918, 84.3227997, 291.072845),
 	},
 }
 
@@ -1092,6 +1101,7 @@ State = {
 	AutoKillVolcano = false,
 	AutoEmber = false,
 	EliteHunterGen = 0,
+	TyrantGen = 0,
 }
 
 local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
@@ -1101,6 +1111,12 @@ pcall(function()
 	local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 	Runtime.RegisterHitEvent = Net:WaitForChild("RE/RegisterHit")
 	Runtime.RegisterAttackEvent = Net:WaitForChild("RE/RegisterAttack")
+	Runtime.CombatCache.NetModule = Net
+	Runtime.CombatCache.RegisterAttack = Runtime.RegisterAttackEvent
+	Runtime.CombatCache.RegisterHit = Runtime.RegisterHitEvent
+	pcall(function()
+		Runtime.CombatCache.NetObject = require(Net)
+	end)
 
 	pcall(function()
 		local CombatUtil = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("CombatUtil"))
@@ -1129,6 +1145,10 @@ pcall(function()
 	pcall(function()
 		local Global = require(ReplicatedStorage:WaitForChild("Global"))
 		if Global then
+			Runtime.CombatCache.GlobalModule = Global
+			if Global.SendHitsToServer then
+				Runtime.CombatCache.NativeHitThread = debug.getupvalue(Global.SendHitsToServer, 1)
+			end
 			Global.tapCooldown = 0
 			local okMt, mt = useUnc("getrawmetatable", Global)
 			if not okMt or not mt then
@@ -1191,8 +1211,22 @@ local function RefreshSessionSecret(force)
 	lastSessionRefreshAt = now
 
 	pcall(function()
-		local c = coroutine.create(function() end)
-		currentSessionSecret = tostring(player.UserId):sub(2, 4) .. tostring(c):sub(11, 15)
+		local nativeThread = Runtime.CombatCache.NativeHitThread
+		if
+			not nativeThread
+			and Runtime.CombatCache.GlobalModule
+			and Runtime.CombatCache.GlobalModule.SendHitsToServer
+		then
+			nativeThread = debug.getupvalue(Runtime.CombatCache.GlobalModule.SendHitsToServer, 1)
+			Runtime.CombatCache.NativeHitThread = nativeThread
+		end
+
+		if nativeThread then
+			currentSessionSecret = tostring(player.UserId):sub(2, 4) .. tostring(nativeThread):sub(11, 15)
+		else
+			local c = coroutine.create(function() end)
+			currentSessionSecret = tostring(player.UserId):sub(2, 4) .. tostring(c):sub(11, 15)
+		end
 
 		local netModule = ReplicatedStorage:FindFirstChild("Modules")
 			and ReplicatedStorage.Modules:FindFirstChild("Net")
@@ -2680,7 +2714,12 @@ local function StopCarrier()
 		end
 		Runtime.activeCarrier = nil
 	end
-	Runtime.activeTween = nil
+	if Runtime.activeTween then
+		pcall(function()
+			Runtime.activeTween:Cancel()
+		end)
+		Runtime.activeTween = nil
+	end
 	lastTargetPos = nil
 end
 
@@ -2726,9 +2765,7 @@ ToggleFloat = function(state)
 
 		if humanoid.Sit and not (cfg.autoSail or cfg.autoBoat) then
 			humanoid.Sit = false
-			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 		end
-		humanoid:ChangeState(11)
 		if not hrp:FindFirstChild("BodyClip") then
 			local bv = Instance.new("BodyVelocity")
 			bv.Name = "BodyClip"
@@ -2747,11 +2784,9 @@ ToggleFloat = function(state)
 	else
 		isNoclipping = false
 		if humanoid and humanoid.Health > 0 then
-			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-		end
-		if Runtime.activeTween then
-			Runtime.activeTween:Cancel()
-			Runtime.activeTween = nil
+			if humanoid.PlatformStand then
+				humanoid.PlatformStand = false
+			end
 		end
 		DestroyTeleAnchor()
 		if hrp:FindFirstChild("BodyClip") then
@@ -2775,6 +2810,9 @@ ToggleFloat = function(state)
 end
 
 GetCurrentSea = function()
+	if Runtime.CachedSea and Runtime.CachedSeaNum then
+		return Runtime.CachedSea, Runtime.CachedSeaNum
+	end
 	local sea = nil
 	pcall(function()
 		local Realm = require(game:GetService("ReplicatedStorage").Util.Realm)
@@ -2792,19 +2830,31 @@ GetCurrentSea = function()
 	end
 	local sLower = string.lower(tostring(sea or ""))
 	if string.find(sLower, "sea3") or string.find(sLower, "third") or string.find(sLower, "3") then
+		Runtime.CachedSea = "Sea3"
+		Runtime.CachedSeaNum = 3
 		return "Sea3", 3
 	elseif string.find(sLower, "sea2") or string.find(sLower, "second") or string.find(sLower, "2") then
+		Runtime.CachedSea = "Sea2"
+		Runtime.CachedSeaNum = 2
 		return "Sea2", 2
 	elseif string.find(sLower, "sea1") or string.find(sLower, "first") or string.find(sLower, "1") then
+		Runtime.CachedSea = "Sea1"
+		Runtime.CachedSeaNum = 1
 		return "Sea1", 1
 	end
 
 	local level = GetPlayerLevel()
 	if level >= 1500 then
+		Runtime.CachedSea = "Sea3"
+		Runtime.CachedSeaNum = 3
 		return "Sea3", 3
 	elseif level >= 700 then
+		Runtime.CachedSea = "Sea2"
+		Runtime.CachedSeaNum = 2
 		return "Sea2", 2
 	else
+		Runtime.CachedSea = "Sea1"
+		Runtime.CachedSeaNum = 1
 		return "Sea1", 1
 	end
 end
@@ -2835,37 +2885,39 @@ end
 EnvironmentGate = {
 	Requirements = {
 		-- Sea 1 Features
-		["Banana"]         = { Sea = 1, NoDungeon = true },
-		["GrapplingHook"]  = { Sea = 1, NoDungeon = true },
-		["FishmanLord"]    = { Sea = 1, NoDungeon = true },
+		["Banana"] = { Sea = 1, NoDungeon = true },
+		["GrapplingHook"] = { Sea = 1, NoDungeon = true },
+		["FishmanLord"] = { Sea = 1, NoDungeon = true },
 		["ColosseumCrowd"] = { Sea = 1, NoDungeon = true },
-		["MagmaEvent"]     = { Sea = 1, NoDungeon = true },
-		["FountainCity"]   = { Sea = 1, NoDungeon = true },
-		["Sea1Puzzle"]     = { Sea = 1, NoDungeon = true },
+		["MagmaEvent"] = { Sea = 1, NoDungeon = true },
+		["FountainCity"] = { Sea = 1, NoDungeon = true },
+		["Sea1Puzzle"] = { Sea = 1, NoDungeon = true },
 
 		-- Sea 2 Features
-		["Factory"]        = { Sea = 2, NoDungeon = true },
-		["LawRaid"]        = { Sea = 2, NoDungeon = true },
-		["Bartilo"]        = { Sea = 2, NoDungeon = true },
-		["RaceV2"]         = { Sea = 2, NoDungeon = true },
+		["Factory"] = { Sea = 2, NoDungeon = true },
+		["LawRaid"] = { Sea = 2, NoDungeon = true },
+		["Bartilo"] = { Sea = 2, NoDungeon = true },
+		["RaceV2"] = { Sea = 2, NoDungeon = true },
 
 		-- Sea 3 Features
-		["DoughKing"]      = { Sea = 3, NoDungeon = true },
-		["CakePrince"]     = { Sea = 3, NoDungeon = true },
-		["BoneFarm"]       = { Sea = 3, NoDungeon = true },
-		["HazeQuest"]      = { Sea = 3, NoDungeon = true },
-		["EliteHunter"]    = { Sea = 3, NoDungeon = true },
-		["Kitsune"]        = { Sea = 3, NoDungeon = true },
-		["Torch"]          = { Sea = 3, NoDungeon = true },
+		["DoughKing"] = { Sea = 3, NoDungeon = true },
+		["CakePrince"] = { Sea = 3, NoDungeon = true },
+		["BoneFarm"] = { Sea = 3, NoDungeon = true },
+		["SoulReaper"] = { Sea = 3, NoDungeon = true },
+		["HazeQuest"] = { Sea = 3, NoDungeon = true },
+		["EliteHunter"] = { Sea = 3, NoDungeon = true },
+		["Tyrant"] = { Sea = 3, NoDungeon = true },
+		["Kitsune"] = { Sea = 3, NoDungeon = true },
+		["Torch"] = { Sea = 3, NoDungeon = true },
 
 		-- Special Worlds
-		["Dungeon"]        = { Dungeon = true },
-		["Raid"]           = { Raid = true },
+		["Dungeon"] = { Dungeon = true },
+		["Raid"] = { Raid = true },
 
 		-- Open Ocean & General
-		["SeaEvents"]      = { MinSea = 2, NoDungeon = true },
-		["Fishing"]        = { NoDungeon = true },
-		["Material"]       = { NoDungeon = true },
+		["SeaEvents"] = { MinSea = 2, NoDungeon = true },
+		["Fishing"] = { NoDungeon = true },
+		["Material"] = { NoDungeon = true },
 	},
 }
 
@@ -2891,7 +2943,9 @@ function EnvironmentGate.CanRun(featureKey)
 
 	if req.Raid then
 		local raidMap = (ScriptContext.GetRaidMap and ScriptContext:GetRaidMap()) or nil
-		if not raidMap and not (currentRaidIsland and currentRaidIsland > 0 and workspace:FindFirstChild("RaidMap")) then
+		if
+			not raidMap and not (currentRaidIsland and currentRaidIsland > 0 and workspace:FindFirstChild("RaidMap"))
+		then
 			return false, "Requires Active Raid"
 		end
 	end
@@ -2966,12 +3020,12 @@ local function GetBestRoute(startPos, targetPos)
 		return nil
 	end
 
-	local CastlePos = Sea3Portals.Turtle.Inner
+	local CastlePos = Sea3Portals.Turtle.Outer
 	local hubs = {
 		Castle = CastlePos,
-		Turtle = Sea3Portals.Turtle.Outer,
-		Hydra = Sea3Portals.Hydra.Outer,
-		Tiki = Sea3Portals.Tiki.Outer,
+		Turtle = Sea3Portals.Turtle.Inner,
+		Hydra = Sea3Portals.Hydra.Inner,
+		Tiki = Sea3Portals.Tiki.Inner,
 	}
 
 	local closestHub = nil
@@ -3003,11 +3057,11 @@ local function GetBestRoute(startPos, targetPos)
 		string.find(locStr, "floating turtle") ~= nil
 		or string.find(locStr, "turtle") ~= nil
 		or string.find(locStr, "mansion") ~= nil
-	) or (startPos - Sea3Portals.Turtle.Outer).Magnitude < 5500
-	local isAtTiki = (string.find(locStr, "tiki") ~= nil) or (startPos - Sea3Portals.Tiki.Outer).Magnitude < 3500
-	local isAtHydra = (string.find(locStr, "hydra") ~= nil) or (startPos - Sea3Portals.Hydra.Outer).Magnitude < 3500
+	) or (startPos - Sea3Portals.Turtle.Inner).Magnitude < 5500
+	local isAtTiki = (string.find(locStr, "tiki") ~= nil) or (startPos - Sea3Portals.Tiki.Inner).Magnitude < 3500
+	local isAtHydra = (string.find(locStr, "hydra") ~= nil) or (startPos - Sea3Portals.Hydra.Inner).Magnitude < 3500
 
-	if isAtTurtle and (targetPos - Sea3Portals.Turtle.Outer).Magnitude < 5500 then
+	if isAtTurtle and (targetPos - Sea3Portals.Turtle.Inner).Magnitude < 5500 then
 		return nil
 	end
 
@@ -3124,7 +3178,7 @@ local function RequestSea3Entrance(coordinate)
 
 	local invoked = false
 	pcall(function()
-		CommF_:InvokeServer("RequestEntrance", coordinate)
+		CommF_:InvokeServer("requestEntrance", coordinate)
 		invoked = true
 	end)
 	return invoked
@@ -3153,7 +3207,7 @@ local function ExecuteSea3Route(route, myHrp)
 
 	if route.Type == "CastleToTiki" then
 		ToggleFloat(true)
-		TweenTo(CFrame.new(Sea3Portals.Tiki.Outer + Vector3.new(0, 200, 0)))
+		TweenTo(CFrame.new(Sea3Portals.Tiki.Inner + Vector3.new(0, 200, 0)))
 		return true
 	end
 
@@ -3171,12 +3225,10 @@ local function ExecuteSea3Route(route, myHrp)
 end
 
 local function LookCFrame(basePos, height)
-	local overhead = basePos + Vector3.new(0, height, 0)
-	local dir = basePos - overhead
-	if math.abs(dir.X) < 1e-3 and math.abs(dir.Z) < 1e-3 then
-		dir = dir + Vector3.new(0.001, 0, 0.001)
-	end
-	return CFrame.lookAt(overhead, overhead + dir)
+	local pos = (typeof(basePos) == "CFrame" and basePos.Position)
+		or (typeof(basePos) == "Vector3" and basePos)
+		or GetSafePosition(basePos)
+	return CFrame.new(pos.X, pos.Y + (height or 0), pos.Z)
 end
 
 TweenTo = function(targetCFrame)
@@ -3361,6 +3413,217 @@ TweenTo = function(targetCFrame)
 				return
 			end
 		end
+	elseif seaNum == 3 then
+		local isCurrentSubmerged = (hrp.Position.Y < -500)
+		local isTargetSubmerged = (targetPos.Y < -500)
+
+		-- 1. KELUAR DARI SUBMERGED ISLAND (Bawah -> Atas via InitiateTeleport / LeaveAbnormally)
+		if isCurrentSubmerged and not isTargetSubmerged then
+			local exitNpcPos = Vector3.new(11427.9, -2156.4, 9726.2)
+			local distToExitNpc = (hrp.Position - exitNpcPos).Magnitude
+
+			if distToExitNpc > 35 then
+				targetPos = exitNpcPos
+				targetCFrame = CFrame.new(exitNpcPos + Vector3.new(0, 5, 0))
+			else
+				if not cfg.lastSubmarineExitAt or (os.clock() - cfg.lastSubmarineExitAt > 2.5) then
+					cfg.lastSubmarineExitAt = os.clock()
+					task.spawn(function()
+						isTeleporting = true
+						local startPos = hrp.Position
+						pcall(function()
+							local Net = require(game:GetService("ReplicatedStorage").Modules.Net)
+							local sub = Net:RemoteFunction("SubmarineTransportation")
+							if sub then
+								local res = sub:InvokeServer("InitiateTeleport", "Tiki Outpost")
+								if res == false then
+									sub:InvokeServer("LeaveAbnormally")
+								end
+							end
+						end)
+						local t = 0
+						while t < 30 do
+							t = t + 1
+							task.wait(0.1)
+							local currHrp = GetRootPart()
+							if currHrp and (currHrp.Position.Y > -500 or (currHrp.Position - startPos).Magnitude > 500) then
+								task.wait(0.5)
+								break
+							end
+						end
+						isTeleporting = false
+						local freshHrp = GetRootPart()
+						if freshHrp then
+							TweenTo(targetCFrame)
+						end
+					end)
+				end
+				return
+			end
+		end
+
+		-- 2. MASUK KE SUBMERGED ISLAND (Atas -> Bawah via Tiki Outpost Submarine Worker NPC)
+		if not isCurrentSubmerged and isTargetSubmerged then
+			local subNpcPos = Vector3.new(-16266.905273, 25.232195, 1372.368042)
+			local distToNpc = (hrp.Position - subNpcPos).Magnitude
+
+			if distToNpc > 20 then
+				targetPos = subNpcPos
+				targetCFrame = CFrame.new(subNpcPos + Vector3.new(0, 5, 0))
+			else
+				if not cfg.lastSubmarineBoardAt or (os.clock() - cfg.lastSubmarineBoardAt > 2.5) then
+					cfg.lastSubmarineBoardAt = os.clock()
+					task.spawn(function()
+						isTeleporting = true
+						local startPos = hrp.Position
+						pcall(function()
+							local SIC = require(game:GetService("ReplicatedStorage").Controllers.MapServices.SubmergedIslandController)
+							if SIC and SIC.UnlockState and SIC.LoadMap then
+								SIC:LoadMap()
+								task.wait(1)
+								SIC:UnlockState()
+							end
+
+							local Net = require(game:GetService("ReplicatedStorage").Modules.Net)
+							local sws = Net:RemoteFunction("SubmarineWorkerSpeak")
+							if sws then
+								sws:InvokeServer("TravelToSubmergedIsland")
+							end
+						end)
+						local t = 0
+						while t < 30 do
+							t = t + 1
+							task.wait(0.1)
+							local currHrp = GetRootPart()
+							if currHrp and (currHrp.Position.Y < -500 or (currHrp.Position - startPos).Magnitude > 500) then
+								task.wait(0.5)
+								break
+							end
+						end
+						isTeleporting = false
+						local freshHrp = GetRootPart()
+						if freshHrp then
+							TweenTo(targetCFrame)
+						end
+					end)
+				end
+				return
+			end
+		end
+
+		-- 3. SEA 3 PORTAL ROUTING (Turtle, Hydra, Castle, Tiki, Haunted)
+		if not isCurrentSubmerged and not isTargetSubmerged then
+			local distDirect = (targetPos - hrp.Position).Magnitude
+			if distDirect > 2500 then
+				local TurtleCastle = Sea3Portals.Turtle.Outer
+				local TurtleIsland = Sea3Portals.Turtle.Inner
+				local HydraCastle = Sea3Portals.Hydra.Outer
+				local HydraIsland = Sea3Portals.Hydra.Inner
+				local TikiCastle = Sea3Portals.Tiki.Outer
+				local TikiIsland = Sea3Portals.Tiki.Inner
+				local CastlePos = TurtleCastle
+
+				local startPos = hrp.Position
+
+				local isAtCastle = (startPos - CastlePos).Magnitude < 1800
+				local isAtTurtle = (startPos - TurtleIsland).Magnitude < 5500
+				local isAtHydra = (startPos - HydraIsland).Magnitude < 4000
+				local isAtTiki = (startPos - TikiIsland).Magnitude < 4500
+
+				local isTargetNearHaunted = (targetPos - Vector3.new(-9515.37, 164.0, 5786.06)).Magnitude < 4500
+
+				local distToTurtle = (targetPos - TurtleIsland).Magnitude
+				local distToHydra = (targetPos - HydraIsland).Magnitude
+				local distToTiki = (targetPos - TikiIsland).Magnitude
+				local distToCastle = (targetPos - CastlePos).Magnitude
+
+				local bestHub = "Castle"
+				local minHubDist = distToCastle
+
+				if distToTurtle < minHubDist then
+					minHubDist = distToTurtle
+					bestHub = "Turtle"
+				end
+				if distToHydra < minHubDist then
+					minHubDist = distToHydra
+					bestHub = "Hydra"
+				end
+				if distToTiki < minHubDist or isTargetNearHaunted then
+					minHubDist = distToTiki
+					bestHub = "Tiki"
+				end
+
+				local needPortal = false
+				local portalTarget = nil
+				local portalInvokeCoord = nil
+
+				if isAtTurtle and bestHub ~= "Turtle" then
+					needPortal = true
+					portalTarget = TurtleIsland
+					portalInvokeCoord = TurtleCastle
+				elseif isAtHydra and bestHub ~= "Hydra" then
+					needPortal = true
+					portalTarget = HydraIsland
+					portalInvokeCoord = HydraCastle
+				elseif isAtTiki and bestHub ~= "Tiki" then
+					needPortal = true
+					portalTarget = TikiIsland
+					portalInvokeCoord = TurtleCastle
+				elseif isAtCastle and bestHub ~= "Castle" then
+					if bestHub == "Turtle" then
+						needPortal = true
+						portalTarget = CastlePos
+						portalInvokeCoord = TurtleIsland
+					elseif bestHub == "Hydra" then
+						needPortal = true
+						portalTarget = CastlePos
+						portalInvokeCoord = HydraIsland
+					elseif bestHub == "Tiki" then
+						needPortal = true
+						portalTarget = TikiCastle
+						portalInvokeCoord = TikiIsland
+					end
+				end
+
+				if needPortal and portalTarget and portalInvokeCoord then
+					local distToPortal = (hrp.Position - portalTarget).Magnitude
+					if distToPortal > 18 then
+						targetPos = portalTarget
+						targetCFrame = CFrame.new(portalTarget + Vector3.new(0, 10, 0))
+					else
+						if not cfg.lastPortalInvokeAt or (os.clock() - cfg.lastPortalInvokeAt > 1.2) then
+							cfg.lastPortalInvokeAt = os.clock()
+							task.spawn(function()
+								isTeleporting = true
+								local curStart = hrp.Position
+								pcall(function()
+									CommF_:InvokeServer("requestEntrance", portalInvokeCoord)
+								end)
+								local t = 0
+								while t < 30 do
+									t = t + 1
+									task.wait(0.1)
+									local currHrp = GetRootPart()
+									if currHrp and (currHrp.Position - curStart).Magnitude > 500 then
+										cfg.lastPortalInvokeAt = 0
+										task.wait(0.25)
+										break
+									end
+								end
+								isTeleporting = false
+								local freshHrp = GetRootPart()
+								if freshHrp then
+									TweenTo(targetCFrame)
+								end
+							end)
+						end
+						targetPos = portalTarget
+						targetCFrame = CFrame.new(portalTarget + Vector3.new(0, 5, 0))
+						return
+					end
+				end
+			end
+		end
 	end
 
 	ToggleFloat(true)
@@ -3372,117 +3635,88 @@ TweenTo = function(targetCFrame)
 	if hrp.AssemblyLinearVelocity ~= Vector3.zero then
 		hrp.AssemblyLinearVelocity = Vector3.zero
 	end
+	if hrp.AssemblyAngularVelocity ~= Vector3.zero then
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
 
 	local char = GetCharacter()
 	if not char then
 		return
 	end
 
-	local carrier = Runtime.activeCarrier
-	if carrier and carrier.Parent and Runtime.activeFollowConn then
-		if lastTargetPos and (targetPos - lastTargetPos).Magnitude < 3 then
-			return
-		end
-		carrier.CFrame = targetCFrame
-		lastTargetPos = targetPos
-		local bg0 = hrp:FindFirstChild("BodyGyroClip")
-		if bg0 then
-			bg0.CFrame = targetCFrame
-		end
-		Runtime.activeTween = carrierToken
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health <= 0 then
+		StopCarrier()
 		return
 	end
 
-	StopCarrier()
+	local remaining = (targetPos - hrp.Position).Magnitude
+
+	if remaining <= 2 then
+		if Runtime.activeTween then
+			pcall(function()
+				Runtime.activeTween:Cancel()
+			end)
+			Runtime.activeTween = nil
+		end
+		hrp.CFrame = targetCFrame
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		local bgClip = hrp:FindFirstChild("BodyGyroClip")
+		if bgClip then
+			local yaw = select(2, hrp.CFrame:ToEulerAnglesYXZ())
+			bgClip.CFrame = CFrame.Angles(0, yaw, 0)
+		end
+		lastTargetPos = targetPos
+		return
+	end
+
+	if Runtime.activeTween and lastTargetPos and (targetPos - lastTargetPos).Magnitude < 3 then
+		return
+	end
+
+	if Runtime.activeTween then
+		pcall(function()
+			Runtime.activeTween:Cancel()
+		end)
+		Runtime.activeTween = nil
+	end
 
 	lastTargetPos = targetPos
 
-	local telePart = Instance.new("Part")
-	telePart.Name = "PartTele"
-	telePart.Size = Vector3.new(2, 2, 2)
-	telePart.Transparency = 1
-	telePart.CanCollide = false
-	telePart.CanTouch = false
-	telePart.CanQuery = false
-	telePart.Anchored = true
-	telePart.CFrame = targetCFrame
-	telePart.Parent = workspace._WorldOrigin or workspace
-	Runtime.activeCarrier = telePart
+	local speed = cfg.TweenSpeed or 300
+	local duration = math.max(remaining / speed, 0.01)
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+	local tween = TweenService:Create(hrp, tweenInfo, { CFrame = targetCFrame })
 
-	local glideDone = false
-	local followConn
-	followConn = RunService.RenderStepped:Connect(function(dt)
-		if glideDone then
-			return
-		end
+	Runtime.activeTween = tween
 
-		if not telePart or not telePart.Parent then
-			glideDone = true
-			if Runtime.activeFollowConn == followConn then
-				Runtime.activeFollowConn = nil
+	local bg0 = hrp:FindFirstChild("BodyGyroClip")
+	if bg0 then
+		local yaw = select(2, targetCFrame:ToEulerAnglesYXZ())
+		bg0.CFrame = CFrame.Angles(0, yaw, 0)
+	end
+
+	tween.Completed:Connect(function(playbackState)
+		if playbackState == Enum.PlaybackState.Completed then
+			local curHrp = GetRootPart()
+			if curHrp and curHrp.Parent then
+				curHrp.CFrame = targetCFrame
+				curHrp.AssemblyLinearVelocity = Vector3.zero
+				curHrp.AssemblyAngularVelocity = Vector3.zero
+				local bgEnd = curHrp:FindFirstChild("BodyGyroClip")
+				if bgEnd then
+					local yaw = select(2, curHrp.CFrame:ToEulerAnglesYXZ())
+					bgEnd.CFrame = CFrame.Angles(0, yaw, 0)
+				end
 			end
-			followConn:Disconnect()
-			return
-		end
-
-		local anchorPos = telePart.Position
-		if anchorPos.Y < -500 or math.abs(anchorPos.X) > 200000 or math.abs(anchorPos.Z) > 200000 then
-			glideDone = true
-			StopCarrier()
-			return
-		end
-
-		local currentHrp = GetRootPart()
-		if not currentHrp or not currentHrp.Parent then
-			glideDone = true
-			if Runtime.activeFollowConn == followConn then
-				Runtime.activeFollowConn = nil
+			if Runtime.activeTween == tween then
+				Runtime.activeTween = nil
 			end
-			followConn:Disconnect()
-			return
-		end
-
-		local currentHum = currentHrp.Parent:FindFirstChildOfClass("Humanoid")
-		if currentHum and currentHum.Health <= 0 then
-			glideDone = true
-			StopCarrier()
-			return
-		end
-
-		local goal = telePart.CFrame
-		local remaining = (goal.Position - currentHrp.Position).Magnitude
-
-		if remaining <= 2 then
-			glideDone = true
-			currentHrp.CFrame = goal
-			currentHrp.AssemblyLinearVelocity = Vector3.zero
-			currentHrp.AssemblyAngularVelocity = Vector3.zero
-			local bgEnd = currentHrp:FindFirstChild("BodyGyroClip")
-			if bgEnd then
-				bgEnd.CFrame = goal
-			end
-			followConn:Disconnect()
-			if Runtime.activeFollowConn == followConn then
-				Runtime.activeFollowConn = nil
-			end
-			StopCarrier()
-			ToggleFloat(false)
-			return
-		end
-
-		local glideSpeed = cfg.TweenSpeed or 300
-		local step = glideSpeed * dt
-		local alpha = math.clamp(step / remaining, 0, 1)
-		currentHrp.CFrame = currentHrp.CFrame:Lerp(goal, alpha)
-		currentHrp.AssemblyLinearVelocity = Vector3.zero
-		currentHrp.AssemblyAngularVelocity = Vector3.zero
-		local bgClip = currentHrp:FindFirstChild("BodyGyroClip")
-		if bgClip then
-			bgClip.CFrame = goal
 		end
 	end)
-	Runtime.activeFollowConn = followConn
-	Runtime.activeTween = carrierToken
+
+	tween:Play()
 end
 
 local function NavigateAndBuyMelee(name)
@@ -4413,9 +4647,7 @@ local function RegisterSpawnedFruit(fruitObj, pos)
 	end)
 	if typeof(fruitObj) == "Instance" then
 		local handle = GetFruitHandle(fruitObj)
-		local fruitPos = pos
-			or (handle and handle.Position)
-			or (fruitObj:IsA("Model") and fruitObj:GetPivot().Position)
+		local fruitPos = pos or (handle and handle.Position) or (fruitObj:IsA("Model") and fruitObj:GetPivot().Position)
 		local info = {
 			Instance = fruitObj,
 			Handle = handle,
@@ -4454,8 +4686,7 @@ local function IsNaturalSpawnedFruit(obj)
 			local info = {
 				Instance = obj,
 				Handle = GetFruitHandle(obj),
-				Position = upvs[1].fruitPosition
-					or (GetFruitHandle(obj) and GetFruitHandle(obj).Position),
+				Position = upvs[1].fruitPosition or (GetFruitHandle(obj) and GetFruitHandle(obj).Position),
 				Name = obj.Name,
 				SpawnTime = upvs[1].fruitSpawnTime or os.clock(),
 				IsNatural = true,
@@ -4573,11 +4804,6 @@ end
 
 local function CollectNearestFruit()
 	if #State.FruitWaypoints == 0 then
-		if Runtime.activeTween then
-			Runtime.activeTween:Cancel()
-			Runtime.activeTween = nil
-		end
-		ToggleFloat(false)
 		return false
 	end
 	local nearestFruit = nil
@@ -5149,6 +5375,55 @@ else
 end
 local QuestCache = getgenv and getgenv().QuestCache or _G.QuestCache
 
+do
+	local function InitQuestController()
+		pcall(function()
+			local rep = game:GetService("ReplicatedStorage")
+			local qcModule = rep:FindFirstChild("Controllers")
+				and rep.Controllers:FindFirstChild("QuestController")
+			if qcModule then
+				local qc = require(qcModule)
+				if qc and qc.Network then
+					ScriptContext:AddConnection(qc.Network.Event:Connect(function(event, data)
+						if event == "Update" then
+							Runtime.ActiveQuestData = data
+							if data and data.Info and data.Progress then
+								local mobName = data.Info.Name
+								local current = 0
+								local maximum = 0
+								if data.Info.Task then
+									for k, v in pairs(data.Info.Task) do
+										mobName = k
+										maximum = tonumber(v) or 0
+										current = tonumber(data.Progress[k]) or 0
+										break
+									end
+								end
+								QuestCache.IsActive = true
+								QuestCache.MobName = mobName
+								QuestCache.Current = current
+								QuestCache.Maximum = maximum
+								QuestCache.Finished = (maximum > 0 and current >= maximum)
+								QuestCache.Text = string.format("%s (%d/%d)", tostring(mobName), current, maximum)
+								QuestCache.LastSeen = os.clock()
+							else
+								Runtime.ActiveQuestData = nil
+								QuestCache.IsActive = false
+								QuestCache.Finished = false
+								QuestCache.MobName = nil
+								QuestCache.Current = 0
+								QuestCache.Maximum = 0
+								QuestCache.Text = ""
+							end
+						end
+					end))
+				end
+			end
+		end)
+	end
+	task.defer(InitQuestController)
+end
+
 local function GetEligibleBoss()
 	local level = GetPlayerLevel()
 	local closestBoss = nil
@@ -5168,6 +5443,49 @@ end
 
 local function GetQuestStatus(targetMobName)
 	local success, result = pcall(function()
+		-- 1. Native QuestController Engine
+		local qData = Runtime.ActiveQuestData
+		if qData and qData.Info and qData.Progress then
+			local mobName = qData.Info.Name
+			local current = 0
+			local maximum = 0
+			if qData.Info.Task then
+				for k, v in pairs(qData.Info.Task) do
+					mobName = k
+					maximum = tonumber(v) or 0
+					current = tonumber(qData.Progress[k]) or 0
+					break
+				end
+			end
+
+			local finished = (maximum > 0 and current >= maximum)
+			local correct = false
+			if targetMobName then
+				local tLower = string.lower(targetMobName)
+				local mLower = string.lower(mobName or "")
+				correct = (tLower == mLower or string.find(mLower, tLower, 1, true) ~= nil or string.find(tLower, mLower, 1, true) ~= nil)
+			end
+
+			QuestCache.IsActive = true
+			QuestCache.MobName = mobName
+			QuestCache.Current = current
+			QuestCache.Maximum = maximum
+			QuestCache.Finished = finished
+			QuestCache.Text = string.format("%s (%d/%d)", tostring(mobName), current, maximum)
+			QuestCache.LastSeen = os.clock()
+
+			return {
+				Active = true,
+				Correct = correct,
+				Finished = finished,
+				Text = QuestCache.Text,
+				MobName = mobName,
+				Current = current,
+				Maximum = maximum,
+			}
+		end
+
+		-- 2. Fallback to GUI inspection if QuestController is not yet populated
 		local playerGui = player:FindFirstChild("PlayerGui")
 		local text = ""
 		local progressText = ""
@@ -5245,7 +5563,7 @@ local function GetQuestStatus(targetMobName)
 			QuestCache.Maximum = tonumber(maximum) or 0
 			QuestCache.Finished = (QuestCache.Maximum > 0 and QuestCache.Current >= QuestCache.Maximum)
 			QuestCache.Text = text
-			QuestCache.LastSeen = tick()
+			QuestCache.LastSeen = os.clock()
 			QuestCache.IsActive = true
 		else
 			QuestCache.IsActive = false
@@ -5284,6 +5602,17 @@ local function GetQuestProfile()
 		or (seaNum == 2 and "Sea2")
 		or (seaNum == 1 and "Sea1")
 		or ((level >= 1500 and "Sea3") or (level >= 700 and "Sea2") or "Sea1")
+
+	if Runtime.CachedQuestProfile and Runtime.CachedProfileLevel == level and Runtime.CachedProfileSea == seaKey then
+		if currentQuestPool and #currentQuestPool > 0 then
+			if currentPoolIndex > #currentQuestPool then
+				currentPoolIndex = 1
+			end
+			return currentQuestPool[currentPoolIndex]
+		end
+		return Runtime.CachedQuestProfile
+	end
+
 	local seaTable = Quests[seaKey]
 	if not seaTable then
 		return nil
@@ -5380,6 +5709,10 @@ local function GetQuestProfile()
 		end
 	end
 
+	Runtime.CachedProfileLevel = level
+	Runtime.CachedProfileSea = seaKey
+	Runtime.CachedQuestProfile = highestQuest
+
 	if #currentQuestPool == 0 then
 		return highestQuest
 	end
@@ -5417,6 +5750,9 @@ local function CycleQuestProfile()
 end
 
 local function HasActiveQuest()
+	if Runtime.ActiveQuestData and Runtime.ActiveQuestData.Info then
+		return true
+	end
 	local status = GetQuestStatus(nil)
 	return status.Active
 end
@@ -5516,8 +5852,6 @@ local function StopAllActivities()
 					child:Destroy()
 				end
 			end
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
 		end
 		local hum = c:FindFirstChildOfClass("Humanoid")
 		if hum and hum.Health > 0 then
@@ -5525,7 +5859,6 @@ local function StopAllActivities()
 				hum.Sit = false
 			end
 			hum.PlatformStand = false
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		end
 	end
 
@@ -5549,6 +5882,25 @@ local function StopAllActivities()
 			end
 		end
 		table.clear(Runtime.activeMagnetTweens)
+	end
+
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+	if enemiesFolder then
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			if enemy:GetAttribute("MagnetLocked") then
+				enemy:SetAttribute("MagnetLocked", nil)
+			end
+			local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+			if eHrp and eHrp:FindFirstChild("Lock") then
+				pcall(function()
+					eHrp.Lock:Destroy()
+				end)
+			end
+			local eHum = enemy:FindFirstChildOfClass("Humanoid")
+			if eHum and eHum.Health > 0 then
+				eHum.PlatformStand = false
+			end
+		end
 	end
 
 	isTweeningToPlayer = false
@@ -5760,8 +6112,9 @@ local function IsEnemyVulnerable(targetChar, targetMobName)
 	return (
 		targetChar:FindFirstChild("HumanoidRootPart")
 		or targetChar:FindFirstChild("Head")
+		or targetChar.PrimaryPart
 		or targetChar:IsA("BasePart")
-		or targetChar:FindFirstChildWhichIsA("BasePart", true)
+		or targetChar:FindFirstChildWhichIsA("BasePart")
 	) ~= nil
 end
 
@@ -5832,7 +6185,7 @@ do
 	local pinnedEnemies = setmetatable({}, { __mode = "k" })
 
 	local function ScanCulledEnemies(container, depth, results, seen)
-		if not container or depth > 5 then
+		if not container then
 			return
 		end
 		for _, obj in ipairs(container:GetChildren()) do
@@ -5842,7 +6195,17 @@ do
 					table.insert(results, obj)
 				end
 			end
-			ScanCulledEnemies(obj, depth + 1, results, seen)
+		end
+		local repEnemies = container:FindFirstChild("Enemies")
+		if repEnemies then
+			for _, obj in ipairs(repEnemies:GetChildren()) do
+				if obj:IsA("Model") and not seen[obj] then
+					if IsRealEnemyInstance(obj) then
+						seen[obj] = true
+						table.insert(results, obj)
+					end
+				end
+			end
 		end
 	end
 
@@ -5867,6 +6230,12 @@ do
 	end
 
 	Runtime.RestoreCulledEnemies = function(targetMobName)
+		local now = os.clock()
+		if now - lastCullRestoreAt < 1.5 then
+			return 0
+		end
+		lastCullRestoreAt = now
+
 		local enemiesFolder = workspace:FindFirstChild("Enemies")
 		if not enemiesFolder then
 			return 0
@@ -5878,12 +6247,6 @@ do
 				model:SetAttribute("DisableDistanceCulling", true)
 			end
 		end
-
-		local now = os.clock()
-		if now - lastCullRestoreAt < 1.5 then
-			return 0
-		end
-		lastCullRestoreAt = now
 
 		local nameLower = targetMobName and string.lower(tostring(targetMobName)) or nil
 		local candidates = {}
@@ -5976,11 +6339,14 @@ do
 end
 
 local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
+	if not cfg.isBringMob then
+		return
+	end
 	if Runtime.CanOperate and not Runtime.CanOperate() then
 		return
 	end
 	local now = os.clock()
-	if now - Runtime.lastMagnetTick < 0.1 then
+	if now - Runtime.lastMagnetTick < 0.02 then
 		return
 	end
 	Runtime.lastMagnetTick = now
@@ -5994,18 +6360,27 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
 		return
 	end
 
-	local distPlayerToMobPos = (myHrpPos - gatherPos).Magnitude
+	local gatherCFrame = (typeof(gatherPos) == "CFrame" and gatherPos)
+		or CFrame.new(gatherPos.X, gatherPos.Y, gatherPos.Z)
+	local bringRadius = cfg.BringRadius or 350
 
-	if distPlayerToMobPos > cfg.BringRadius then
-		return
+	if not Runtime.lastSimRadiusAt or (now - Runtime.lastSimRadiusAt >= 1.5) then
+		Runtime.lastSimRadiusAt = now
+		if UNC.sethiddenproperty then
+			UNC.sethiddenproperty(player, "SimulationRadius", math.huge)
+			UNC.sethiddenproperty(player, "MaxSimulationRadius", math.huge)
+		end
 	end
 
-	local gatherCFrame = CFrame.new(gatherPos.X, gatherPos.Y, gatherPos.Z)
+	local nameLower = targetMobName and string.lower(targetMobName) or nil
+
 	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 		local isMatch = false
-		if targetMobName then
-			isMatch = (string.lower(enemy.Name) == string.lower(targetMobName))
-				and IsEnemyVulnerable(enemy, targetMobName)
+		if nameLower then
+			local enemyNameLower = string.lower(enemy.Name)
+			isMatch = (
+				enemyNameLower == nameLower or string.find(enemyNameLower, nameLower, 1, true) ~= nil
+			) and IsEnemyVulnerable(enemy, targetMobName)
 		else
 			isMatch = IsEnemyVulnerable(enemy, nil)
 		end
@@ -6016,45 +6391,63 @@ local function UniversalMagnet(targetMobName, gatherPos, myHrpPos)
 			if not IsEnemyReadyToPull(enemy) then
 				eHrp = nil
 			end
-			if eHrp and eHum and eHum.Health > 0 then
-				local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
-				if distToPlayer <= cfg.BringRadius then
-					if eHrp.CanCollide then
-						eHrp.CanCollide = false
-					end
-					if eHum.PlatformStand == false then
-						eHum.PlatformStand = true
-					end
-
-					if Runtime.activeMagnetTweens[eHrp] then
-						Runtime.activeMagnetTweens[eHrp]:Cancel()
-						Runtime.activeMagnetTweens[eHrp] = nil
-					end
-
-					if cfg.BringMethod == "Tween" then
-						local distToGather = (eHrp.Position - gatherPos).Magnitude
-						if distToGather > 4 then
-							if not Runtime.activeMagnetTweens[eHrp] then
-								local duration = math.clamp(distToGather / 400, 0.05, 0.25)
-								local tween = TweenService:Create(
-									eHrp,
-									TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-									{ CFrame = gatherCFrame }
-								)
-								Runtime.activeMagnetTweens[eHrp] = tween
-								tween.Completed:Connect(function()
-									Runtime.activeMagnetTweens[eHrp] = nil
-									if eHrp and eHrp.Parent then
-										eHrp.CFrame = gatherCFrame
-									end
-								end)
-								tween:Play()
-							end
-						else
-							eHrp.CFrame = gatherCFrame
-						end
-					else
+			if eHrp and eHum then
+				if eHum.Health > 0 then
+					local distToPlayer = (GetSafePosition(eHrp) - myHrpPos).Magnitude
+					if distToPlayer <= bringRadius then
 						eHrp.CFrame = gatherCFrame
+						eHrp.AssemblyLinearVelocity = Vector3.zero
+						eHrp.AssemblyAngularVelocity = Vector3.zero
+						eHrp.CanCollide = false
+
+						local head = enemy:FindFirstChild("Head")
+						if head and head:IsA("BasePart") then
+							head.CanCollide = false
+						end
+
+						if not enemy:GetAttribute("MagnetLocked") then
+							enemy:SetAttribute("MagnetLocked", true)
+							for _, part in ipairs(enemy:GetChildren()) do
+								if part:IsA("BasePart") then
+									part.CanCollide = false
+								end
+							end
+							eHum.WalkSpeed = 0
+							eHum.JumpPower = 0
+							if eHum.PlatformStand == false then
+								eHum.PlatformStand = true
+							end
+
+							local anim = eHum:FindFirstChild("Animator")
+							if anim then
+								pcall(function()
+									anim:Destroy()
+								end)
+							end
+
+							local lockBv = eHrp:FindFirstChild("Lock")
+							if not lockBv then
+								lockBv = Instance.new("BodyVelocity")
+								lockBv.Name = "Lock"
+								lockBv.MaxForce = Vector3.new(100000, 100000, 100000)
+								lockBv.Velocity = Vector3.zero
+								lockBv.Parent = eHrp
+							else
+								lockBv.Velocity = Vector3.zero
+							end
+
+							pcall(function()
+								eHum:ChangeState(11)
+							end)
+						end
+					end
+				else
+					if enemy:GetAttribute("MagnetLocked") then
+						enemy:SetAttribute("MagnetLocked", nil)
+						local lockBv = eHrp:FindFirstChild("Lock")
+						if lockBv then
+							lockBv:Destroy()
+						end
 					end
 				end
 			end
@@ -6073,7 +6466,7 @@ local function UniversalEvasionTween(myHrp, targetPos, now)
 		if targetDistance > 80 then
 			TweenTo(LookCFrame(targetPos, cfg.TweenHeight))
 		else
-			TweenTo(CFrame.new(targetPos + currentEvasionOffset, targetPos))
+			TweenTo(CFrame.new(targetPos + currentEvasionOffset))
 		end
 	end
 end
@@ -6211,39 +6604,21 @@ local function SearchEntities(filterOpts)
 		end
 	end
 
-	if Paths.Characters then
-		for _, c in ipairs(Paths.Characters:GetChildren()) do
-			local valid, hPart = isValidEntity(c)
-			if valid then
-				table.insert(results, c)
-				if #results >= limit then
-					return results
-				end
-			end
-		end
-	end
-
-	if radius and originPos and radius <= 600 then
-		for _, obj in ipairs(workspace:GetChildren()) do
-			if obj ~= Paths.Enemies and obj ~= Paths.Characters and (obj:IsA("Model") or obj:IsA("BasePart")) then
-				local valid, hPart = isValidEntity(obj)
+	if #results == 0 then
+		for _, ent in ipairs(ReplicatedStorage:GetChildren()) do
+			if ent:IsA("Model") and ent ~= player.Character then
+				local valid, hPart = isValidEntity(ent)
 				if valid then
-					table.insert(results, obj)
+					table.insert(results, ent)
 					if #results >= limit then
-						return results
+						break
 					end
 				end
 			end
 		end
-	end
-
-	if #results == 0 and filterOpts.DeepSearch then
-		local repTarget = ReplicatedStorage:FindFirstChild(filterOpts.Name or "")
-		if repTarget and isValidEntity(repTarget) then
-			table.insert(results, repTarget)
-		end
-		if #results == 0 then
-			for _, ent in ipairs(ReplicatedStorage:GetChildren()) do
+		local repEnemies = ReplicatedStorage:FindFirstChild("Enemies")
+		if repEnemies and #results < limit then
+			for _, ent in ipairs(repEnemies:GetChildren()) do
 				if ent:IsA("Model") and ent ~= player.Character then
 					local valid, hPart = isValidEntity(ent)
 					if valid then
@@ -6264,7 +6639,7 @@ local function FindEntityAnywhere(mobName)
 		return nil
 	end
 	local now = os.clock()
-	if now - Runtime.lastFindAnywhereAt < 2.5 then
+	if now - Runtime.lastFindAnywhereAt < 0.25 then
 		return nil
 	end
 	Runtime.lastFindAnywhereAt = now
@@ -6280,18 +6655,23 @@ local function FindEntityAnywhere(mobName)
 		end
 	end
 
-	local charactersFolder = Paths and Paths.Characters or workspace:FindFirstChild("Characters")
-	if charactersFolder then
-		for _, char in ipairs(charactersFolder:GetChildren()) do
-			if string.lower(char.Name) == nameLower and IsEnemyVulnerable(char, mobName) then
-				return char
-			end
-		end
+	local exact = ReplicatedStorage:FindFirstChild(mobName)
+	if exact and exact:IsA("Model") and IsEnemyVulnerable(exact, mobName) then
+		return exact
 	end
 
 	for _, ent in ipairs(ReplicatedStorage:GetChildren()) do
 		if ent:IsA("Model") and string.lower(ent.Name) == nameLower and IsEnemyVulnerable(ent, mobName) then
 			return ent
+		end
+	end
+
+	local repEnemies = ReplicatedStorage:FindFirstChild("Enemies")
+	if repEnemies then
+		for _, ent in ipairs(repEnemies:GetChildren()) do
+			if ent:IsA("Model") and string.lower(ent.Name) == nameLower and IsEnemyVulnerable(ent, mobName) then
+				return ent
+			end
 		end
 	end
 
@@ -6329,10 +6709,31 @@ local function findTarget(name)
 		end
 	end
 
-	if #allTargets == 0 and name and name ~= "" and not farmNearestEnabled and not isAutoRaidKill then
-		local fallbackEnemy = FindEntityAnywhere(name)
-		if fallbackEnemy then
-			table.insert(allTargets, fallbackEnemy)
+	if #allTargets == 0 and not farmNearestEnabled and not isAutoRaidKill and name and name ~= "" then
+		local exact = ReplicatedStorage:FindFirstChild(name)
+		if exact and exact:IsA("Model") and IsEnemyVulnerable(exact, name) then
+			table.insert(allTargets, exact)
+		else
+			local nameLower = string.lower(name)
+			for _, enemy in ipairs(ReplicatedStorage:GetChildren()) do
+				if enemy:IsA("Model") and string.lower(enemy.Name) == nameLower and IsEnemyVulnerable(enemy, name) then
+					table.insert(allTargets, enemy)
+					break
+				end
+			end
+			local repEnemies = ReplicatedStorage:FindFirstChild("Enemies")
+			if repEnemies and #allTargets == 0 then
+				for _, enemy in ipairs(repEnemies:GetChildren()) do
+					if
+						enemy:IsA("Model")
+						and string.lower(enemy.Name) == nameLower
+						and IsEnemyVulnerable(enemy, name)
+					then
+						table.insert(allTargets, enemy)
+						break
+					end
+				end
+			end
 		end
 	end
 
@@ -6354,7 +6755,10 @@ local function GetTargetEnemy(mobName)
 	local closest, shortestDist = nil, math.huge
 	if myHrp then
 		for _, enemy in ipairs(targets) do
-			local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+			local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+				or enemy:FindFirstChild("Head")
+				or enemy.PrimaryPart
+				or enemy:FindFirstChildWhichIsA("BasePart")
 			if eHrp then
 				local dist = (eHrp.Position - myHrp.Position).Magnitude
 				if dist < shortestDist then
@@ -6475,7 +6879,10 @@ local function GetSpawnedBoss(targetBossName)
 	local closest, shortestDist = nil, math.huge
 	if myHrp then
 		for _, enemy in ipairs(targets) do
-			local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
+			local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+				or enemy:FindFirstChild("Head")
+				or enemy.PrimaryPart
+				or enemy:FindFirstChildWhichIsA("BasePart")
 			if eHrp then
 				local dist = (eHrp.Position - myHrp.Position).Magnitude
 				if dist < shortestDist then
@@ -6541,6 +6948,126 @@ local function getDripMamaStatus()
 		end
 	end
 	return Runtime.cachedDripMamaStatus
+end
+
+Runtime.IsInMirrorDimension = function()
+	local curLoc = tostring(player:GetAttribute("CurrentLocation") or "")
+	local exactLoc = tostring(player:GetAttribute("ExactLocation") or "")
+	local locStr = string.lower(curLoc .. " " .. exactLoc)
+	if string.find(locStr, "mirror") or string.find(locStr, "dimension") then
+		return true
+	end
+
+	local map = workspace:FindFirstChild("Map")
+	local md = map and (map:FindFirstChild("MirrorDimension") or map:FindFirstChild("Mirror Dimension"))
+	if md then
+		local myHrp = GetRootPart()
+		if myHrp and (myHrp.Position - GetSafePosition(md)).Magnitude < 1800 then
+			return true
+		end
+	end
+
+	return false
+end
+
+Runtime.GetCakeMirrorPart = function()
+	local map = workspace:FindFirstChild("Map")
+	if not map then
+		return nil
+	end
+	local cakeLoaf = map:FindFirstChild("CakeLoaf")
+	local bigMirror = cakeLoaf and cakeLoaf:FindFirstChild("BigMirror")
+	local mainPart = bigMirror and bigMirror:FindFirstChild("Main")
+	if mainPart and mainPart:IsA("BasePart") then
+		return mainPart
+	end
+
+	local found = map:FindFirstChild("BigMirror", true)
+	if found then
+		return found:FindFirstChild("Main") or found:FindFirstChildWhichIsA("BasePart")
+	end
+	return nil
+end
+
+Runtime.TouchCakeMirror = function(myHrp)
+	if not myHrp then
+		return false
+	end
+	if Runtime.IsInMirrorDimension and Runtime.IsInMirrorDimension() then
+		return false
+	end
+
+	local now = os.clock()
+	if Runtime.lastTouchMirrorAt and (now - Runtime.lastTouchMirrorAt < 2.5) then
+		return false
+	end
+	Runtime.lastTouchMirrorAt = now
+
+	local mirrorMain = Runtime.GetCakeMirrorPart()
+	if not mirrorMain then
+		return false
+	end
+
+	if Runtime.activeTween then
+		pcall(function()
+			Runtime.activeTween:Cancel()
+		end)
+		Runtime.activeTween = nil
+	end
+
+	pcall(function()
+		local ft = (type(firetouchinterest) == "function" and firetouchinterest)
+			or UNC.firetouchinterest
+			or (getgenv and getgenv().firetouchinterest)
+		if ft then
+			ft(myHrp, mirrorMain, true)
+			task.wait(0.05)
+			ft(myHrp, mirrorMain, false)
+			ft(myHrp, mirrorMain, 0)
+			task.wait(0.05)
+			ft(myHrp, mirrorMain, 1)
+		end
+		useUnc("firetouchinterest", myHrp, mirrorMain, 0)
+		task.wait(0.05)
+		useUnc("firetouchinterest", myHrp, mirrorMain, 1)
+	end)
+	return true
+end
+
+Runtime.FindCakeBoss = function(bossName)
+	local targetNameLower = string.lower(bossName)
+	local enemies = workspace:FindFirstChild("Enemies")
+	if enemies then
+		for _, mob in ipairs(enemies:GetChildren()) do
+			local nameLower = string.lower(mob.Name)
+			if string.find(nameLower, targetNameLower) and IsEnemyVulnerable(mob, nil) then
+				local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart", true)
+				return mob, hrp
+			end
+		end
+	end
+	for _, mob in ipairs(ReplicatedStorage:GetChildren()) do
+		if mob:IsA("Model") then
+			local nameLower = string.lower(mob.Name)
+			if string.find(nameLower, targetNameLower) and IsEnemyVulnerable(mob, nil) then
+				local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart", true)
+				return mob, hrp
+			end
+		end
+	end
+	local repEnemies = ReplicatedStorage:FindFirstChild("Enemies")
+	if repEnemies then
+		for _, mob in ipairs(repEnemies:GetChildren()) do
+			if mob:IsA("Model") then
+				local nameLower = string.lower(mob.Name)
+				if string.find(nameLower, targetNameLower) and IsEnemyVulnerable(mob, nil) then
+					local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart", true)
+					return mob, hrp
+				end
+			end
+		end
+	end
+	return nil, nil
 end
 
 local function EquipWeapon(overrideCategory)
@@ -6644,6 +7171,37 @@ local function IsAllyOrSameTeam(otherEntity)
 	return false
 end
 
+do
+	local function TryAddTargetEntity(entity, myRawChar, seenEntities, myPos, attackRange, hitTargets)
+		if not entity or entity == myRawChar or seenEntities[entity] then
+			return
+		end
+		if IsAllyOrSameTeam(entity) then
+			return
+		end
+		local bl = enemyBlacklist[entity]
+		if bl and os.clock() < bl then
+			return
+		end
+		local eHum = entity:FindFirstChildOfClass("Humanoid")
+		if not eHum or eHum.Health <= 0 then
+			return
+		end
+		local eHrp = entity:FindFirstChild("HumanoidRootPart")
+		if not eHrp then
+			return
+		end
+		if (eHrp.Position - myPos).Magnitude > attackRange then
+			return
+		end
+
+		seenEntities[entity] = true
+		local targetPart = entity:FindFirstChild("Head") or eHrp
+		table.insert(hitTargets, { entity, targetPart })
+	end
+	Runtime.TryAddTargetEntity = TryAddTargetEntity
+end
+
 local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 	if Runtime.CanOperate and not Runtime.CanOperate() then
 		return
@@ -6735,70 +7293,18 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 
 	local myPos = myHrp.Position
 	local myRawChar = player.Character
-
-	local function TryAddTargetEntity(entity)
-		if not entity or entity == myRawChar or seenEntities[entity] then
-			return
-		end
-		if IsAllyOrSameTeam(entity) then
-			return
-		end
-		local bl = enemyBlacklist[entity]
-		if bl and os.clock() < bl then
-			return
-		end
-		local eHum = entity:FindFirstChildOfClass("Humanoid")
-		if not eHum or eHum.Health <= 0 then
-			return
-		end
-		local eHrp = entity:FindFirstChild("HumanoidRootPart")
-		if not eHrp then
-			return
-		end
-		if (eHrp.Position - myPos).Magnitude > attackRange then
-			return
-		end
-
-		seenEntities[entity] = true
-		local targetPart = entity:FindFirstChild("Head") or eHrp
-		table.insert(hitTargets, { entity, targetPart })
-	end
+	local tryAddTarget = Runtime.TryAddTargetEntity
 
 	if currentTargetInstance then
-		TryAddTargetEntity(currentTargetInstance)
+		tryAddTarget(currentTargetInstance, myRawChar, seenEntities, myPos, attackRange, hitTargets)
 	end
 
 	local enemiesFolder = Paths and Paths.Enemies or workspace:FindFirstChild("Enemies")
 	if enemiesFolder then
 		for _, entity in ipairs(enemiesFolder:GetChildren()) do
-			TryAddTargetEntity(entity)
+			tryAddTarget(entity, myRawChar, seenEntities, myPos, attackRange, hitTargets)
 			if #hitTargets >= maxTargets then
 				break
-			end
-		end
-	end
-
-	if #hitTargets < maxTargets then
-		local charsFolder = Paths and Paths.Characters or workspace:FindFirstChild("Characters")
-		if charsFolder then
-			for _, charModel in ipairs(charsFolder:GetChildren()) do
-				if charModel ~= myChar and charModel ~= player.Character then
-					TryAddTargetEntity(charModel)
-					if #hitTargets >= maxTargets then
-						break
-					end
-				end
-			end
-		end
-	end
-
-	if #hitTargets < maxTargets then
-		for _, otherPlayer in ipairs(Players:GetPlayers()) do
-			if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character ~= myChar then
-				TryAddTargetEntity(otherPlayer.Character)
-				if #hitTargets >= maxTargets then
-					break
-				end
 			end
 		end
 	end
@@ -6883,11 +7389,9 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 
 				local firstModel = hitTargets[1] and hitTargets[1][1]
 				local headPart = firstModel
-						and (
-							firstModel:FindFirstChild("Head")
-							or hitTargets[1][2]
-							or firstModel:FindFirstChild("HumanoidRootPart")
-						)
+						and (firstModel:FindFirstChild("Head") or hitTargets[1][2] or firstModel:FindFirstChild(
+							"HumanoidRootPart"
+						))
 					or targetHead
 
 				if not headPart then
@@ -6898,35 +7402,31 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 					and ReplicatedStorage.Modules:FindFirstChild("Net")
 
 				if attackSpeedMode == "Beta Fast Attack" then
-					local regAttack = Runtime.RegisterAttackEvent
-						or (netModule and netModule:FindFirstChild("RE/RegisterAttack"))
+					local regAttack = Runtime.CombatCache.RegisterAttack or Runtime.RegisterAttackEvent
 					if regAttack then
 						regAttack:FireServer(0.1, fruitM1Combo)
 					end
 
 					local sent = false
-					local okGlobal, Global = pcall(require, ReplicatedStorage:WaitForChild("Global"))
-					local nativeHitThread = okGlobal and Global and Global.SendHitsToServer and debug.getupvalue(Global.SendHitsToServer, 1)
+					local nativeHitThread = Runtime.CombatCache.NativeHitThread
 					if nativeHitThread and coroutine.status(nativeHitThread) == "suspended" then
 						sent = pcall(coroutine.resume, nativeHitThread, headPart, hitTargets)
 					end
 
-					if not sent and netModule and require then
-						pcall(function()
-							local netObj = require(netModule)
-							local regHit = netObj:RemoteEvent("RegisterHit")
-							if regHit then
-								local secret = currentSessionSecret
-								if not secret and nativeHitThread then
-									secret = tostring(player.UserId):sub(2, 4) .. tostring(nativeHitThread):sub(11, 15)
-									currentSessionSecret = secret
-								end
-								regHit:FireServer(headPart, hitTargets, nil, secret)
-							end
-						end)
+					if not sent then
+						local regHit = Runtime.CombatCache.RegisterHit or Runtime.RegisterHitEvent
+						if not regHit and Runtime.CombatCache.NetObject then
+							pcall(function()
+								regHit = Runtime.CombatCache.NetObject:RemoteEvent("RegisterHit")
+							end)
+						end
+						if regHit then
+							regHit:FireServer(headPart, hitTargets, nil, currentSessionSecret)
+						end
 					end
 				else
-					if netModule and require then
+					if netModule and require and not Runtime.cachedNetRequired then
+						Runtime.cachedNetRequired = true
 						pcall(function()
 							require(netModule):RemoteEvent("RegisterHit", true)
 						end)
@@ -6935,7 +7435,7 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 					local regAttack = Runtime.RegisterAttackEvent
 						or (netModule and netModule:FindFirstChild("RE/RegisterAttack"))
 					if regAttack then
-						regAttack:FireServer(0, fruitM1Combo)
+						regAttack:FireServer()
 					end
 
 					local secret = currentSessionSecret
@@ -6962,36 +7462,48 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 							serverTime = os.time()
 						end
 
-						local bit_bxor = (bit32 and bit32.bxor)
-							or (bit and bit.bxor)
-							or function(a, b)
-								local r = 0
-								for i = 0, 31 do
-									local bitA = math.floor(a / 2 ^ i) % 2
-									local bitB = math.floor(b / 2 ^ i) % 2
-									if bitA ~= bitB then
-										r = r + 2 ^ i
+						local bit_bxor = Runtime.bit_bxor
+						if not bit_bxor then
+							bit_bxor = (bit32 and bit32.bxor)
+								or (bit and bit.bxor)
+								or function(a, b)
+									local r = 0
+									for i = 0, 31 do
+										local bitA = math.floor(a / 2 ^ i) % 2
+										local bitB = math.floor(b / 2 ^ i) % 2
+										if bitA ~= bitB then
+											r = r + 2 ^ i
+										end
 									end
+									return r
 								end
-								return r
-							end
+							Runtime.bit_bxor = bit_bxor
+						end
 
-						local encRemoteName = string.gsub("RE/RegisterHit", ".", function(p2)
-							return string.char(bit_bxor(string.byte(p2), math.floor(serverTime / 10 % 10) + 1))
-						end)
-
-						local seedVal = getgenv().cachedNetSeed or 1
-						local netSeed = netModule and netModule:FindFirstChild("seed")
-						if netSeed and netSeed:IsA("RemoteFunction") then
-							pcall(function()
-								seedVal = netSeed:InvokeServer()
-								getgenv().cachedNetSeed = seedVal
+						local timeBucket = math.floor(serverTime / 10 % 10) + 1
+						if Runtime.cachedEncBucket ~= timeBucket or not Runtime.cachedEncRemoteName then
+							Runtime.cachedEncBucket = timeBucket
+							Runtime.cachedEncRemoteName = string.gsub("RE/RegisterHit", ".", function(p2)
+								return string.char(bit_bxor(string.byte(p2), timeBucket))
 							end)
+						end
+						local encRemoteName = Runtime.cachedEncRemoteName
+
+						local seedVal = getgenv().cachedNetSeed
+						if not seedVal then
+							local netSeed = netModule and netModule:FindFirstChild("seed")
+							if netSeed and netSeed:IsA("RemoteFunction") then
+								pcall(function()
+									seedVal = netSeed:InvokeServer()
+									getgenv().cachedNetSeed = seedVal
+								end)
+							end
+							seedVal = seedVal or 1
 						end
 
 						local encSeed = bit_bxor(dId + 909090, seedVal * 2)
 						pcall(function()
-							local safeRemote = dRemote or (useUnc and select(2, useUnc("cloneref", dRemote)))
+							local safeRemote = (UNC.cloneref and UNC.cloneref(dRemote)) or dRemote
 							safeRemote:FireServer(encRemoteName, encSeed, headPart, hitTargets)
 						end)
 					end
@@ -7000,10 +7512,27 @@ local function ExecuteAttack(myChar, myHrp, forceEquip, targetMobName)
 		end
 	end
 end
-local function AttackThread(generation)
+local function IsAnyCombatActive()
+	return isAutoFarm
+		or isAutoCakePrince
+		or isAutodoughKing
+		or isAutoBone
+		or isAutoSoulReaper
+		or isAutoMaterial
+		or cfg.isAutoHaze
+		or isAutoEliteHunter
+		or cfg.isAutoTyrant
+		or isAutoRaidKill
+		or isAutoDungeon
+		or farmNearestEnabled
+		or State.AutoKillVolcano
+		or isAutoAttackEnabled
+end
+
+local function StartCentralCombatEngine()
 	task.spawn(function()
-		while ScriptContext.Running and generation == State.WorkerGen do
-			if isAutoFarm then
+		while ScriptContext.Running do
+			if IsAnyCombatActive() then
 				if
 					(Runtime.CanOperate and not Runtime.CanOperate())
 					or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
@@ -7017,27 +7546,57 @@ local function AttackThread(generation)
 					local myChar = GetCharacter()
 					local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-					if now - lastAttackAt >= interval then
+					if myHrp and (now - lastAttackAt >= interval) then
 						local target = currentTargetInstance
 						local hum = target and target.Parent and target:FindFirstChildOfClass("Humanoid")
-						if myHrp and hum and hum.Health > 0 then
+						if hum and hum.Health > 0 then
 							local tHrp = target:FindFirstChild("HumanoidRootPart")
-								or target:FindFirstChildWhichIsA("BasePart", true)
-							local canHit = isReadyToAttack
+								or target:FindFirstChild("Head")
+								or target.PrimaryPart
+								or target:FindFirstChildWhichIsA("BasePart")
+							local inRange = isReadyToAttack
 								or (tHrp and (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= (cfg.HitRadius + 40))
-							if canHit then
-								ExecuteAttack(myChar, myHrp, true, target.Name)
+							if inRange then
 								lastAttackAt = now
+								ExecuteAttack(myChar, myHrp, true, target.Name)
 							end
-						elseif myHrp then
-							local p = GetQuestProfile()
-							local newT = GetTargetEnemy(p and p.Mob or nil)
-							if newT then
-								currentTargetInstance = newT
-								local newHum = newT:FindFirstChildOfClass("Humanoid")
-								if newHum and newHum.Health > 0 then
-									ExecuteAttack(myChar, myHrp, true, newT.Name)
-									lastAttackAt = now
+						elseif
+							isAutoAttackEnabled
+							and not (
+								isAutoFarm
+								or isAutoCakePrince
+								or isAutodoughKing
+								or isAutoBone
+								or isAutoSoulReaper
+								or isAutoMaterial
+								or cfg.isAutoHaze
+								or isAutoEliteHunter
+							)
+						then
+							if
+								not Runtime.lastStandaloneAttackScanAt
+								or (now - Runtime.lastStandaloneAttackScanAt >= 0.2)
+							then
+								Runtime.lastStandaloneAttackScanAt = now
+								local enemiesFolder = Paths and Paths.Enemies or workspace:FindFirstChild("Enemies")
+								if enemiesFolder then
+									local minDist = math.max(cfg.HitRadius or 60, 85)
+									local nearestMob = nil
+									for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+										local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+										if eHum and eHum.Health > 0 and eHrp and not IsAllyOrSameTeam(enemy) then
+											local d = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+											if d <= minDist then
+												minDist = d
+												nearestMob = enemy
+											end
+										end
+									end
+									if nearestMob then
+										lastAttackAt = now
+										ExecuteAttack(myChar, myHrp, false, nearestMob.Name)
+									end
 								end
 							end
 						end
@@ -7045,13 +7604,19 @@ local function AttackThread(generation)
 				end
 			end
 
-			if isAutoFarm and (attackSpeedMode == "Super Fast Attack" or attackSpeedMode == "Beta Fast Attack") then
+			if IsAnyCombatActive() and isReadyToAttack and currentTargetInstance then
 				task.wait()
 			else
-				task.wait(cfg.ThreadSleep)
+				task.wait(cfg.ThreadSleep or 0.05)
 			end
 		end
 	end)
+end
+
+StartCentralCombatEngine()
+
+local function AttackThread(generation)
+	-- Unified into StartCentralCombatEngine()
 end
 
 local cachedHazeMob = nil
@@ -7154,12 +7719,6 @@ local function GetBestHazeMob()
 			table.insert(searchList, inst)
 		end
 	end
-	local charactersFolder = Paths and Paths.Characters or workspace:FindFirstChild("Characters")
-	if charactersFolder then
-		for _, inst in ipairs(charactersFolder:GetChildren()) do
-			table.insert(searchList, inst)
-		end
-	end
 	for _, inst in ipairs(ReplicatedStorage:GetChildren()) do
 		if inst:IsA("Model") then
 			table.insert(searchList, inst)
@@ -7204,7 +7763,6 @@ end
 
 local function StartAutoHaze()
 	local generation = State.WorkerGen
-	ToggleFloat(true)
 
 	local Sea3PatrolLocations = {
 		Vector3.new(-449, 108, 5948),
@@ -7218,32 +7776,6 @@ local function StartAutoHaze()
 	local currentPatrolIndex = 1
 	local lastPatrolTime = 0
 	local PATROL_INTERVAL = 8
-
-	task.spawn(function()
-		while cfg.isAutoHaze and ScriptContext.Running and generation == State.WorkerGen do
-			if IsHighPriorityActive("AutoHaze") or not EnvironmentGate.CanRun("HazeQuest") then
-				task.wait(1)
-				if IsHighPriorityActive("AutoHaze") then
-					break
-				end
-			else
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-				local myChar = GetCharacter()
-				local myHrp = GetRootPart()
-				if myHrp then
-					local tName = currentTargetInstance and currentTargetInstance.Name
-					ExecuteAttack(myChar, myHrp, true, tName)
-				end
-
-				if interval <= 0 then
-					task.wait()
-				else
-					task.wait(interval)
-				end
-			end
-		end
-	end)
 
 	local hazeBringConn
 	local lastHazeBringTick = 0
@@ -7262,12 +7794,12 @@ local function StartAutoHaze()
 		if IsHighPriorityActive("AutoHaze") or not EnvironmentGate.CanRun("HazeQuest") then
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
 			if myHrp and tHrp then
-				local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+				local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 				if magnetPos then
 					UniversalMagnet(target.Name, magnetPos, myHrp.Position)
 				end
@@ -7282,97 +7814,87 @@ local function StartAutoHaze()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			elseif IsHighPriorityActive("AutoHaze") then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
 			else
 				local ok, err = pcall(function()
-				local myHrp = GetRootPart()
-				if not myHrp then
-					return
-				end
-
-				local now = os.clock()
-				if now - lastEvasionTime >= cfg.EvasionTick then
-					lastEvasionTime = now
-					local radius = math.max(0, math.floor(cfg.EvasionRadius))
-					currentEvasionOffset =
-						Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-					lastEvasionMoveAt = 0
-				end
-
-				local targetMobInfo = GetBestHazeMob()
-				if not targetMobInfo then
-					isReadyToAttack = false
-					currentTargetInstance = nil
-					if Runtime.activeTween then
-						Runtime.activeTween:Cancel()
-						Runtime.activeTween = nil
+					local myHrp = GetRootPart()
+					if not myHrp then
+						return
 					end
-					ToggleFloat(false)
-					return
-				end
 
-				if targetMobInfo.IsGhostPos then
-					isReadyToAttack = false
-					currentTargetInstance = nil
-					ToggleFloat(true)
-					TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0)))
-					return
-				end
-
-				local targetEnemy = targetMobInfo.Instance
-				currentTargetInstance = targetEnemy
-
-				if targetEnemy then
-					local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-					if h then
-						if h.Health ~= lastTargetHealth then
-							lastTargetHealth = h.Health
-							lastTargetHealthChangeAt = os.clock()
-						end
-						if h.Health == 0 or (os.clock() - lastTargetHealthChangeAt > cfg.StuckTimeout) then
-							enemyBlacklist[targetEnemy] = os.clock() + cfg.StuckTimeout
-							isReadyToAttack = false
-							currentTargetInstance = nil
-							task.wait(0.1)
-							return
-						end
+					local now = os.clock()
+					if now - lastEvasionTime >= cfg.EvasionTick then
+						lastEvasionTime = now
+						local radius = math.max(0, math.floor(cfg.EvasionRadius))
+						currentEvasionOffset =
+							Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+						lastEvasionMoveAt = 0
 					end
-				end
 
-				if targetEnemy and targetEnemy:FindFirstChild("HumanoidRootPart") then
-					EquipWeapon()
-					local tHrp = targetEnemy.HumanoidRootPart
-					local targetDistance = (tHrp.Position - myHrp.Position).Magnitude
-
-					if targetDistance > cfg.BringRadius then
+					local targetMobInfo = GetBestHazeMob()
+					if not targetMobInfo then
 						isReadyToAttack = false
-						ToggleFloat(true)
-						TweenTo(LookCFrame(tHrp.Position, cfg.TweenHeight))
-					else
-						isReadyToAttack = true
-						UniversalEvasionTween(myHrp, tHrp.Position, now)
+						currentTargetInstance = nil
+						task.wait(1)
+						return
 					end
-				else
-					isReadyToAttack = false
+
+					if targetMobInfo.IsGhostPos then
+						isReadyToAttack = false
+						currentTargetInstance = nil
+						ToggleFloat(true)
+						TweenTo(CFrame.new(targetMobInfo.MobPos + Vector3.new(0, cfg.TweenHeight, 0)))
+						return
+					end
+
+					local targetEnemy = targetMobInfo.Instance
+					currentTargetInstance = targetEnemy
+
+					if targetEnemy then
+						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+						if h then
+							if h.Health ~= lastTargetHealth then
+								lastTargetHealth = h.Health
+								lastTargetHealthChangeAt = os.clock()
+							end
+							if h.Health == 0 or (os.clock() - lastTargetHealthChangeAt > cfg.StuckTimeout) then
+								enemyBlacklist[targetEnemy] = os.clock() + cfg.StuckTimeout
+								isReadyToAttack = false
+								currentTargetInstance = nil
+								task.wait(0.1)
+								return
+							end
+						end
+					end
+
+					if targetEnemy and targetEnemy:FindFirstChild("HumanoidRootPart") then
+						EquipWeapon()
+						local tHrp = targetEnemy.HumanoidRootPart
+						local targetDistance = (tHrp.Position - myHrp.Position).Magnitude
+
+						if targetDistance > cfg.BringRadius then
+							isReadyToAttack = false
+							ToggleFloat(true)
+							TweenTo(LookCFrame(tHrp.Position, cfg.TweenHeight))
+						else
+							isReadyToAttack = true
+							UniversalEvasionTween(myHrp, tHrp.Position, now)
+						end
+					else
+						isReadyToAttack = false
+					end
+				end)
+				if not ok then
+					warn("[Auto Haze Error] " .. tostring(err))
 				end
-			end)
-			if not ok then
-				warn("[Auto Haze Error] " .. tostring(err))
+				task.wait(0.08)
 			end
-			task.wait(cfg.ThreadSleep)
 		end
-	end
-	ToggleFloat(false)
+		ToggleFloat(false)
 		if Runtime.activeTween then
 			Runtime.activeTween:Cancel()
 			Runtime.activeTween = nil
@@ -7729,42 +8251,10 @@ end
 
 local function StartAutoBone()
 	local generation = State.WorkerGen
-	ToggleFloat(true)
 
 	local defaultHauntedFallback =
 		{ Name = "Reborn Skeletons", Mob = "Reborn Skeleton", MobPos = Vector3.new(-8760, 183, 6168) }
 	local activeHauntedMobInfo = GetBestHauntedMob() or defaultHauntedFallback
-
-	task.spawn(function()
-		while isAutoBone and ScriptContext.Running and generation == State.WorkerGen do
-			if IsHighPriorityActive("RegularFarm") or not EnvironmentGate.CanRun("BoneFarm") then
-				task.wait(1)
-				if IsHighPriorityActive("RegularFarm") then
-					break
-				end
-			elseif
-				(Runtime.CanOperate and not Runtime.CanOperate())
-				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
-			then
-				task.wait(1)
-			else
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-				local myChar = GetCharacter()
-				local myHrp = GetRootPart()
-				if myHrp then
-					local tName = currentTargetInstance and currentTargetInstance.Name or activeHauntedMobInfo.Mob
-					ExecuteAttack(myChar, myHrp, true, tName)
-				end
-
-				if interval <= 0 then
-					task.wait()
-				else
-					task.wait(interval)
-				end
-			end
-		end
-	end)
 
 	local boneBringConn
 	local lastBoneBringTick = 0
@@ -7783,14 +8273,14 @@ local function StartAutoBone()
 		if IsHighPriorityActive("RegularFarm") or not EnvironmentGate.CanRun("BoneFarm") then
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
 			if myHrp and tHrp then
 				local targetMobInfo = activeHauntedMobInfo or GetBestHauntedMob()
 				local targetMobName = targetMobInfo.Mob
-				local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+				local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 				if magnetPos then
 					UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
 				end
@@ -7805,17 +8295,11 @@ local function StartAutoBone()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			elseif IsHighPriorityActive("RegularFarm") then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
 			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
@@ -7905,7 +8389,7 @@ local function StartAutoBone()
 								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 								lastEvasionMoveAt = now
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 							end
 
 							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
@@ -7916,8 +8400,8 @@ local function StartAutoBone()
 						local spawnPos = targetMobInfo and targetMobInfo.MobPos or defaultHauntedFallback.MobPos
 						if spawnPos then
 							local distToSpawn = (myHrp.Position - spawnPos).Magnitude
+							ToggleFloat(true)
 							if distToSpawn > 80 then
-								ToggleFloat(true)
 								pcall(function()
 									local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
 									local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
@@ -7927,25 +8411,209 @@ local function StartAutoBone()
 								end)
 								TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
 							else
-								if Runtime.activeTween then
-									Runtime.activeTween:Cancel()
-									Runtime.activeTween = nil
-								end
-								ToggleFloat(false)
+								TweenTo(CFrame.new(spawnPos + currentEvasionOffset))
 							end
-						else
-							if Runtime.activeTween then
-								Runtime.activeTween:Cancel()
-								Runtime.activeTween = nil
-							end
-							ToggleFloat(false)
 						end
 						if Runtime.RestoreCulledEnemies then
 							Runtime.RestoreCulledEnemies(targetMobName)
 						end
 					end
 				end)
-				task.wait()
+				task.wait(0.08)
+			end
+		end
+
+		ToggleFloat(false)
+		if Runtime.activeTween then
+			pcall(function()
+				Runtime.activeTween:Cancel()
+			end)
+			Runtime.activeTween = nil
+		end
+	end)
+end
+
+local function StartAutoSoulReaper()
+	soulReaperWorkerGeneration = (soulReaperWorkerGeneration or 0) + 1
+	local generation = soulReaperWorkerGeneration
+
+	local function FindSoulReaper()
+		local function isValidBoss(m)
+			if not m then
+				return false
+			end
+			local hum = m:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				return true
+			end
+			if not hum and (m:FindFirstChild("HumanoidRootPart") or m:FindFirstChildWhichIsA("BasePart", true)) then
+				return true
+			end
+			return false
+		end
+
+		local enemies = workspace:FindFirstChild("Enemies")
+		if enemies then
+			for _, mob in ipairs(enemies:GetChildren()) do
+				local nameLower = string.lower(mob.Name)
+				if string.find(nameLower, "soul") and string.find(nameLower, "reaper") then
+					if isValidBoss(mob) then
+						local hrp = mob:FindFirstChild("HumanoidRootPart")
+							or mob:FindFirstChildWhichIsA("BasePart", true)
+						return mob, hrp
+					end
+				end
+			end
+		end
+
+		for _, child in ipairs(ReplicatedStorage:GetChildren()) do
+			local nameLower = string.lower(child.Name)
+			if string.find(nameLower, "soul") and string.find(nameLower, "reaper") then
+				if child:IsA("Model") and isValidBoss(child) then
+					local hrp = child:FindFirstChild("HumanoidRootPart")
+						or child:FindFirstChildWhichIsA("BasePart", true)
+					return child, hrp
+				end
+			end
+		end
+
+		local repEnemies = ReplicatedStorage:FindFirstChild("Enemies")
+		if repEnemies then
+			for _, child in ipairs(repEnemies:GetChildren()) do
+				local nameLower = string.lower(child.Name)
+				if string.find(nameLower, "soul") and string.find(nameLower, "reaper") then
+					if child:IsA("Model") and isValidBoss(child) then
+						local hrp = child:FindFirstChild("HumanoidRootPart")
+							or child:FindFirstChildWhichIsA("BasePart", true)
+						return child, hrp
+					end
+				end
+			end
+		end
+
+		return nil
+	end
+
+	task.spawn(function()
+		local arenaPos = Vector3.new(-9517.153320, 315.941315, 6787.390625)
+
+		while isAutoSoulReaper and ScriptContext.Running and generation == soulReaperWorkerGeneration do
+			local canRun = EnvironmentGate.CanRun("SoulReaper")
+			if not canRun then
+				isReadyToAttack = false
+				currentTargetInstance = nil
+				task.wait(2)
+			elseif
+				(Runtime.CanOperate and not Runtime.CanOperate())
+				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
+			then
+				task.wait(1)
+			else
+				local ok, err = pcall(function()
+					local myChar = GetCharacter()
+					local myHrp = GetRootPart()
+					if not myChar or not myHrp then
+						return
+					end
+
+					local now = os.clock()
+					if now - lastEvasionTime >= cfg.EvasionTick then
+						lastEvasionTime = now
+						local radius = math.max(0, math.floor(cfg.EvasionRadius))
+						currentEvasionOffset =
+							Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+						lastEvasionMoveAt = 0
+					end
+
+					local soulReaper, srHrp = FindSoulReaper()
+
+					if soulReaper then
+						if soulReaper.Parent == ReplicatedStorage then
+							currentTargetInstance = nil
+							isReadyToAttack = false
+							ToggleFloat(true)
+							pcall(function()
+								local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+								local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
+								if req then
+									req:FireServer(arenaPos)
+								end
+							end)
+							local distToArena = (myHrp.Position - arenaPos).Magnitude
+							if distToArena > 80 then
+								TweenTo(LookCFrame(arenaPos, cfg.TweenHeight))
+							else
+								TweenTo(CFrame.new(arenaPos + currentEvasionOffset))
+							end
+							return
+						end
+
+						currentTargetInstance = soulReaper
+						if srHrp then
+							ToggleFloat(true)
+							local centerPos = srHrp.Position
+							local targetDistance = (centerPos - myHrp.Position).Magnitude
+							if targetDistance > 80 then
+								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+								lastEvasionMoveAt = now
+							else
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
+							end
+							isReadyToAttack = (GetSafePosition(srHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
+							return
+						end
+					end
+
+					currentTargetInstance = nil
+					isReadyToAttack = false
+
+					local backpack = player:FindFirstChild("Backpack")
+					local essence = (backpack and backpack:FindFirstChild("Hallow Essence"))
+						or myChar:FindFirstChild("Hallow Essence")
+
+					if essence then
+						if essence.Parent == backpack and myChar:FindFirstChildOfClass("Humanoid") then
+							myChar.Humanoid:EquipTool(essence)
+							task.wait(0.2)
+						end
+
+						local map = workspace:FindFirstChild("Map")
+						local hc = map and map:FindFirstChild("Haunted Castle")
+						local summoner = hc and hc:FindFirstChild("Summoner")
+						local detection = summoner and summoner:FindFirstChild("Detection")
+
+						if detection and detection:IsA("BasePart") then
+							local distToSummoner = (myHrp.Position - detection.Position).Magnitude
+							ToggleFloat(true)
+							if distToSummoner > 25 then
+								TweenTo(LookCFrame(detection.Position, 8))
+							else
+								TweenTo(CFrame.new(detection.Position + Vector3.new(0, 3, 0)))
+								useUnc("firetouchinterest", myHrp, detection, 0)
+								task.wait(0.1)
+								useUnc("firetouchinterest", myHrp, detection, 1)
+								task.wait(0.5)
+							end
+							return
+						end
+					end
+
+					local distToArena = (myHrp.Position - arenaPos).Magnitude
+					ToggleFloat(true)
+					if distToArena > 80 then
+						pcall(function()
+							local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+							local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
+							if req then
+								req:FireServer(arenaPos)
+							end
+						end)
+						TweenTo(LookCFrame(arenaPos, cfg.TweenHeight))
+					else
+						TweenTo(CFrame.new(arenaPos + currentEvasionOffset))
+					end
+				end)
+				task.wait(0.08)
 			end
 		end
 
@@ -7961,40 +8629,8 @@ end
 
 local function StartAutoMaterialFarm()
 	local generation = State.WorkerGen
-	ToggleFloat(true)
 
 	local activeMaterialMobInfo = GetBestMaterialMob()
-
-	task.spawn(function()
-		while isAutoMaterial and ScriptContext.Running and generation == State.WorkerGen do
-			if IsHighPriorityActive("RegularFarm") then
-				task.wait(1)
-				break
-			end
-			if
-				(Runtime.CanOperate and not Runtime.CanOperate())
-				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
-			then
-				task.wait(1)
-			else
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-				local myChar = GetCharacter()
-				local myHrp = GetRootPart()
-				if myHrp then
-					local tName = currentTargetInstance and currentTargetInstance.Name
-						or (activeMaterialMobInfo and activeMaterialMobInfo.Mob or nil)
-					ExecuteAttack(myChar, myHrp, true, tName)
-				end
-
-				if interval <= 0 then
-					task.wait()
-				else
-					task.wait(interval)
-				end
-			end
-		end
-	end)
 
 	local materialBringConn
 	local lastMaterialBringTick = 0
@@ -8013,7 +8649,7 @@ local function StartAutoMaterialFarm()
 		if IsHighPriorityActive("RegularFarm") then
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -8025,7 +8661,7 @@ local function StartAutoMaterialFarm()
 						return
 					end
 					local targetMobName = targetMobInfo.Mob
-					local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+					local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 
 					if magnetPos then
 						UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
@@ -8039,10 +8675,10 @@ local function StartAutoMaterialFarm()
 	task.spawn(function()
 		while isAutoMaterial and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
-			end
-			if
+			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
 			then
@@ -8143,8 +8779,8 @@ local function StartAutoMaterialFarm()
 						local spawnPos = targetMobInfo and targetMobInfo.MobPos
 						if spawnPos then
 							local distToSpawn = (myHrp.Position - spawnPos).Magnitude
+							ToggleFloat(true)
 							if distToSpawn > 80 then
-								ToggleFloat(true)
 								pcall(function()
 									local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
 									local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
@@ -8154,18 +8790,8 @@ local function StartAutoMaterialFarm()
 								end)
 								TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
 							else
-								if Runtime.activeTween then
-									Runtime.activeTween:Cancel()
-									Runtime.activeTween = nil
-								end
-								ToggleFloat(false)
+								TweenTo(CFrame.new(spawnPos + currentEvasionOffset))
 							end
-						else
-							if Runtime.activeTween then
-								Runtime.activeTween:Cancel()
-								Runtime.activeTween = nil
-							end
-							ToggleFloat(false)
 						end
 						if Runtime.RestoreCulledEnemies then
 							Runtime.RestoreCulledEnemies(targetMobName)
@@ -8177,7 +8803,7 @@ local function StartAutoMaterialFarm()
 					currentTargetInstance = nil
 					isReadyToAttack = false
 				end
-				task.wait()
+				task.wait(0.08)
 			end
 		end
 	end)
@@ -8191,54 +8817,6 @@ local function StartAutoCakePrince()
 	local defaultCakeFallback =
 		{ Name = "Cookie Crafters", Mob = "Cookie Crafter", MobPos = Vector3.new(-2374, 38, -12125) }
 	local activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
-
-	task.spawn(function()
-		while isAutoCakePrince and ScriptContext.Running and generation == cakePrinceWorkerGeneration do
-			if isEliteHunterActive or not EnvironmentGate.CanRun("CakePrince") then
-				task.wait(1)
-				if isEliteHunterActive then
-					break
-				end
-			elseif
-				(Runtime.CanOperate and not Runtime.CanOperate())
-				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
-			then
-				task.wait(1)
-			else
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-				local myChar = GetCharacter()
-				local myHrp = GetRootPart()
-
-				if
-					myHrp
-					and isReadyToAttack
-					and currentTargetInstance
-					and currentTargetInstance.Parent
-					and currentTargetInstance:FindFirstChild("Humanoid")
-					and currentTargetInstance.Humanoid.Health > 0
-				then
-					local tName = currentTargetInstance.Name or activeCakeMobInfo.Mob
-					local cakeBoss = nil
-					local enemies = workspace:FindFirstChild("Enemies")
-					if enemies then
-						cakeBoss = enemies:FindFirstChild("Cake Prince")
-					end
-
-					if cakeBoss then
-						tName = "Cake Prince"
-					end
-					ExecuteAttack(myChar, myHrp, true, tName)
-				end
-
-				if interval <= 0 then
-					task.wait()
-				else
-					task.wait(interval)
-				end
-			end
-		end
-	end)
 
 	local cakeBringConn
 	local lastCakeBringTick = 0
@@ -8254,10 +8832,14 @@ local function StartAutoCakePrince()
 			end
 			return
 		end
-		if isEliteHunterActive or not EnvironmentGate.CanRun("CakePrince") then
+		if
+			isEliteHunterActive
+			or not EnvironmentGate.CanRun("CakePrince")
+			or (Runtime.IsInMirrorDimension and Runtime.IsInMirrorDimension())
+		then
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -8270,7 +8852,7 @@ local function StartAutoCakePrince()
 						return
 					end
 
-					local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+					local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 					if magnetPos then
 						UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
 					end
@@ -8286,17 +8868,11 @@ local function StartAutoCakePrince()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			elseif isEliteHunterActive then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
 			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
@@ -8320,25 +8896,69 @@ local function StartAutoCakePrince()
 
 					local status = getDripMamaStatus()
 
-					if status == "ready" then
-						CommF_:InvokeServer("CakePrinceSpawner")
+					if
+						status == "ready" and (not Runtime.lastCakeSpawnerAt or (now - Runtime.lastCakeSpawnerAt >= 4))
+					then
+						Runtime.lastCakeSpawnerAt = now
+						task.spawn(function()
+							pcall(function()
+								CommF_:InvokeServer("CakePrinceSpawner")
+							end)
+						end)
 					end
 
-					local enemiesFolder = workspace:FindFirstChild("Enemies")
-					local cakeBossSpawned = enemiesFolder and enemiesFolder:FindFirstChild("Cake Prince") ~= nil
+					local inMirror = Runtime.IsInMirrorDimension()
+					local cakeBoss, cbHrp = Runtime.FindCakeBoss("Cake Prince")
+
+					if inMirror then
+						if cakeBoss and cbHrp then
+							currentTargetInstance = cakeBoss
+							ToggleFloat(true)
+							local centerPos = cbHrp.Position
+							local targetDistance = (centerPos - myHrp.Position).Magnitude
+							if targetDistance > 80 then
+								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+								lastEvasionMoveAt = now
+							else
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
+							end
+							isReadyToAttack = (GetSafePosition(cbHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
+						else
+							currentTargetInstance = nil
+							isReadyToAttack = false
+							ToggleFloat(true)
+							local map = workspace:FindFirstChild("Map")
+							local md = map
+								and (map:FindFirstChild("MirrorDimension") or map:FindFirstChild("Mirror Dimension"))
+							if md then
+								local mdPos = GetSafePosition(md)
+								if (myHrp.Position - mdPos).Magnitude > 80 then
+									TweenTo(LookCFrame(mdPos, cfg.TweenHeight))
+								else
+									TweenTo(CFrame.new(mdPos + currentEvasionOffset))
+								end
+							end
+							if Runtime.RestoreCulledEnemies then
+								Runtime.RestoreCulledEnemies("Cake Prince")
+							end
+						end
+						return
+					end
+
+					if cakeBoss or status == "spawned" then
+						currentTargetInstance = nil
+						isReadyToAttack = false
+						Runtime.TouchCakeMirror(myHrp)
+						task.wait(0.5)
+						return
+					end
 
 					local targetMobInfo = activeCakeMobInfo
-					local targetMobName = targetMobInfo.Mob
-
-					if cakeBossSpawned then
-						targetMobName = "Cake Prince"
-					else
-						if not activeCakeMobInfo then
-							activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
-						end
+					if not targetMobInfo then
+						activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
 						targetMobInfo = activeCakeMobInfo
-						targetMobName = targetMobInfo.Mob
 					end
+					local targetMobName = targetMobInfo.Mob
 
 					local targetEnemy = currentTargetInstance
 
@@ -8371,7 +8991,7 @@ local function StartAutoCakePrince()
 
 					if not targetEnemy or not IsEnemyVulnerable(targetEnemy, targetMobName) then
 						targetEnemy = GetTargetEnemy(targetMobName)
-						if not targetEnemy and not cakeBossSpawned then
+						if not targetEnemy then
 							local distToCurrentSpawn = targetMobInfo.MobPos
 									and (myHrp.Position - targetMobInfo.MobPos).Magnitude
 								or 0
@@ -8402,16 +9022,12 @@ local function StartAutoCakePrince()
 							local mobProfile = GetMobProfileByName(targetEnemy.Name)
 							local centerPos = tHrp.Position
 
-							if cakeBossSpawned then
-								centerPos = tHrp.Position
-							end
-
 							local targetDistance = (centerPos - myHrp.Position).Magnitude
 							if targetDistance > 80 then
 								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 								lastEvasionMoveAt = now
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 							end
 							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 						end
@@ -8432,7 +9048,7 @@ local function StartAutoCakePrince()
 							end)
 							TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
 						else
-							TweenTo(CFrame.new(spawnPos + currentEvasionOffset, spawnPos))
+							TweenTo(CFrame.new(spawnPos + currentEvasionOffset))
 						end
 						if Runtime.RestoreCulledEnemies then
 							Runtime.RestoreCulledEnemies(targetMobName)
@@ -8444,7 +9060,7 @@ local function StartAutoCakePrince()
 					currentTargetInstance = nil
 					isReadyToAttack = false
 				end
-				task.wait()
+				task.wait(0.08)
 			end
 		end
 	end)
@@ -8458,49 +9074,6 @@ local function StartAutoDoughKing()
 	local defaultCakeFallback =
 		{ Name = "Cookie Crafters", Mob = "Cookie Crafter", MobPos = Vector3.new(-2374, 38, -12125) }
 	local activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
-
-	task.spawn(function()
-		while isAutodoughKing and ScriptContext.Running and generation == doughKingWorkerGeneration do
-			if isEliteHunterActive or not EnvironmentGate.CanRun("DoughKing") then
-				task.wait(1)
-				if isEliteHunterActive then
-					break
-				end
-			elseif
-				(Runtime.CanOperate and not Runtime.CanOperate())
-				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
-			then
-				task.wait(1)
-			else
-				local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-				local myChar = GetCharacter()
-				local myHrp = GetRootPart()
-
-				if
-					myHrp
-					and isReadyToAttack
-					and currentTargetInstance
-					and currentTargetInstance.Parent
-					and currentTargetInstance:FindFirstChild("Humanoid")
-					and currentTargetInstance.Humanoid.Health > 0
-				then
-					local tName = currentTargetInstance.Name or activeCakeMobInfo.Mob
-					local enemies = workspace:FindFirstChild("Enemies")
-					if enemies and enemies:FindFirstChild("Dough King") then
-						tName = "Dough King"
-					end
-					ExecuteAttack(myChar, myHrp, true, tName)
-				end
-
-				if interval <= 0 then
-					task.wait()
-				else
-					task.wait(interval)
-				end
-			end
-		end
-	end)
 
 	local doughBringConn
 	local lastDoughBringTick = 0
@@ -8516,10 +9089,14 @@ local function StartAutoDoughKing()
 			end
 			return
 		end
-		if isEliteHunterActive or not EnvironmentGate.CanRun("DoughKing") then
+		if
+			isEliteHunterActive
+			or not EnvironmentGate.CanRun("DoughKing")
+			or (Runtime.IsInMirrorDimension and Runtime.IsInMirrorDimension())
+		then
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -8532,7 +9109,7 @@ local function StartAutoDoughKing()
 						return
 					end
 
-					local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+					local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 					if magnetPos then
 						UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
 					end
@@ -8548,17 +9125,11 @@ local function StartAutoDoughKing()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			elseif isEliteHunterActive then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
 			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
@@ -8582,25 +9153,75 @@ local function StartAutoDoughKing()
 
 					local status = getDripMamaStatus()
 
-					if status == "ready" then
-						CommF_:InvokeServer("CakePrinceSpawner")
+					if
+						status == "ready" and (not Runtime.lastCakeSpawnerAt or (now - Runtime.lastCakeSpawnerAt >= 4))
+					then
+						Runtime.lastCakeSpawnerAt = now
+						task.spawn(function()
+							pcall(function()
+								CommF_:InvokeServer("CakePrinceSpawner")
+							end)
+						end)
+					end
+
+					local inMirror = Runtime.IsInMirrorDimension()
+					local doughBoss, dbHrp = Runtime.FindCakeBoss("Dough King")
+					if not doughBoss then
+						doughBoss, dbHrp = Runtime.FindCakeBoss("Cake Prince")
+					end
+
+					if inMirror then
+						if doughBoss and dbHrp then
+							currentTargetInstance = doughBoss
+							ToggleFloat(true)
+							local centerPos = dbHrp.Position
+							local targetDistance = (centerPos - myHrp.Position).Magnitude
+							if targetDistance > 80 then
+								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+								lastEvasionMoveAt = now
+							else
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
+							end
+							isReadyToAttack = (GetSafePosition(dbHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
+						else
+							currentTargetInstance = nil
+							isReadyToAttack = false
+							ToggleFloat(true)
+							local map = workspace:FindFirstChild("Map")
+							local md = map
+								and (map:FindFirstChild("MirrorDimension") or map:FindFirstChild("Mirror Dimension"))
+							if md then
+								local mdPos = GetSafePosition(md)
+								if (myHrp.Position - mdPos).Magnitude > 80 then
+									TweenTo(LookCFrame(mdPos, cfg.TweenHeight))
+								else
+									TweenTo(CFrame.new(mdPos + currentEvasionOffset))
+								end
+							end
+							if Runtime.RestoreCulledEnemies then
+								Runtime.RestoreCulledEnemies("Dough King")
+							end
+						end
+						return
 					end
 
 					local mapFolder = workspace:FindFirstChild("Map")
 					local cakeDimension = mapFolder and mapFolder:FindFirstChild("MirrorDimension") or nil
 
-					local targetMobInfo = activeCakeMobInfo
-					local targetMobName = targetMobInfo.Mob
-
-					if cakeDimension then
-						targetMobName = "Dough King"
-					else
-						if not activeCakeMobInfo then
-							activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
-						end
-						targetMobInfo = activeCakeMobInfo
-						targetMobName = targetMobInfo.Mob
+					if doughBoss or cakeDimension or status == "spawned" then
+						currentTargetInstance = nil
+						isReadyToAttack = false
+						Runtime.TouchCakeMirror(myHrp)
+						task.wait(0.5)
+						return
 					end
+
+					local targetMobInfo = activeCakeMobInfo
+					if not targetMobInfo then
+						activeCakeMobInfo = GetBestCakeMob() or defaultCakeFallback
+						targetMobInfo = activeCakeMobInfo
+					end
+					local targetMobName = targetMobInfo.Mob
 
 					local targetEnemy = currentTargetInstance
 
@@ -8664,16 +9285,12 @@ local function StartAutoDoughKing()
 							local mobProfile = GetMobProfileByName(targetEnemy.Name)
 							local centerPos = tHrp.Position
 
-							if cakeDimension then
-								centerPos = tHrp.Position
-							end
-
 							local targetDistance = (centerPos - myHrp.Position).Magnitude
 							if targetDistance > 80 then
 								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 								lastEvasionMoveAt = now
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 							end
 							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 						end
@@ -8682,32 +9299,19 @@ local function StartAutoDoughKing()
 						isReadyToAttack = false
 						ToggleFloat(true)
 
-						if cakeDimension then
-							local dimPos = GetSafePosition(cakeDimension)
-							local distToDim = (myHrp.Position - dimPos).Magnitude
-							if distToDim > 80 then
-								if now - lastEvasionMoveAt >= cfg.EvasionTick then
-									lastEvasionMoveAt = now
-									TweenTo(LookCFrame(dimPos, cfg.TweenHeight))
+						local spawnPos = targetMobInfo and targetMobInfo.MobPos or defaultCakeFallback.MobPos
+						local distToSpawn = (myHrp.Position - spawnPos).Magnitude
+						if distToSpawn > 80 then
+							pcall(function()
+								local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+								local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
+								if req then
+									req:FireServer(spawnPos)
 								end
-							else
-								TweenTo(CFrame.new(dimPos + currentEvasionOffset, dimPos))
-							end
+							end)
+							TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
 						else
-							local spawnPos = targetMobInfo and targetMobInfo.MobPos or defaultCakeFallback.MobPos
-							local distToSpawn = (myHrp.Position - spawnPos).Magnitude
-							if distToSpawn > 80 then
-								pcall(function()
-									local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-									local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
-									if req then
-										req:FireServer(spawnPos)
-									end
-								end)
-								TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
-							else
-								TweenTo(CFrame.new(spawnPos + currentEvasionOffset, spawnPos))
-							end
+							TweenTo(CFrame.new(spawnPos + currentEvasionOffset))
 						end
 						if Runtime.RestoreCulledEnemies then
 							Runtime.RestoreCulledEnemies(targetMobName)
@@ -8719,7 +9323,7 @@ local function StartAutoDoughKing()
 					currentTargetInstance = nil
 					isReadyToAttack = false
 				end
-				task.wait()
+				task.wait(0.08)
 			end
 		end
 	end)
@@ -8954,16 +9558,44 @@ end
 local function StartAutoFarm()
 	local generation = State.WorkerGen
 
-	ToggleFloat(true)
 	AttackThread(generation)
+
+	local farmBringConn
+	local lastFarmBringTick = 0
+	farmBringConn = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastFarmBringTick < 0.1 then
+			return
+		end
+		lastFarmBringTick = now
+		if not isAutoFarm or not ScriptContext.Running or generation ~= State.WorkerGen then
+			if farmBringConn then
+				farmBringConn:Disconnect()
+			end
+			return
+		end
+		if IsHighPriorityActive("RegularFarm") then
+			return
+		end
+		if isReadyToAttack and cfg.isBringMob then
+			local myHrp = GetRootPart()
+			local target = currentTargetInstance
+			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
+			if myHrp and tHrp then
+				local targetMobName = target.Name
+				UniversalMagnet(targetMobName, tHrp.Position, myHrp.Position)
+			end
+		end
+	end)
+	ScriptContext:AddConnection(farmBringConn)
 
 	task.spawn(function()
 		while isAutoFarm and ScriptContext.Running and generation == State.WorkerGen do
 			if IsHighPriorityActive("RegularFarm") then
+				isReadyToAttack = false
+				currentTargetInstance = nil
 				task.wait(1)
-				break
-			end
-			if
+			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
 			then
@@ -9017,7 +9649,7 @@ local function StartAutoFarm()
 									else
 										if now - lastEvasionMoveAt >= cfg.EvasionTick then
 											lastEvasionMoveAt = now
-											TweenTo(CFrame.new(bHrp.Position + currentEvasionOffset, bHrp.Position))
+											TweenTo(CFrame.new(bHrp.Position + currentEvasionOffset))
 										end
 									end
 
@@ -9152,8 +9784,10 @@ local function StartAutoFarm()
 
 							UniversalEvasionTween(myHrp, centerPos, now)
 
-							local magnetPos = profile and profile.MobPos or tHrp.Position
-							UniversalMagnet(profile.Mob, magnetPos, myHrp.Position)
+							local magnetPos = (tHrp and tHrp.Position) or (profile and profile.MobPos)
+							if cfg.isBringMob then
+								UniversalMagnet(profile.Mob, magnetPos, myHrp.Position)
+							end
 
 							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 						end
@@ -9163,8 +9797,8 @@ local function StartAutoFarm()
 						local spawnPos = profile and profile.MobPos
 						if spawnPos then
 							local distToSpawn = (myHrp.Position - spawnPos).Magnitude
+							ToggleFloat(true)
 							if distToSpawn > 80 then
-								ToggleFloat(true)
 								pcall(function()
 									local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
 									local req = remotes and remotes:FindFirstChild("RequestStreamAroundAsync")
@@ -9174,18 +9808,8 @@ local function StartAutoFarm()
 								end)
 								TweenTo(LookCFrame(spawnPos, cfg.TweenHeight))
 							else
-								if Runtime.activeTween then
-									Runtime.activeTween:Cancel()
-									Runtime.activeTween = nil
-								end
-								ToggleFloat(false)
+								TweenTo(CFrame.new(spawnPos + currentEvasionOffset))
 							end
-						else
-							if Runtime.activeTween then
-								Runtime.activeTween:Cancel()
-								Runtime.activeTween = nil
-							end
-							ToggleFloat(false)
 						end
 						if Runtime.RestoreCulledEnemies then
 							Runtime.RestoreCulledEnemies(profile and profile.Mob)
@@ -9246,7 +9870,7 @@ ScriptContext:AddConnection(RunService.Stepped:Connect(function()
 				or Runtime.activeTween ~= nil
 				or isTweeningToPlayer
 			if isFlightActive then
-				for _, p in ipairs(c:GetDescendants()) do
+				for _, p in ipairs(c:GetChildren()) do
 					if p:IsA("BasePart") and p.CanCollide then
 						p.CanCollide = false
 					end
@@ -9664,7 +10288,6 @@ end
 local function StartAutoRaid()
 	raidWorkerGeneration = raidWorkerGeneration + 1
 	local generation = raidWorkerGeneration
-	ToggleFloat(true)
 
 	task.spawn(function()
 		while isAutoRaidKill and ScriptContext.Running and generation == raidWorkerGeneration do
@@ -9699,7 +10322,12 @@ local function StartAutoRaid()
 			return
 		end
 		lastRaidBringTick = now
-		if not isAutoRaidKill or not ScriptContext.Running or generation ~= raidWorkerGeneration or not EnvironmentGate.CanRun("Raid") then
+		if
+			not isAutoRaidKill
+			or not ScriptContext.Running
+			or generation ~= raidWorkerGeneration
+			or not EnvironmentGate.CanRun("Raid")
+		then
 			if raidBringConn then
 				raidBringConn:Disconnect()
 			end
@@ -9714,7 +10342,7 @@ local function StartAutoRaid()
 		local myChar = GetCharacter()
 		local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-		if isReadyToAttack and isAutoRaidBring and not GetLiveRaidStatus().Ended then
+		if isReadyToAttack and isAutoRaidBring and cfg.isBringMob and not GetLiveRaidStatus().Ended then
 			local target = currentTargetInstance
 			local tHrp = target
 				and (target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart", true))
@@ -9736,162 +10364,164 @@ local function StartAutoRaid()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			else
 				local ok, err = pcall(function()
 					local myHrp = GetRootPart()
-				if not myHrp then
-					return
-				end
-
-				local raidStatus = GetLiveRaidStatus()
-				if raidStatus.Ended then
-					isReadyToAttack = false
-					currentTargetInstance = nil
-					if Runtime.activeTween then
-						Runtime.activeTween:Cancel()
-						Runtime.activeTween = nil
+					if not myHrp then
+						return
 					end
-					ToggleFloat(false)
-					task.wait(1)
-					return
-				end
 
-				ToggleFloat(true)
-
-				local now = os.clock()
-				if now - lastEvasionTime >= cfg.EvasionTick then
-					lastEvasionTime = now
-					local radius = math.max(0, math.floor(cfg.EvasionRadius))
-					currentEvasionOffset =
-						Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-					lastEvasionMoveAt = 0
-				end
-
-				local enemiesFolder = workspace:FindFirstChild("Enemies")
-				local raidMap = ScriptContext:GetRaidMap()
-
-				if not raidMap then
-					if Runtime.activeTween then
-						Runtime.activeTween:Cancel()
-						Runtime.activeTween = nil
+					local raidStatus = GetLiveRaidStatus()
+					if raidStatus.Ended then
+						isReadyToAttack = false
+						currentTargetInstance = nil
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
+						end
+						ToggleFloat(false)
+						task.wait(1)
+						return
 					end
-					ToggleFloat(false)
-					currentTargetInstance = nil
-					isReadyToAttack = false
-					return
-				end
 
-				local targetEnemy = currentTargetInstance
+					ToggleFloat(true)
 
-				if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
-					local closest = nil
-					local shortestDist = math.huge
+					local now = os.clock()
+					if now - lastEvasionTime >= cfg.EvasionTick then
+						lastEvasionTime = now
+						local radius = math.max(0, math.floor(cfg.EvasionRadius))
+						currentEvasionOffset =
+							Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+						lastEvasionMoveAt = 0
+					end
 
-					for _, enemy in ipairs(raidStatus.Enemies) do
-						if IsEnemyVulnerable(enemy) then
-							local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-								or enemy:FindFirstChildWhichIsA("BasePart", true)
-							if eHrp then
-								local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-								if dist < shortestDist then
-									shortestDist = dist
-									closest = enemy
+					local enemiesFolder = workspace:FindFirstChild("Enemies")
+					local raidMap = ScriptContext:GetRaidMap()
+
+					if not raidMap then
+						if Runtime.activeTween then
+							Runtime.activeTween:Cancel()
+							Runtime.activeTween = nil
+						end
+						ToggleFloat(false)
+						currentTargetInstance = nil
+						isReadyToAttack = false
+						return
+					end
+
+					local targetEnemy = currentTargetInstance
+
+					if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
+						local closest = nil
+						local shortestDist = math.huge
+
+						for _, enemy in ipairs(raidStatus.Enemies) do
+							if IsEnemyVulnerable(enemy) then
+								local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+									or enemy:FindFirstChildWhichIsA("BasePart", true)
+								if eHrp then
+									local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+									if dist < shortestDist then
+										shortestDist = dist
+										closest = enemy
+									end
 								end
 							end
 						end
-					end
 
-					targetEnemy = closest
-					currentTargetInstance = targetEnemy
-					if targetEnemy then
-						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-						lastTargetHealth = h and h.Health or -1
-						lastTargetHealthChangeAt = now
-					end
-				end
-
-				if targetEnemy then
-					local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-					if h then
-						if h.Health ~= lastTargetHealth then
-							lastTargetHealth = h.Health
+						targetEnemy = closest
+						currentTargetInstance = targetEnemy
+						if targetEnemy then
+							local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+							lastTargetHealth = h and h.Health or -1
 							lastTargetHealthChangeAt = now
 						end
+					end
 
-						if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
-							if not IsBossEntity(targetEnemy) then
-								enemyBlacklist[targetEnemy] = now + 3
-								currentTargetInstance = nil
-								isReadyToAttack = false
-								targetEnemy = nil
-							else
+					if targetEnemy then
+						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+						if h then
+							if h.Health ~= lastTargetHealth then
+								lastTargetHealth = h.Health
 								lastTargetHealthChangeAt = now
 							end
+
+							if
+								lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout)
+							then
+								if not IsBossEntity(targetEnemy) then
+									enemyBlacklist[targetEnemy] = now + 3
+									currentTargetInstance = nil
+									isReadyToAttack = false
+									targetEnemy = nil
+								else
+									lastTargetHealthChangeAt = now
+								end
+							end
 						end
 					end
-				end
 
-				if targetEnemy then
-					raidEmptyTimer = now
-					local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
-						or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
-					if tHrp then
-						local centerPos = GetSafePosition(tHrp)
-
-						local targetDistance = (centerPos - myHrp.Position).Magnitude
-						if targetDistance > 80 then
-							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
-							lastEvasionMoveAt = now
-						else
-							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
-						end
-
-						isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
-					end
-				else
-					isReadyToAttack = false
-					currentTargetInstance = nil
-
-					if raidEmptyTimer == 0 then
+					if targetEnemy then
 						raidEmptyTimer = now
-					end
+						local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
+							or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
+						if tHrp then
+							local centerPos = GetSafePosition(tHrp)
 
-					if isAutoRaidNextIsland and (now - raidEmptyTimer >= 1) then
-						local activeIsland, activeIslandNum = GetTargetRaidIsland()
-						if activeIsland then
-							local iPos = GetRealRaidIslandPosition(activeIsland)
-							local dist = (myHrp.Position - iPos).Magnitude
-
-							if dist > 15000 then
-								if Runtime.activeTween then
-									Runtime.activeTween:Cancel()
-									Runtime.activeTween = nil
-								end
-								ToggleFloat(true)
-								return
-							end
-
-							if activeIslandNum >= 5 and dist <= 150 then
-								if Runtime.activeTween then
-									Runtime.activeTween:Cancel()
-									Runtime.activeTween = nil
-								end
-								ToggleFloat(true)
-								return
-							end
-
-							if dist > 80 then
-								TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
+							local targetDistance = (centerPos - myHrp.Position).Magnitude
+							if targetDistance > 80 then
+								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+								lastEvasionMoveAt = now
 							else
-								TweenTo(CFrame.new(iPos + currentEvasionOffset, iPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
+							end
+
+							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
+						end
+					else
+						isReadyToAttack = false
+						currentTargetInstance = nil
+
+						if raidEmptyTimer == 0 then
+							raidEmptyTimer = now
+						end
+
+						if isAutoRaidNextIsland and (now - raidEmptyTimer >= 1) then
+							local activeIsland, activeIslandNum = GetTargetRaidIsland()
+							if activeIsland then
+								local iPos = GetRealRaidIslandPosition(activeIsland)
+								local dist = (myHrp.Position - iPos).Magnitude
+
+								if dist > 15000 then
+									if Runtime.activeTween then
+										Runtime.activeTween:Cancel()
+										Runtime.activeTween = nil
+									end
+									ToggleFloat(true)
+									return
+								end
+
+								if activeIslandNum >= 5 and dist <= 150 then
+									if Runtime.activeTween then
+										Runtime.activeTween:Cancel()
+										Runtime.activeTween = nil
+									end
+									ToggleFloat(true)
+									return
+								end
+
+								if dist > 80 then
+									TweenTo(CFrame.new(iPos + Vector3.new(0, 60, 0), iPos))
+								else
+									TweenTo(CFrame.new(iPos + currentEvasionOffset))
+								end
+							else
+								if Runtime.activeTween then
+									Runtime.activeTween:Cancel()
+									Runtime.activeTween = nil
+								end
+								ToggleFloat(false)
 							end
 						else
 							if Runtime.activeTween then
@@ -9900,15 +10530,8 @@ local function StartAutoRaid()
 							end
 							ToggleFloat(false)
 						end
-					else
-						if Runtime.activeTween then
-							Runtime.activeTween:Cancel()
-							Runtime.activeTween = nil
-						end
-						ToggleFloat(false)
 					end
-				end
-			end)
+				end)
 			end
 			task.wait()
 		end
@@ -9917,7 +10540,6 @@ end
 
 local function StartFarmNearest()
 	local generation = State.WorkerGen
-	ToggleFloat(true)
 
 	task.spawn(function()
 		while farmNearestEnabled and ScriptContext.Running and generation == State.WorkerGen do
@@ -9959,7 +10581,7 @@ local function StartFarmNearest()
 			end
 			return
 		end
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target
@@ -10185,7 +10807,6 @@ end
 
 local function StartAutoDungeon()
 	local generation = dungeonWorkerGeneration
-	ToggleFloat(true)
 
 	task.spawn(function()
 		while isAutoDungeon and ScriptContext.Running and generation == dungeonWorkerGeneration do
@@ -10222,14 +10843,19 @@ local function StartAutoDungeon()
 			return
 		end
 		lastDungeonBringTick = now
-		if not isAutoDungeon or not ScriptContext.Running or generation ~= dungeonWorkerGeneration or not EnvironmentGate.CanRun("Dungeon") then
+		if
+			not isAutoDungeon
+			or not ScriptContext.Running
+			or generation ~= dungeonWorkerGeneration
+			or not EnvironmentGate.CanRun("Dungeon")
+		then
 			if dungeonBringConn then
 				dungeonBringConn:Disconnect()
 			end
 			return
 		end
 
-		if isReadyToAttack and isAutoDungeonBring then
+		if isReadyToAttack and isAutoDungeonBring and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -10237,7 +10863,7 @@ local function StartAutoDungeon()
 				local enemiesFolder = workspace:FindFirstChild("Enemies")
 				if enemiesFolder then
 					local targetMobName = target.Name
-					local magnetPos = targetMobInfo and targetMobInfo.MobPos or tHrp.Position
+					local magnetPos = tHrp.Position or (targetMobInfo and targetMobInfo.MobPos)
 					if magnetPos then
 						UniversalMagnet(targetMobName, magnetPos, myHrp.Position)
 					end
@@ -10253,14 +10879,7 @@ local function StartAutoDungeon()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			else
 				local ok, err = pcall(function()
 					local myHrp = GetRootPart()
@@ -10272,205 +10891,214 @@ local function StartAutoDungeon()
 					if not isDungeon then
 						isReadyToAttack = false
 						currentTargetInstance = nil
-						if Runtime.activeTween then
-							pcall(function()
-								Runtime.activeTween:Cancel()
-							end)
-							Runtime.activeTween = nil
-						end
+						task.wait(1)
 						return
 					end
 
-				local now = os.clock()
-				if now - lastEvasionTime >= cfg.EvasionTick then
-					lastEvasionTime = now
-					local radius = math.max(0, math.floor(cfg.EvasionRadius))
-					currentEvasionOffset =
-						Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
-					lastEvasionMoveAt = 0
-				end
+					local now = os.clock()
+					if now - lastEvasionTime >= cfg.EvasionTick then
+						lastEvasionTime = now
+						local radius = math.max(0, math.floor(cfg.EvasionRadius))
+						currentEvasionOffset =
+							Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+						lastEvasionMoveAt = 0
+					end
 
-				local enemiesFolder = workspace:FindFirstChild("Enemies")
-				local targetEnemy = currentTargetInstance
+					local enemiesFolder = workspace:FindFirstChild("Enemies")
+					local targetEnemy = currentTargetInstance
 
-				if targetEnemy then
-					local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-					if h then
-						if h.Health ~= lastTargetHealth then
-							lastTargetHealth = h.Health
-							lastTargetHealthChangeAt = now
-						end
-						if lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout) then
-							if not IsBossEntity(targetEnemy) and not IsDungeonProp(targetEnemy) then
-								enemyBlacklist[targetEnemy] = now + 3
-								currentTargetInstance = nil
-								isReadyToAttack = false
-								targetEnemy = nil
-							else
+					if targetEnemy then
+						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+						if h then
+							if h.Health ~= lastTargetHealth then
+								lastTargetHealth = h.Health
 								lastTargetHealthChangeAt = now
 							end
-						end
-					end
-				end
-
-				local activeProp = nil
-				local shortestPropDist = math.huge
-
-				if enemiesFolder then
-					for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-						if enemy.Parent == enemiesFolder and IsDungeonProp(enemy) and IsEnemyVulnerable(enemy) then
-							local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-								or enemy:FindFirstChildWhichIsA("BasePart", true)
-							if eHrp then
-								local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-								if dist <= 550 and dist < shortestPropDist then
-									shortestPropDist = dist
-									activeProp = enemy
+							if
+								lastTargetHealthChangeAt > 0 and (now - lastTargetHealthChangeAt >= cfg.StuckTimeout)
+							then
+								if not IsBossEntity(targetEnemy) and not IsDungeonProp(targetEnemy) then
+									enemyBlacklist[targetEnemy] = now + 3
+									currentTargetInstance = nil
+									isReadyToAttack = false
+									targetEnemy = nil
+								else
+									lastTargetHealthChangeAt = now
 								end
 							end
 						end
 					end
-				end
 
-				if activeProp then
-					if targetEnemy ~= activeProp then
-						if currentTargetInstance and currentTargetInstance ~= activeProp then
-							if Runtime.activeTween then
-								pcall(function()
-									Runtime.activeTween:Cancel()
-								end)
-								Runtime.activeTween = nil
-							end
-						end
-						targetEnemy = activeProp
-						currentTargetInstance = targetEnemy
-						local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-						lastTargetHealth = h and h.Health or -1
-						lastTargetHealthChangeAt = now
-					end
-				else
-					if targetEnemy and IsDungeonProp(targetEnemy) and not IsEnemyVulnerable(targetEnemy) then
-						targetEnemy = nil
-						currentTargetInstance = nil
-						if Runtime.activeTween then
-							pcall(function()
-								Runtime.activeTween:Cancel()
-							end)
-							Runtime.activeTween = nil
-						end
-					end
+					local activeProp = nil
+					local shortestPropDist = math.huge
 
-					if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
-						if currentTargetInstance then
-							if Runtime.activeTween then
-								pcall(function()
-									Runtime.activeTween:Cancel()
-								end)
-								Runtime.activeTween = nil
-							end
-							currentTargetInstance = nil
-						end
-
-						local bestTarget = nil
-						local shortestDist = math.huge
-
-						if enemiesFolder then
-							for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-								if
-									enemy.Parent == enemiesFolder
-									and not IsDungeonProp(enemy)
-									and IsEnemyVulnerable(enemy)
-								then
-									local isBoss = enemy:GetAttribute("IsBoss") == true
-										or enemy:GetAttribute("RaidBoss") == true
-										or IsBossEntity(enemy)
-									if isBoss then
-										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-											or enemy:FindFirstChildWhichIsA("BasePart", true)
-										if eHrp then
-											local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-											if dist <= 550 then
-												bestTarget = enemy
-												break
-											end
-										end
+					if enemiesFolder then
+						for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+							if enemy.Parent == enemiesFolder and IsDungeonProp(enemy) and IsEnemyVulnerable(enemy) then
+								local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+									or enemy:FindFirstChildWhichIsA("BasePart", true)
+								if eHrp then
+									local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+									if dist <= 550 and dist < shortestPropDist then
+										shortestPropDist = dist
+										activeProp = enemy
 									end
 								end
 							end
+						end
+					end
 
-							if not bestTarget then
+					if activeProp then
+						if targetEnemy ~= activeProp then
+							if currentTargetInstance and currentTargetInstance ~= activeProp then
+								if Runtime.activeTween then
+									pcall(function()
+										Runtime.activeTween:Cancel()
+									end)
+									Runtime.activeTween = nil
+								end
+							end
+							targetEnemy = activeProp
+							currentTargetInstance = targetEnemy
+							local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+							lastTargetHealth = h and h.Health or -1
+							lastTargetHealthChangeAt = now
+						end
+					else
+						if targetEnemy and IsDungeonProp(targetEnemy) and not IsEnemyVulnerable(targetEnemy) then
+							targetEnemy = nil
+							currentTargetInstance = nil
+							if Runtime.activeTween then
+								pcall(function()
+									Runtime.activeTween:Cancel()
+								end)
+								Runtime.activeTween = nil
+							end
+						end
+
+						if not targetEnemy or not IsEnemyVulnerable(targetEnemy) then
+							if currentTargetInstance then
+								if Runtime.activeTween then
+									pcall(function()
+										Runtime.activeTween:Cancel()
+									end)
+									Runtime.activeTween = nil
+								end
+								currentTargetInstance = nil
+							end
+
+							local bestTarget = nil
+							local shortestDist = math.huge
+
+							if enemiesFolder then
 								for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 									if
 										enemy.Parent == enemiesFolder
 										and not IsDungeonProp(enemy)
 										and IsEnemyVulnerable(enemy)
 									then
-										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-											or enemy:FindFirstChildWhichIsA("BasePart", true)
-										if eHrp then
-											local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-											if dist <= 550 and dist < shortestDist then
-												shortestDist = dist
-												bestTarget = enemy
+										local isBoss = enemy:GetAttribute("IsBoss") == true
+											or enemy:GetAttribute("RaidBoss") == true
+											or IsBossEntity(enemy)
+										if isBoss then
+											local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+												or enemy:FindFirstChildWhichIsA("BasePart", true)
+											if eHrp then
+												local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+												if dist <= 550 then
+													bestTarget = enemy
+													break
+												end
+											end
+										end
+									end
+								end
+
+								if not bestTarget then
+									for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+										if
+											enemy.Parent == enemiesFolder
+											and not IsDungeonProp(enemy)
+											and IsEnemyVulnerable(enemy)
+										then
+											local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+												or enemy:FindFirstChildWhichIsA("BasePart", true)
+											if eHrp then
+												local dist = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
+												if dist <= 550 and dist < shortestDist then
+													shortestDist = dist
+													bestTarget = enemy
+												end
 											end
 										end
 									end
 								end
 							end
-						end
 
-						targetEnemy = bestTarget
-						currentTargetInstance = targetEnemy
-						if targetEnemy then
-							local h = targetEnemy:FindFirstChildOfClass("Humanoid")
-							lastTargetHealth = h and h.Health or -1
-							lastTargetHealthChangeAt = now
+							targetEnemy = bestTarget
+							currentTargetInstance = targetEnemy
+							if targetEnemy then
+								local h = targetEnemy:FindFirstChildOfClass("Humanoid")
+								lastTargetHealth = h and h.Health or -1
+								lastTargetHealthChangeAt = now
+							end
 						end
 					end
-				end
 
-				if targetEnemy then
-					local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
-						or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
-					if tHrp then
-						local centerPos = GetSafePosition(tHrp)
-						local targetDistance = (centerPos - myHrp.Position).Magnitude
+					if targetEnemy then
+						local tHrp = targetEnemy:FindFirstChild("HumanoidRootPart")
+							or targetEnemy:FindFirstChildWhichIsA("BasePart", true)
+						if tHrp then
+							local centerPos = GetSafePosition(tHrp)
+							local targetDistance = (centerPos - myHrp.Position).Magnitude
 
-						if targetDistance > 550 then
-							currentTargetInstance = nil
-							targetEnemy = nil
-							isReadyToAttack = false
-							if Runtime.activeTween then
-								pcall(function()
-									Runtime.activeTween:Cancel()
-								end)
-								Runtime.activeTween = nil
-							end
-						else
-							if targetDistance > 80 then
-								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
-								lastEvasionMoveAt = now
+							if targetDistance > 550 then
+								currentTargetInstance = nil
+								targetEnemy = nil
+								isReadyToAttack = false
+								if Runtime.activeTween then
+									pcall(function()
+										Runtime.activeTween:Cancel()
+									end)
+									Runtime.activeTween = nil
+								end
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								if targetDistance > 80 then
+									TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
+									lastEvasionMoveAt = now
+								else
+									TweenTo(CFrame.new(centerPos + currentEvasionOffset))
+								end
+								isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 							end
-							isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
 						end
 					end
-				end
 
-				if not targetEnemy then
-					isReadyToAttack = false
-					currentTargetInstance = nil
+					if not targetEnemy then
+						isReadyToAttack = false
+						currentTargetInstance = nil
 
-					if isAutoDungeonNext then
-						local exitPos, exitPart = GetNearestDungeonExit()
-						if exitPos then
-							local myHrpPos = myHrp.Position
-							local dist = (myHrpPos - exitPos).Magnitude
-							if dist > 12 then
-								if now - lastEvasionMoveAt >= cfg.EvasionTick then
-									lastEvasionMoveAt = now
-									TweenTo(CFrame.new(exitPos + Vector3.new(0, 5, 0)))
+						if isAutoDungeonNext then
+							local exitPos, exitPart = GetNearestDungeonExit()
+							if exitPos then
+								local myHrpPos = myHrp.Position
+								local dist = (myHrpPos - exitPos).Magnitude
+								if dist > 12 then
+									if now - lastEvasionMoveAt >= cfg.EvasionTick then
+										lastEvasionMoveAt = now
+										TweenTo(CFrame.new(exitPos + Vector3.new(0, 5, 0)))
+									end
+								else
+									if Runtime.activeTween then
+										pcall(function()
+											Runtime.activeTween:Cancel()
+										end)
+										Runtime.activeTween = nil
+									end
+									myHrp.CFrame = CFrame.new(exitPos + Vector3.new(0, 2, 0))
+									if exitPart and hasFireTouch then
+										SafeTouch(exitPart, myHrp, 30)
+									end
 								end
 							else
 								if Runtime.activeTween then
@@ -10479,10 +11107,7 @@ local function StartAutoDungeon()
 									end)
 									Runtime.activeTween = nil
 								end
-								myHrp.CFrame = CFrame.new(exitPos + Vector3.new(0, 2, 0))
-								if exitPart and hasFireTouch then
-									SafeTouch(exitPart, myHrp, 30)
-								end
+								ToggleFloat(false)
 							end
 						else
 							if Runtime.activeTween then
@@ -10493,17 +11118,8 @@ local function StartAutoDungeon()
 							end
 							ToggleFloat(false)
 						end
-					else
-						if Runtime.activeTween then
-							pcall(function()
-								Runtime.activeTween:Cancel()
-							end)
-							Runtime.activeTween = nil
-						end
-						ToggleFloat(false)
 					end
-				end
-			end)
+				end)
 			end
 			task.wait()
 		end
@@ -10514,7 +11130,6 @@ end
 
 local function StartAutoKillVolcano()
 	local generation = State.WorkerGen
-	ToggleFloat(true)
 
 	task.spawn(function()
 		while State.AutoKillVolcano and ScriptContext.Running and generation == State.WorkerGen do
@@ -10555,7 +11170,7 @@ local function StartAutoKillVolcano()
 			return
 		end
 
-		if isReadyToAttack then
+		if isReadyToAttack and cfg.isBringMob then
 			local myHrp = GetRootPart()
 			local target = currentTargetInstance
 			local tHrp = target and target:FindFirstChild("HumanoidRootPart")
@@ -10627,7 +11242,7 @@ local function StartAutoKillVolcano()
 							TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							lastEvasionMoveAt = now
 						else
-							TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+							TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 						end
 
 						isReadyToAttack = (GetSafePosition(tHrp) - myHrp.Position).Magnitude <= cfg.MaxPullRange
@@ -10657,7 +11272,6 @@ local function StartAutoTorch()
 	isAutoTorch = true
 	autoTorchWorker = autoTorchWorker + 1
 	local gen = autoTorchWorker
-	ToggleFloat(true)
 
 	local litTorches = {}
 
@@ -10665,14 +11279,7 @@ local function StartAutoTorch()
 		while isAutoTorch and ScriptContext.Running and gen == autoTorchWorker do
 			local canRun = EnvironmentGate.CanRun("Torch")
 			if not canRun then
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			else
 				local hrp = GetRootPart()
 				if not hrp then
@@ -10743,14 +11350,7 @@ local function StartAutoFactory()
 		while isAutoFactory and ScriptContext.Running and gen == autoFactoryWorker do
 			local canRun = EnvironmentGate.CanRun("Factory")
 			if not canRun then
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			else
 				local hrp = GetRootPart()
 				if not hrp then
@@ -10778,8 +11378,11 @@ local function StartAutoFactory()
 							if now - lastEvasionTime >= cfg.EvasionTick then
 								lastEvasionTime = now
 								local radius = math.max(0, math.floor(cfg.EvasionRadius))
-								currentEvasionOffset =
-									Vector3.new(math.random(-radius, radius), cfg.TweenHeight, math.random(-radius, radius))
+								currentEvasionOffset = Vector3.new(
+									math.random(-radius, radius),
+									cfg.TweenHeight,
+									math.random(-radius, radius)
+								)
 								lastEvasionMoveAt = 0
 							end
 
@@ -10789,7 +11392,7 @@ local function StartAutoFactory()
 							if dist > 80 then
 								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 							end
 
 							if dist <= cfg.HitRadius then
@@ -10805,13 +11408,7 @@ local function StartAutoFactory()
 							end
 						end
 					else
-						if not cfg.isTeleportingToIsland then
-							if Runtime.activeTween then
-								Runtime.activeTween:Cancel()
-								Runtime.activeTween = nil
-							end
-							ToggleFloat(false)
-						end
+						task.wait(1)
 					end
 				end
 
@@ -10922,7 +11519,6 @@ end
 local function StartAutoFarmMagnet()
 	autoFarmMagnetWorkerGen = autoFarmMagnetWorkerGen + 1
 	local gen = autoFarmMagnetWorkerGen
-	ToggleFloat(true)
 
 	task.spawn(function()
 		while cfg.isAutoFarmMagnet and ScriptContext.Running and gen == autoFarmMagnetWorkerGen do
@@ -10964,6 +11560,10 @@ local function StartAutoFarmMagnet()
 			return
 		end
 
+		if not cfg.isBringMob then
+			return
+		end
+
 		local magnetMobs = FindMagnetEnemies()
 		local target = currentTargetInstance
 		local gatherPos = target and GetSafePosition(target)
@@ -10973,45 +11573,73 @@ local function StartAutoFarmMagnet()
 		end
 
 		if gatherPos and gatherPos ~= Vector3.zero then
+			if not Runtime.lastSimRadiusAt or (now - Runtime.lastSimRadiusAt >= 1.5) then
+				Runtime.lastSimRadiusAt = now
+				if UNC.sethiddenproperty then
+					UNC.sethiddenproperty(player, "SimulationRadius", math.huge)
+					UNC.sethiddenproperty(player, "MaxSimulationRadius", math.huge)
+				end
+			end
+
+			local gatherCF = (typeof(gatherPos) == "CFrame" and gatherPos) or CFrame.new(gatherPos)
+			local bringRadius = cfg.BringRadius or 350
+
 			for _, enemy in ipairs(magnetMobs) do
 				local eHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildWhichIsA("BasePart", true)
 				local eHum = enemy:FindFirstChildOfClass("Humanoid")
 
-				if eHrp and eHum and eHum.Health > 0 then
-					local dist = (eHrp.Position - myHrp.Position).Magnitude
-					if dist <= cfg.BringRadius then
-						if eHrp.CanCollide then
-							eHrp.CanCollide = false
-						end
-						if eHum.PlatformStand == false then
-							eHum.PlatformStand = true
-						end
-
-						local gatherCF = CFrame.new(gatherPos)
-						if cfg.BringMethod == "Tween" then
-							local d = (eHrp.Position - gatherPos).Magnitude
-							if d > 4 then
-								if not Runtime.activeMagnetTweens[eHrp] then
-									local dur = math.clamp(d / 400, 0.05, 0.25)
-									local tween = TweenService:Create(
-										eHrp,
-										TweenInfo.new(dur, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-										{ CFrame = gatherCF }
-									)
-									Runtime.activeMagnetTweens[eHrp] = tween
-									tween.Completed:Connect(function()
-										Runtime.activeMagnetTweens[eHrp] = nil
-										if eHrp and eHrp.Parent then
-											eHrp.CFrame = gatherCF
-										end
-									end)
-									tween:Play()
-								end
-							else
-								eHrp.CFrame = gatherCF
-							end
-						else
+				if eHrp and eHum then
+					if eHum.Health > 0 then
+						local dist = (eHrp.Position - myHrp.Position).Magnitude
+						if dist <= bringRadius then
 							eHrp.CFrame = gatherCF
+							eHrp.AssemblyLinearVelocity = Vector3.zero
+							eHrp.AssemblyAngularVelocity = Vector3.zero
+							eHrp.CanCollide = false
+
+							if not enemy:GetAttribute("MagnetLocked") then
+								enemy:SetAttribute("MagnetLocked", true)
+								eHum.WalkSpeed = 0
+								eHum.JumpPower = 0
+								if eHum.PlatformStand == false then
+									eHum.PlatformStand = true
+								end
+
+								local head = enemy:FindFirstChild("Head")
+								if head and head:IsA("BasePart") then
+									head.CanCollide = false
+								end
+
+								local anim = eHum:FindFirstChild("Animator")
+								if anim then
+									pcall(function()
+										anim:Destroy()
+									end)
+								end
+
+								local lockBv = eHrp:FindFirstChild("Lock")
+								if not lockBv then
+									lockBv = Instance.new("BodyVelocity")
+									lockBv.Name = "Lock"
+									lockBv.MaxForce = Vector3.new(100000, 100000, 100000)
+									lockBv.Velocity = Vector3.zero
+									lockBv.Parent = eHrp
+								else
+									lockBv.Velocity = Vector3.zero
+								end
+
+								pcall(function()
+									eHum:ChangeState(11)
+								end)
+							end
+						end
+					else
+						if enemy:GetAttribute("MagnetLocked") then
+							enemy:SetAttribute("MagnetLocked", nil)
+							local lockBv = eHrp:FindFirstChild("Lock")
+							if lockBv then
+								lockBv:Destroy()
+							end
 						end
 					end
 				end
@@ -11140,7 +11768,7 @@ local function StartAutoFarmMagnet()
 							if dist > 80 then
 								TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 							else
-								TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+								TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 							end
 						end
 
@@ -11225,103 +11853,8 @@ local function StartAutoFarmMagnet()
 end
 
 local function StartStandaloneAutoAttackThread()
-	task.spawn(function()
-		while ScriptContext.Running do
-			if isAutoAttackEnabled and not (isAutoFarm and isReadyToAttack) then
-				local now = os.clock()
-				local interval = (attackSpeedMode == "Beta Fast Attack") and cfg.AttackIntervalBeta
-					or (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
-					or cfg.AttackIntervalFast
-
-				if now - lastAttackAt >= interval then
-					local myChar = GetCharacter()
-					local myHrp = GetRootPart()
-					local currentWeapon = myChar and myChar:FindFirstChildOfClass("Tool")
-
-					if myHrp and currentWeapon then
-						local isBloxFruit = IsToolMatching(currentWeapon, "Fruit")
-							or IsToolMatching(currentWeapon, "Blox Fruit")
-							or IsToolMatching(currentWeapon, "Demon Fruit")
-							or currentWeapon.ToolTip == "Blox Fruit"
-						local isGun = IsToolMatching(currentWeapon, "Gun") or currentWeapon.ToolTip == "Gun"
-						local isPhysical = IsToolMatching(currentWeapon, "Melee")
-							or IsToolMatching(currentWeapon, "Sword")
-							or currentWeapon.ToolTip == "Melee"
-							or currentWeapon.ToolTip == "Sword"
-							or (meleeNames and meleeNames[currentWeapon.Name] == true)
-
-						if isPhysical or isBloxFruit or isGun then
-							local target = currentTargetInstance
-							local tHum = target and target:FindFirstChildOfClass("Humanoid")
-							if not target or not target.Parent or not tHum or tHum.Health <= 0 then
-								local minDist = math.max(cfg.HitRadius or 60, 85)
-
-								local function checkCandidate(entity)
-									if not entity or entity == myChar or entity == player.Character then
-										return
-									end
-									if IsAllyOrSameTeam(entity) then
-										return
-									end
-									local eHrp = entity:FindFirstChild("HumanoidRootPart")
-										or entity:FindFirstChildWhichIsA("BasePart", true)
-									local eHum = entity:FindFirstChildOfClass("Humanoid")
-									if eHrp and eHum and eHum.Health > 0 then
-										local d = (GetSafePosition(eHrp) - myHrp.Position).Magnitude
-										if d < minDist then
-											minDist = d
-											target = entity
-										end
-									end
-								end
-
-								local enemiesFolder = Paths and Paths.Enemies or workspace:FindFirstChild("Enemies")
-								if enemiesFolder then
-									for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-										checkCandidate(enemy)
-									end
-								end
-
-								local charsFolder = Paths and Paths.Characters or workspace:FindFirstChild("Characters")
-								if charsFolder then
-									for _, c in ipairs(charsFolder:GetChildren()) do
-										checkCandidate(c)
-									end
-								end
-
-								for _, otherP in ipairs(Players:GetPlayers()) do
-									if otherP ~= player and otherP.Character then
-										checkCandidate(otherP.Character)
-									end
-								end
-							end
-
-							if
-								target
-								and target:FindFirstChildOfClass("Humanoid")
-								and target:FindFirstChildOfClass("Humanoid").Health > 0
-							then
-								ExecuteAttack(myChar, myHrp, false, target.Name)
-								lastAttackAt = now
-							end
-						end
-					end
-				end
-			end
-
-			if
-				isAutoAttackEnabled
-				and (attackSpeedMode == "Super Fast Attack" or attackSpeedMode == "Beta Fast Attack")
-			then
-				task.wait()
-			else
-				task.wait(cfg.ThreadSleep)
-			end
-		end
-	end)
+	-- Handled centrally by StartCentralCombatEngine()
 end
-
-StartStandaloneAutoAttackThread()
 
 local autoSeaBeastWorkerGen = 0
 
@@ -11337,14 +11870,7 @@ local function StartAutoSeaBeast()
 		while cfg.autoSeaBeast and ScriptContext.Running and gen == autoSeaBeastWorkerGen do
 			local canRun = EnvironmentGate.CanRun("SeaEvents")
 			if not canRun then
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			else
 				local ok, err = pcall(function()
 					local myChar = GetCharacter()
@@ -11384,7 +11910,7 @@ local function StartAutoSeaBeast()
 							ToggleFloat(true)
 						end
 					else
-						ToggleFloat(false)
+						task.wait(1)
 					end
 				end)
 				if not ok then
@@ -11437,13 +11963,18 @@ local function StartAutoEliteHunter()
 			return
 		end
 		lastEliteBringTick = now
-		if not isAutoEliteHunter or not ScriptContext.Running or gen ~= State.EliteHunterGen or not EnvironmentGate.CanRun("EliteHunter") then
+		if
+			not isAutoEliteHunter
+			or not ScriptContext.Running
+			or gen ~= State.EliteHunterGen
+			or not EnvironmentGate.CanRun("EliteHunter")
+		then
 			if eliteBringConn then
 				eliteBringConn:Disconnect()
 			end
 			return
 		end
-		if isReadyToAttack and currentTargetInstance and currentEliteEnemy then
+		if isReadyToAttack and cfg.isBringMob and currentTargetInstance and currentEliteEnemy then
 			local myHrp = GetRootPart()
 			local tHrp = currentTargetInstance:FindFirstChild("HumanoidRootPart")
 			if myHrp and tHrp then
@@ -11461,14 +11992,7 @@ local function StartAutoEliteHunter()
 			if not canRun then
 				isReadyToAttack = false
 				currentTargetInstance = nil
-				if Runtime.activeTween then
-					pcall(function()
-						Runtime.activeTween:Cancel()
-					end)
-					Runtime.activeTween = nil
-				end
-				ToggleFloat(false)
-				task.wait(1.5)
+				task.wait(2)
 			elseif
 				(Runtime.CanOperate and not Runtime.CanOperate())
 				or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
@@ -11574,7 +12098,7 @@ local function StartAutoEliteHunter()
 									if targetDistance > 80 then
 										TweenTo(LookCFrame(centerPos, cfg.TweenHeight))
 									else
-										TweenTo(CFrame.new(centerPos + currentEvasionOffset, centerPos))
+										TweenTo(CFrame.new(centerPos + currentEvasionOffset))
 									end
 								end
 								isReadyToAttack = targetDistance <= cfg.MaxPullRange
@@ -11616,13 +12140,7 @@ local function StartAutoEliteHunter()
 					else
 						currentTargetInstance = nil
 						isReadyToAttack = false
-						if not cfg.isTeleportingToIsland then
-							if Runtime.activeTween then
-								Runtime.activeTween:Cancel()
-								Runtime.activeTween = nil
-							end
-							ToggleFloat(false)
-						end
+						task.wait(1)
 					end
 				end)
 				if not ok then
@@ -11636,6 +12154,166 @@ local function StartAutoEliteHunter()
 		StopAllActivities()
 		getgenv().EliteWaitStart = nil
 	end)
+end
+
+do
+	local function FindTyrant()
+		local enemiesFolder = workspace:FindFirstChild("Enemies")
+		if enemiesFolder then
+			for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+				if string.find(string.lower(enemy.Name), "tyrant") then
+					local hum = enemy:FindFirstChildOfClass("Humanoid")
+					local hrp = enemy:FindFirstChild("HumanoidRootPart")
+						or enemy:FindFirstChild("Head")
+						or enemy.PrimaryPart
+						or enemy:FindFirstChildWhichIsA("BasePart")
+					if hum and hum.Health > 0 and hrp then
+						return enemy, hrp, hum, "Enemies"
+					end
+				end
+			end
+		end
+
+		local rep = game:GetService("ReplicatedStorage")
+		local function checkRepModel(model)
+			if model and model:IsA("Model") and string.find(string.lower(model.Name), "tyrant") then
+				local hum = model:FindFirstChildOfClass("Humanoid")
+				if not hum or hum.Health > 0 then
+					local hrp = model:FindFirstChild("HumanoidRootPart")
+						or model:FindFirstChild("Head")
+						or model.PrimaryPart
+						or model:FindFirstChildWhichIsA("BasePart")
+					return model, hrp, hum, "ReplicatedStorage"
+				end
+			end
+			return nil
+		end
+
+		for _, child in ipairs(rep:GetChildren()) do
+			local m, hrp, hum, src = checkRepModel(child)
+			if m then
+				return m, hrp, hum, src
+			end
+		end
+
+		local repEnemies = rep:FindFirstChild("Enemies")
+		if repEnemies then
+			for _, child in ipairs(repEnemies:GetChildren()) do
+				local m, hrp, hum, src = checkRepModel(child)
+				if m then
+					return m, hrp, hum, src
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function RequestEliteQuestIfAlive()
+		pcall(function()
+			local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+			local questGui = pg and pg:FindFirstChild("Main") and pg.Main:FindFirstChild("Quest")
+			local isQuestActive = questGui and questGui.Visible
+			if not isQuestActive and CommF_ then
+				CommF_:InvokeServer("EliteHunter")
+			end
+		end)
+	end
+
+	local function StartAutoTyrant()
+		State.TyrantGen = (State.TyrantGen or 0) + 1
+		local gen = State.TyrantGen
+
+		task.spawn(function()
+			local lastQuestCheck = 0
+			local defaultAltarPos = Vector3.new(-16194.00, 155.22, 1420.72)
+
+			while cfg.isAutoTyrant and ScriptContext.Running and gen == State.TyrantGen do
+				local canRun = EnvironmentGate.CanRun and EnvironmentGate.CanRun("Tyrant")
+				if canRun == false then
+					currentTargetInstance = nil
+					isReadyToAttack = false
+					task.wait(1.5)
+				elseif
+					(Runtime.CanOperate and not Runtime.CanOperate())
+					or (Runtime.IsPlayerAlive and not Runtime.IsPlayerAlive())
+				then
+					task.wait(1)
+				else
+					local ok, err = pcall(function()
+						local tyrantModel, tyrantPart, tyrantHum, source = FindTyrant()
+						local myChar = GetCharacter()
+						local myHrp = GetRootPart()
+
+						if tyrantModel and (not tyrantHum or tyrantHum.Health > 0) then
+							-- 1. Ambil quest Elite Hunter selama Tyrant masih hidup
+							if cfg.isAutoTyrantEliteQuest then
+								local now = os.clock()
+								if now - lastQuestCheck >= 5 then
+									lastQuestCheck = now
+									RequestEliteQuestIfAlive()
+								end
+							end
+
+							-- 2. Gerakan dan Penyerangan
+							if source == "ReplicatedStorage" then
+								currentTargetInstance = nil
+								isReadyToAttack = false
+								ToggleFloat(true)
+								local targetPos = (tyrantPart and tyrantPart.Position ~= Vector3.zero)
+										and tyrantPart.Position
+									or defaultAltarPos
+								TweenTo(CFrame.new(targetPos + Vector3.new(0, 40, 0), targetPos))
+								task.wait(0.5)
+							elseif source == "Enemies" and tyrantPart and myChar and myHrp then
+								currentTargetInstance = tyrantModel
+								ToggleFloat(true)
+								EnableBuso()
+
+								local bossPos = tyrantPart.Position
+								local attackCFrame = CFrame.new(bossPos + Vector3.new(0, 30, 0), bossPos)
+
+								TweenTo(attackCFrame)
+
+								local dist = (bossPos - myHrp.Position).Magnitude
+								isReadyToAttack = dist <= 80
+								if isReadyToAttack then
+									ExecuteAttack(myChar, myHrp, true, tyrantModel.Name)
+								end
+
+								local interval = (attackSpeedMode == "Super Fast Attack") and cfg.AttackIntervalSuper
+									or cfg.AttackIntervalFast
+								if interval <= 0 then
+									task.wait()
+								else
+									task.wait(interval)
+								end
+							end
+						else
+							currentTargetInstance = nil
+							isReadyToAttack = false
+							ToggleFloat(false)
+							task.wait(1.5)
+						end
+					end)
+
+					if not ok then
+						warn("[Auto Tyrant Error]: " .. tostring(err))
+						task.wait(1)
+					end
+				end
+			end
+
+			currentTargetInstance = nil
+			isReadyToAttack = false
+			ToggleFloat(false)
+			StopAllActivities()
+		end)
+	end
+
+	Runtime.FindTyrantBoss = FindTyrant
+	Runtime.RequestEliteQuestIfAlive = RequestEliteQuestIfAlive
+	Runtime.StartAutoTyrant = StartAutoTyrant
 end
 
 do
@@ -11858,7 +12536,8 @@ do
 
 		-- Neutralize game's auto-teleport into ocean
 		pcall(function()
-			local rc = require(game:GetService("ReplicatedStorage").FishReplicated.FishingClient.Components.RodController)
+			local rc =
+				require(game:GetService("ReplicatedStorage").FishReplicated.FishingClient.Components.RodController)
 			if rc then
 				rc.teleportToClosestLandToWater = function() end
 			end
@@ -11878,249 +12557,242 @@ do
 				else
 					local ok, err = pcall(function()
 						local c = GetCharacter()
-					local hum = c and c:FindFirstChildOfClass("Humanoid")
-					local hrp = c and c:FindFirstChild("HumanoidRootPart")
+						local hum = c and c:FindFirstChildOfClass("Humanoid")
+						local hrp = c and c:FindFirstChild("HumanoidRootPart")
 
-					if not c or not hum or not hrp or hum.Health <= 0 then
-						task.wait(0.5)
-						return
-					end
-
-					-- 1. Equip selected / best rod
-					local rod, isEquipped = getFishingRod()
-					if not rod then
-						updateFishingStatusLabels("No rod")
-						task.wait(1)
-						return
-					end
-
-					if not isEquipped and cfg.autoEquipFishingRod then
-						updateFishingStatusLabels("Equipping " .. rod.Name)
-						hum:EquipTool(rod)
-						local equipStart = os.clock()
-						while rod.Parent ~= c and (os.clock() - equipStart < 1.5) do
-							task.wait(0.05)
-						end
-						rod, isEquipped = getFishingRod()
-					end
-
-					-- 2. Check bait
-					local currentBait = checkAndBuyBait()
-					if not currentBait or currentBait == "None" then
-						updateFishingStatusLabels("No bait")
-						task.wait(1)
-						return
-					end
-
-					if not fishingReq then
-						fishRep = game:GetService("ReplicatedStorage"):FindFirstChild("FishReplicated")
-						fishingReq = fishRep and fishRep:FindFirstChild("FishingRequest")
-					end
-
-					if not fishingReq then
-						updateFishingStatusLabels("Connecting")
-						task.wait(1)
-						return
-					end
-
-					local serverState = rod:GetAttribute("ServerState")
-					local clientState = rod:GetAttribute("State")
-
-					-- 3. If biting, handle catch / check treasure
-					if serverState == "Biting" then
-						updateFishingStatusLabels("Biting")
-						pcall(function()
-							fishingReq:InvokeServer("Catching", true)
-						end)
-
-						local s = getFishingState()
-						local isChest = false
-						if cfg.isFishingTreasure and not cfg.isInstantCatch then
-							task.wait(0.15)
-							if s and s.currentFish and s.currentFish.TreasureData then
-								isChest = true
-							elseif s and type(s.treasurePos) == "number" and s.treasurePos > 0 then
-								isChest = true
-							else
-								local pGui = player:FindFirstChildOfClass("PlayerGui")
-								local rGui = pGui and pGui:FindFirstChild("Fishing_Reeling")
-								local tGui = rGui and rGui:FindFirstChild("Treasure", true)
-								if tGui and tGui.Visible then
-									isChest = true
-								end
-							end
+						if not c or not hum or not hrp or hum.Health <= 0 then
+							task.wait(0.5)
+							return
 						end
 
-						-- Only instant catch if toggle is explicitly ON
-						if cfg.isInstantCatch then
-							pcall(function()
-								fishingReq:InvokeServer("Catch", 1)
-							end)
-							local catchConfirmStart = os.clock()
-							while
-								rod:GetAttribute("ServerState") == "Biting"
-								and (os.clock() - catchConfirmStart < 2)
-							do
+						-- 1. Equip selected / best rod
+						local rod, isEquipped = getFishingRod()
+						if not rod then
+							updateFishingStatusLabels("No rod")
+							task.wait(1)
+							return
+						end
+
+						if not isEquipped and cfg.autoEquipFishingRod then
+							updateFishingStatusLabels("Equipping " .. rod.Name)
+							hum:EquipTool(rod)
+							local equipStart = os.clock()
+							while rod.Parent ~= c and (os.clock() - equipStart < 1.5) do
 								task.wait(0.05)
 							end
-							Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
-							updateFishingStatusLabels("Caught")
+							rod, isEquipped = getFishingRod()
+						end
+
+						-- 2. Check bait
+						local currentBait = checkAndBuyBait()
+						if not currentBait or currentBait == "None" then
+							updateFishingStatusLabels("No bait")
+							task.wait(1)
 							return
-						elseif isChest and cfg.isFishingTreasure then
-							-- Solve treasure minigame
-							updateFishingStatusLabels("Reeling treasure")
-							local minigameStart = os.clock()
-							local chestDone = false
-							while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
-								if os.clock() - minigameStart > 25 then
-									break
+						end
+
+						if not fishingReq then
+							fishRep = game:GetService("ReplicatedStorage"):FindFirstChild("FishReplicated")
+							fishingReq = fishRep and fishRep:FindFirstChild("FishingRequest")
+						end
+
+						if not fishingReq then
+							updateFishingStatusLabels("Connecting")
+							task.wait(1)
+							return
+						end
+
+						local serverState = rod:GetAttribute("ServerState")
+						local clientState = rod:GetAttribute("State")
+
+						-- 3. If biting, handle catch / check treasure
+						if serverState == "Biting" then
+							updateFishingStatusLabels("Biting")
+							pcall(function()
+								fishingReq:InvokeServer("Catching", true)
+							end)
+
+							local s = getFishingState()
+							local isChest = false
+							if cfg.isFishingTreasure and not cfg.isInstantCatch then
+								task.wait(0.15)
+								if s and s.currentFish and s.currentFish.TreasureData then
+									isChest = true
+								elseif s and type(s.treasurePos) == "number" and s.treasurePos > 0 then
+									isChest = true
+								else
+									local pGui = player:FindFirstChildOfClass("PlayerGui")
+									local rGui = pGui and pGui:FindFirstChild("Fishing_Reeling")
+									local tGui = rGui and rGui:FindFirstChild("Treasure", true)
+									if tGui and tGui.Visible then
+										isChest = true
+									end
 								end
-								local curServer = rod:GetAttribute("ServerState")
+							end
+
+							-- Only instant catch if toggle is explicitly ON
+							if cfg.isInstantCatch then
+								pcall(function()
+									fishingReq:InvokeServer("Catch", 1)
+								end)
+								local catchConfirmStart = os.clock()
+								while
+									rod:GetAttribute("ServerState") == "Biting"
+									and (os.clock() - catchConfirmStart < 2)
+								do
+									task.wait(0.05)
+								end
+								Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
+								updateFishingStatusLabels("Caught")
+								return
+							elseif isChest and cfg.isFishingTreasure then
+								-- Solve treasure minigame
+								updateFishingStatusLabels("Reeling treasure")
+								local minigameStart = os.clock()
+								local chestDone = false
+								while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
+									if os.clock() - minigameStart > 25 then
+										break
+									end
+									local curServer = rod:GetAttribute("ServerState")
+									if curServer ~= "Biting" and curServer ~= "Catching" and curServer ~= "Fishing" then
+										break
+									end
+
+									if s and s.playing then
+										local tPos = (type(s.treasurePos) == "number" and s.treasurePos) or 0.5
+										s.playerPos = tPos
+										s.velocity = 0
+										if s.treasureProgress and s.treasureProgress >= 1 then
+											chestDone = true
+											break
+										end
+									end
+									task.wait(0.04)
+								end
+
+								pcall(function()
+									fishingReq:InvokeServer("Catch", 1)
+								end)
+								local catchConfirmStart = os.clock()
+								while
+									rod:GetAttribute("ServerState") ~= "ReeledIn"
+									and (os.clock() - catchConfirmStart < 2)
+								do
+									task.wait(0.05)
+								end
+
+								if chestDone then
+									Runtime.Fishing.TreasureCaught = Runtime.Fishing.TreasureCaught + 1
+									updateFishingStatusLabels("Treasure & fish caught")
+								else
+									Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
+									updateFishingStatusLabels("Caught")
+								end
+								return
+							else
+								-- Normal minigame reel (Instant Catch is OFF)
+								updateFishingStatusLabels("Reeling")
+								local minigameStart = os.clock()
+								while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
+									if os.clock() - minigameStart > 20 then
+										break
+									end
+									local curServer = rod:GetAttribute("ServerState")
+									if curServer == "ReeledIn" then
+										break
+									end
+									if s and s.playing then
+										s.playerPos = s.fishPos
+										s.velocity = 0
+										local prog = math.clamp(s.progress or 0, 0, 1)
+										updateFishingStatusLabels(
+											string.format("Reeling [%d%%]", math.floor(prog * 100))
+										)
+										if prog >= 1 then
+											break
+										end
+									end
+									task.wait(0.03)
+								end
+
+								pcall(function()
+									fishingReq:InvokeServer("Catch", 1)
+								end)
+								local catchConfirmStart = os.clock()
+								while
+									rod:GetAttribute("ServerState") ~= "ReeledIn"
+									and (os.clock() - catchConfirmStart < 2)
+								do
+									task.wait(0.05)
+								end
+
+								Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
+								updateFishingStatusLabels("Caught")
+								return
+							end
+						end
+
+						-- 4. If waiting for fish to bite
+						if serverState == "Fishing" or clientState == "Casting" then
+							updateFishingStatusLabels("Waiting for bite")
+							local waitBiteStart = os.clock()
+							while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
+								local curState = rod:GetAttribute("ServerState")
 								if
-									curServer ~= "Biting"
-									and curServer ~= "Catching"
-									and curServer ~= "Fishing"
+									curState == "Biting"
+									or curState == "ReeledIn"
+									or (os.clock() - waitBiteStart > 30)
 								then
 									break
 								end
-
-								if s and s.playing then
-									local tPos = (type(s.treasurePos) == "number" and s.treasurePos) or 0.5
-									s.playerPos = tPos
-									s.velocity = 0
-									if s.treasureProgress and s.treasureProgress >= 1 then
-										chestDone = true
-										break
-									end
-								end
-								task.wait(0.04)
-							end
-
-							pcall(function()
-								fishingReq:InvokeServer("Catch", 1)
-							end)
-							local catchConfirmStart = os.clock()
-							while
-								rod:GetAttribute("ServerState") ~= "ReeledIn"
-								and (os.clock() - catchConfirmStart < 2)
-							do
 								task.wait(0.05)
 							end
-
-							if chestDone then
-								Runtime.Fishing.TreasureCaught = Runtime.Fishing.TreasureCaught + 1
-								updateFishingStatusLabels("Treasure & fish caught")
-							else
-								Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
-								updateFishingStatusLabels("Caught")
+							if os.clock() - waitBiteStart > 30 and rod:GetAttribute("ServerState") ~= "Biting" then
+								updateFishingStatusLabels("Timeout, recasting")
+								pcall(function()
+									fishingReq:InvokeServer("Catch", 0)
+								end)
+								local recastWait = os.clock()
+								while rod:GetAttribute("ServerState") ~= "ReeledIn" and (os.clock() - recastWait < 2) do
+									task.wait(0.05)
+								end
 							end
 							return
-						else
-							-- Normal minigame reel (Instant Catch is OFF)
-							updateFishingStatusLabels("Reeling")
-							local minigameStart = os.clock()
-							while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
-								if os.clock() - minigameStart > 20 then
-									break
-								end
-								local curServer = rod:GetAttribute("ServerState")
-								if curServer == "ReeledIn" then
-									break
-								end
-								if s and s.playing then
-									s.playerPos = s.fishPos
-									s.velocity = 0
-									local prog = math.clamp(s.progress or 0, 0, 1)
-									updateFishingStatusLabels(
-										string.format("Reeling [%d%%]", math.floor(prog * 100))
-									)
-									if prog >= 1 then
-										break
-									end
-								end
-								task.wait(0.03)
-							end
+						end
 
+						-- 5. If reeled in, cast line directly
+						if
+							(serverState == "ReeledIn" or not serverState)
+							and clientState ~= "Casting"
+							and clientState ~= "Holding"
+						then
+							local castPos = getWaterCastLocation(c, hrp)
+							updateFishingStatusLabels("Casting (100%)")
 							pcall(function()
-								fishingReq:InvokeServer("Catch", 1)
+								fishingReq:InvokeServer("StartCasting")
 							end)
-							local catchConfirmStart = os.clock()
+							task.wait(0.42)
+							pcall(function()
+								fishingReq:InvokeServer("CastLineAtLocation", castPos, 100, true)
+							end)
+							local castConfirmStart = os.clock()
 							while
-								rod:GetAttribute("ServerState") ~= "ReeledIn"
-								and (os.clock() - catchConfirmStart < 2)
+								rod:GetAttribute("ServerState") == "ReeledIn"
+								and (os.clock() - castConfirmStart < 2.5)
 							do
 								task.wait(0.05)
 							end
-
-							Runtime.Fishing.FishCaught = Runtime.Fishing.FishCaught + 1
-							updateFishingStatusLabels("Caught")
 							return
 						end
+
+						task.wait(0.2)
+					end)
+
+					if not ok then
+						warn("[Auto Fishing Error]: " .. tostring(err))
+						task.wait(0.5)
 					end
-
-					-- 4. If waiting for fish to bite
-					if serverState == "Fishing" or clientState == "Casting" then
-						updateFishingStatusLabels("Waiting for bite")
-						local waitBiteStart = os.clock()
-						while cfg.isAutoFishing and ScriptContext.Running and gen == cfg.autoFishingWorker do
-							local curState = rod:GetAttribute("ServerState")
-							if
-								curState == "Biting"
-								or curState == "ReeledIn"
-								or (os.clock() - waitBiteStart > 30)
-							then
-								break
-							end
-							task.wait(0.05)
-						end
-						if os.clock() - waitBiteStart > 30 and rod:GetAttribute("ServerState") ~= "Biting" then
-							updateFishingStatusLabels("Timeout, recasting")
-							pcall(function()
-								fishingReq:InvokeServer("Catch", 0)
-							end)
-							local recastWait = os.clock()
-							while
-								rod:GetAttribute("ServerState") ~= "ReeledIn"
-								and (os.clock() - recastWait < 2)
-							do
-								task.wait(0.05)
-							end
-						end
-						return
-					end
-
-					-- 5. If reeled in, cast line directly
-					if
-						(serverState == "ReeledIn" or not serverState)
-						and clientState ~= "Casting"
-						and clientState ~= "Holding"
-					then
-						local castPos = getWaterCastLocation(c, hrp)
-						updateFishingStatusLabels("Casting (100%)")
-						pcall(function()
-							fishingReq:InvokeServer("StartCasting")
-						end)
-						task.wait(0.42)
-						pcall(function()
-							fishingReq:InvokeServer("CastLineAtLocation", castPos, 100, true)
-						end)
-						local castConfirmStart = os.clock()
-						while
-							rod:GetAttribute("ServerState") == "ReeledIn"
-							and (os.clock() - castConfirmStart < 2.5)
-						do
-							task.wait(0.05)
-						end
-						return
-					end
-
-					task.wait(0.2)
-				end)
-
-				if not ok then
-					warn("[Auto Fishing Error]: " .. tostring(err))
-					task.wait(0.5)
-				end
 				end
 			end
 
@@ -13301,38 +13973,42 @@ Tabs.Sea1:CreateToggle({
 		if Value then
 			task.spawn(function()
 				while cfg.isAutoBanana do
-					task.wait(0.5)
-					pcall(function()
-						local bananaFolder = workspace:FindFirstChild("BananaSpawner")
-						if bananaFolder then
-							local bananas = bananaFolder:GetChildren()
-							for _, banana in ipairs(bananas) do
-								if not cfg.isAutoBanana then
-									break
-								end
-								if banana:IsA("Tool") or banana:IsA("Model") or banana:IsA("BasePart") then
-									local hrp = GetRootPart()
-									if hrp then
-										local targetPos
-										if banana:IsA("Model") and banana.PrimaryPart then
-											targetPos = banana.PrimaryPart.CFrame
-										elseif banana:IsA("Tool") and banana:FindFirstChild("Handle") then
-											targetPos = banana.Handle.CFrame
-										elseif banana:IsA("BasePart") then
-											targetPos = banana.CFrame
-										else
-											targetPos = banana:GetPivot()
-										end
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local bananaFolder = workspace:FindFirstChild("BananaSpawner")
+							if bananaFolder then
+								local bananas = bananaFolder:GetChildren()
+								for _, banana in ipairs(bananas) do
+									if not cfg.isAutoBanana then
+										break
+									end
+									if banana:IsA("Tool") or banana:IsA("Model") or banana:IsA("BasePart") then
+										local hrp = GetRootPart()
+										if hrp then
+											local targetPos
+											if banana:IsA("Model") and banana.PrimaryPart then
+												targetPos = banana.PrimaryPart.CFrame
+											elseif banana:IsA("Tool") and banana:FindFirstChild("Handle") then
+												targetPos = banana.Handle.CFrame
+											elseif banana:IsA("BasePart") then
+												targetPos = banana.CFrame
+											else
+												targetPos = banana:GetPivot()
+											end
 
-										if targetPos then
-											TweenTo(targetPos)
-											task.wait(0.2)
+											if targetPos then
+												TweenTo(targetPos)
+												task.wait(0.2)
+											end
 										end
 									end
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -13357,119 +14033,123 @@ Tabs.Sea1:CreateToggle({
 				local guideRemote = netFolder:WaitForChild("RF/BonusMomentsGuide")
 
 				while cfg.isAutoGrapplingHook do
-					local success, err = pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							task.wait(0.5)
-							return
-						end
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						local success, err = pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								task.wait(0.5)
+								return
+							end
 
-						local hookPickup = workspace:FindFirstChild("GroundPickupGrapplingHook")
-						if hookPickup then
-							local ropePart = hookPickup:FindFirstChild("Rope")
-							local hookPart = hookPickup:FindFirstChild("hook.001")
-							local prompt = hookPart and hookPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+							local hookPickup = workspace:FindFirstChild("GroundPickupGrapplingHook")
+							if hookPickup then
+								local ropePart = hookPickup:FindFirstChild("Rope")
+								local hookPart = hookPickup:FindFirstChild("hook.001")
+								local prompt = hookPart and hookPart:FindFirstChildWhichIsA("ProximityPrompt", true)
 
-							if ropePart and ropePart:IsA("BasePart") then
-								local dist = (myHrp.Position - ropePart.Position).Magnitude
-								if dist > 15 then
-									TweenTo(CFrame.new(ropePart.Position + Vector3.new(0, 3, 0)))
-									task.wait(0.3)
+								if ropePart and ropePart:IsA("BasePart") then
+									local dist = (myHrp.Position - ropePart.Position).Magnitude
+									if dist > 15 then
+										TweenTo(CFrame.new(ropePart.Position + Vector3.new(0, 3, 0)))
+										task.wait(0.3)
+									end
+								end
+
+								if prompt then
+									SafeProximity(prompt, myHrp)
+									task.wait(0.5)
 								end
 							end
 
-							if prompt then
-								SafeProximity(prompt, myHrp)
-								task.wait(0.5)
+							local throwPos = Vector3.new(-1278.500977, 74.385216, -249.276627)
+							local distToThrow = (myHrp.Position - throwPos).Magnitude
+							if distToThrow > 10 then
+								TweenTo(CFrame.new(throwPos))
+								local startTime = os.clock()
+								while
+									cfg.isAutoGrapplingHook
+									and (myHrp.Position - throwPos).Magnitude > 10
+									and (os.clock() - startTime < 10)
+								do
+									task.wait(0.1)
+								end
 							end
-						end
+							task.wait(0.3)
 
-						local throwPos = Vector3.new(-1278.500977, 74.385216, -249.276627)
-						local distToThrow = (myHrp.Position - throwPos).Magnitude
-						if distToThrow > 10 then
-							TweenTo(CFrame.new(throwPos))
-							local startTime = os.clock()
-							while
-								cfg.isAutoGrapplingHook
-								and (myHrp.Position - throwPos).Magnitude > 10
-								and (os.clock() - startTime < 10)
-							do
-								task.wait(0.1)
-							end
-						end
-						task.wait(0.3)
-
-						local throwArgs = {
-							"Zipline Repair",
-							"Throw",
-							"Grappling Hook",
-							{
-								Type = "AimData",
-								Origin = CFrame.new(
-									-1283.0609130859375,
-									74.38521575927734,
-									-263.3216552734375,
-									-0.7788268327713013,
-									0,
-									0.6272390484809875,
-									0,
-									1.0000001192092896,
-									-0,
-									-0.6272390484809875,
-									0,
-									-0.7788268327713013
-								),
-								Target = Vector3.new(-1482.841064453125, 78.08488464355469, -15.25970458984375),
-								InitialVelocity = Vector3.new(
-									-135.9412841796875,
-									146.5705108642578,
-									168.79486083984375
-								),
-								Arc = {
-									ArcLength = 340.6257979931375,
-									AimDegrees = 20,
-									HighestPointOffsetY = 54.791302827463625,
-									HighestPoint = Vector3.new(
-										-1486.3323974609375,
-										129.176513671875,
-										-10.924606323242188
-									),
-									TargetOffsetX = 318.5072021484375,
-									GroundPoint = Vector3.new(
-										-1486.3323974609375,
+							local throwArgs = {
+								"Zipline Repair",
+								"Throw",
+								"Grappling Hook",
+								{
+									Type = "AimData",
+									Origin = CFrame.new(
+										-1283.0609130859375,
 										74.38521575927734,
-										-10.924606323242188
+										-263.3216552734375,
+										-0.7788268327713013,
+										0,
+										0.6272390484809875,
+										0,
+										1.0000001192092896,
+										-0,
+										-0.6272390484809875,
+										0,
+										-0.7788268327713013
 									),
-									GroundPointOffsetX = 324.0734015001714,
-									TargetOffsetY = 3.6996688842773438,
+									Target = Vector3.new(-1482.841064453125, 78.08488464355469, -15.25970458984375),
+									InitialVelocity = Vector3.new(
+										-135.9412841796875,
+										146.5705108642578,
+										168.79486083984375
+									),
+									Arc = {
+										ArcLength = 340.6257979931375,
+										AimDegrees = 20,
+										HighestPointOffsetY = 54.791302827463625,
+										HighestPoint = Vector3.new(
+											-1486.3323974609375,
+											129.176513671875,
+											-10.924606323242188
+										),
+										TargetOffsetX = 318.5072021484375,
+										GroundPoint = Vector3.new(
+											-1486.3323974609375,
+											74.38521575927734,
+											-10.924606323242188
+										),
+										GroundPointOffsetX = 324.0734015001714,
+										TargetOffsetY = 3.6996688842773438,
+									},
 								},
-							},
-						}
-						bmRemote:InvokeServer(unpack(throwArgs))
-						task.wait(1.5)
+							}
+							bmRemote:InvokeServer(unpack(throwArgs))
+							task.wait(1.5)
 
-						local jungleMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Jungle")
-						local ziplinePair = jungleMap and jungleMap:FindFirstChild("ZiplinePair")
-						local ziplineObj = ziplinePair and ziplinePair:FindFirstChild("zipline")
-						if ziplinePair and ziplineObj then
-							useZipline:FireServer(ziplinePair, ziplineObj)
+							local jungleMap = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Jungle")
+							local ziplinePair = jungleMap and jungleMap:FindFirstChild("ZiplinePair")
+							local ziplineObj = ziplinePair and ziplinePair:FindFirstChild("zipline")
+							if ziplinePair and ziplineObj then
+								useZipline:FireServer(ziplinePair, ziplineObj)
+							end
+							task.wait(2)
+
+							guideRemote:InvokeServer("InteractQuestGiver", "JungleQuest")
+							task.wait(0.5)
+
+							cfg.isAutoGrapplingHook = false
+							if Window and Window.Flags and Window.Flags["ToggleAutoGrapplingHook"] then
+								Window.Flags["ToggleAutoGrapplingHook"]:Set(false)
+							end
+							print("[Auto Grappling Hook] Quest Zipline Repair successfully completed!")
+						end)
+
+						if not success then
+							warn("[Auto Grappling Hook Error]: " .. tostring(err))
+							task.wait(2)
 						end
-						task.wait(2)
-
-						guideRemote:InvokeServer("InteractQuestGiver", "JungleQuest")
-						task.wait(0.5)
-
-						cfg.isAutoGrapplingHook = false
-						if Window and Window.Flags and Window.Flags["ToggleAutoGrapplingHook"] then
-							Window.Flags["ToggleAutoGrapplingHook"]:Set(false)
-						end
-						print("[Auto Grappling Hook] Quest Zipline Repair successfully completed!")
-					end)
-
-					if not success then
-						warn("[Auto Grappling Hook Error]: " .. tostring(err))
-						task.wait(2)
 					end
 				end
 			end)
@@ -13494,69 +14174,73 @@ Tabs.Sea1:CreateToggle({
 				local bmRemote = Remotes:WaitForChild("BonusMomentsRemoteFunction")
 
 				while cfg.isAutoPearl do
-					task.wait(1)
-					pcall(function()
-						local clams = CollectionService:GetTagged("PearlClam")
-						for _, clam in ipairs(clams) do
-							if not cfg.isAutoPearl then
-								break
-							end
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(1)
+						pcall(function()
+							local clams = CollectionService:GetTagged("PearlClam")
+							for _, clam in ipairs(clams) do
+								if not cfg.isAutoPearl then
+									break
+								end
 
-							local cframePos
-							if clam:IsA("Model") and clam.PrimaryPart then
-								cframePos = clam.PrimaryPart.CFrame
-							elseif clam:IsA("BasePart") then
-								cframePos = clam.CFrame
-							else
-								cframePos = clam:GetBoundingBox()
-							end
+								local cframePos
+								if clam:IsA("Model") and clam.PrimaryPart then
+									cframePos = clam.PrimaryPart.CFrame
+								elseif clam:IsA("BasePart") then
+									cframePos = clam.CFrame
+								else
+									cframePos = clam:GetBoundingBox()
+								end
 
-							if cframePos then
-								TweenTo(cframePos * CFrame.new(0, 5, 0))
-								task.wait(0.5)
+								if cframePos then
+									TweenTo(cframePos * CFrame.new(0, 5, 0))
+									task.wait(0.5)
 
-								local prompt = clam:FindFirstChildWhichIsA("ProximityPrompt", true)
-								if prompt and prompt.Enabled then
-									SafeProximity(prompt, hrp or (GetRootPart()))
-									task.wait(1.5)
+									local prompt = clam:FindFirstChildWhichIsA("ProximityPrompt", true)
+									if prompt and prompt.Enabled then
+										SafeProximity(prompt, hrp or (GetRootPart()))
+										task.wait(1.5)
 
-									local pearlPrompt = nil
-									for _, p in ipairs(workspace:GetDescendants()) do
-										if
-											p:IsA("ProximityPrompt")
-											and p.ObjectText == "Pearl of the Deep"
-											and p.ActionText == "Claim"
-										then
-											pearlPrompt = p
+										local pearlPrompt = nil
+										for _, p in ipairs(workspace:GetDescendants()) do
+											if
+												p:IsA("ProximityPrompt")
+												and p.ObjectText == "Pearl of the Deep"
+												and p.ActionText == "Claim"
+											then
+												pearlPrompt = p
+												break
+											end
+										end
+
+										if pearlPrompt and pearlPrompt.Enabled then
+											SafeProximity(pearlPrompt, hrp or (GetRootPart()))
+											cfg.isAutoPearl = false
+											local pearlToggle = Window.Flags["ToggleAutoPearl"]
+											if pearlToggle then
+												pearlToggle:Set(false)
+											end
+											break
+										end
+									else
+										local res = bmRemote:InvokeServer("Pearl of the Deep", "OpenClam", clam)
+										if res == "Black" then
+											task.wait(1)
+											bmRemote:InvokeServer("Pearl of the Deep", "ClaimPearl")
+											cfg.isAutoPearl = false
+											local pearlToggle = Window.Flags["ToggleAutoPearl"]
+											if pearlToggle then
+												pearlToggle:Set(false)
+											end
 											break
 										end
 									end
-
-									if pearlPrompt and pearlPrompt.Enabled then
-										SafeProximity(pearlPrompt, hrp or (GetRootPart()))
-										cfg.isAutoPearl = false
-										local pearlToggle = Window.Flags["ToggleAutoPearl"]
-										if pearlToggle then
-											pearlToggle:Set(false)
-										end
-										break
-									end
-								else
-									local res = bmRemote:InvokeServer("Pearl of the Deep", "OpenClam", clam)
-									if res == "Black" then
-										task.wait(1)
-										bmRemote:InvokeServer("Pearl of the Deep", "ClaimPearl")
-										cfg.isAutoPearl = false
-										local pearlToggle = Window.Flags["ToggleAutoPearl"]
-										if pearlToggle then
-											pearlToggle:Set(false)
-										end
-										break
-									end
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -13576,45 +14260,49 @@ Tabs.Sea1:CreateToggle({
 		if Value then
 			task.spawn(function()
 				while cfg.isAutoCrowd do
-					task.wait(0.1)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local foundTarget = false
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Colosseum")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not cfg.isAutoCrowd then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.1)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
 
-							if obj.Name == "Target" and (obj:IsA("Model") or obj:IsA("BasePart")) then
-								local targetPos
-								if obj:IsA("Model") and obj.PrimaryPart then
-									targetPos = obj.PrimaryPart.CFrame
-								elseif obj:IsA("BasePart") then
-									targetPos = obj.CFrame
+							local foundTarget = false
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Colosseum")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not cfg.isAutoCrowd then
+									break
 								end
 
-								if targetPos then
-									foundTarget = true
+								if obj.Name == "Target" and (obj:IsA("Model") or obj:IsA("BasePart")) then
+									local targetPos
+									if obj:IsA("Model") and obj.PrimaryPart then
+										targetPos = obj.PrimaryPart.CFrame
+									elseif obj:IsA("BasePart") then
+										targetPos = obj.CFrame
+									end
 
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
+									if targetPos then
+										foundTarget = true
 
-									ExecuteAttack(myChar, myHrp, true, obj.Name)
-									task.wait(0.2)
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+
+										ExecuteAttack(myChar, myHrp, true, obj.Name)
+										task.wait(0.2)
+									end
 								end
 							end
-						end
 
-						if not foundTarget then
-							task.wait(1)
-						end
-					end)
+							if not foundTarget then
+								task.wait(1)
+							end
+						end)
+					end
 				end
 			end)
 		end
@@ -13634,69 +14322,73 @@ Tabs.Sea1:CreateToggle({
 		if Value then
 			task.spawn(function()
 				while cfg.isAutoMagmaEvent do
-					task.wait(0.1)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.1)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
+							end
 
-						local foundTarget = false
-						local enemiesFolder = workspace:FindFirstChild("Enemies")
+							local foundTarget = false
+							local enemiesFolder = workspace:FindFirstChild("Enemies")
 
-						if enemiesFolder then
-							for _, slime in ipairs(enemiesFolder:GetChildren()) do
-								if not cfg.isAutoMagmaEvent then
-									break
-								end
+							if enemiesFolder then
+								for _, slime in ipairs(enemiesFolder:GetChildren()) do
+									if not cfg.isAutoMagmaEvent then
+										break
+									end
 
-								if
-									slime.Name == "Evil Slime"
-									and slime:FindFirstChild("Humanoid")
-									and slime.Humanoid.Health > 0
-								then
-									local targetHrp = slime:FindFirstChild("HumanoidRootPart")
-									if targetHrp then
-										foundTarget = true
-										TweenTo(targetHrp.CFrame * CFrame.new(0, 15, 0))
-										ExecuteAttack(myChar, myHrp, true, "Evil Slime")
-										task.wait(0.2)
+									if
+										slime.Name == "Evil Slime"
+										and slime:FindFirstChild("Humanoid")
+										and slime.Humanoid.Health > 0
+									then
+										local targetHrp = slime:FindFirstChild("HumanoidRootPart")
+										if targetHrp then
+											foundTarget = true
+											TweenTo(targetHrp.CFrame * CFrame.new(0, 15, 0))
+											ExecuteAttack(myChar, myHrp, true, "Evil Slime")
+											task.wait(0.2)
+										end
 									end
 								end
 							end
-						end
 
-						if not foundTarget then
-							local map = workspace:FindFirstChild("Map")
-							local searchFolder = (map and map:FindFirstChild("Magma")) or workspace
-							for _, obj in ipairs(searchFolder:GetChildren()) do
-								if not cfg.isAutoMagmaEvent then
-									break
-								end
-
-								if obj.Name == "MagmaFissure" and obj:IsA("Model") then
-									local targetPos
-									if obj.PrimaryPart then
-										targetPos = obj.PrimaryPart.CFrame
-									else
-										targetPos = obj:GetBoundingBox()
+							if not foundTarget then
+								local map = workspace:FindFirstChild("Map")
+								local searchFolder = (map and map:FindFirstChild("Magma")) or workspace
+								for _, obj in ipairs(searchFolder:GetChildren()) do
+									if not cfg.isAutoMagmaEvent then
+										break
 									end
 
-									if targetPos then
-										foundTarget = true
-										TweenTo(targetPos * CFrame.new(0, 5, 0))
-										ExecuteAttack(myChar, myHrp, true, obj.Name)
-										task.wait(0.2)
+									if obj.Name == "MagmaFissure" and obj:IsA("Model") then
+										local targetPos
+										if obj.PrimaryPart then
+											targetPos = obj.PrimaryPart.CFrame
+										else
+											targetPos = obj:GetBoundingBox()
+										end
+
+										if targetPos then
+											foundTarget = true
+											TweenTo(targetPos * CFrame.new(0, 5, 0))
+											ExecuteAttack(myChar, myHrp, true, obj.Name)
+											task.wait(0.2)
+										end
 									end
 								end
 							end
-						end
 
-						if not foundTarget then
-							task.wait(1)
-						end
-					end)
+							if not foundTarget then
+								task.wait(1)
+							end
+						end)
+					end
 				end
 			end)
 		end
@@ -13716,46 +14408,50 @@ Tabs.Sea1:CreateToggle({
 		if Value then
 			task.spawn(function()
 				while cfg.isAutoFountainPipe do
-					task.wait(0.1)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local foundPipe = false
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not cfg.isAutoFountainPipe then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.1)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
 
-							if
-								(obj.Name == "FountainPipeNodes" or obj.Name == "PipeNode" or obj.Name == "Leak")
-								and (obj:IsA("Model") or obj:IsA("BasePart"))
-							then
-								local targetPos
-								if obj:IsA("Model") and obj.PrimaryPart then
-									targetPos = obj.PrimaryPart.CFrame
-								elseif obj:IsA("BasePart") then
-									targetPos = obj.CFrame
+							local foundPipe = false
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not cfg.isAutoFountainPipe then
+									break
 								end
 
-								if targetPos then
-									foundPipe = true
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									ExecuteAttack(myChar, myHrp, true, obj.Name)
-									task.wait(0.2)
+								if
+									(obj.Name == "FountainPipeNodes" or obj.Name == "PipeNode" or obj.Name == "Leak")
+									and (obj:IsA("Model") or obj:IsA("BasePart"))
+								then
+									local targetPos
+									if obj:IsA("Model") and obj.PrimaryPart then
+										targetPos = obj.PrimaryPart.CFrame
+									elseif obj:IsA("BasePart") then
+										targetPos = obj.CFrame
+									end
+
+									if targetPos then
+										foundPipe = true
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										ExecuteAttack(myChar, myHrp, true, obj.Name)
+										task.wait(0.2)
+									end
 								end
 							end
-						end
 
-						if not foundPipe then
-							task.wait(1)
-						end
-					end)
+							if not foundPipe then
+								task.wait(1)
+							end
+						end)
+					end
 				end
 			end)
 		end
@@ -13777,48 +14473,52 @@ Tabs.Sea1:CreateToggle({
 				local bmRemote = Remotes:WaitForChild("BonusMomentsRemoteFunction")
 
 				while cfg.isAutoFountainWire do
-					task.wait(0.1)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local foundWire = false
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not cfg.isAutoFountainWire then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.1)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
 
-							if
-								(obj.Name == "LiveWire" or obj.Name == "FountainWire")
-								and (obj:IsA("Model") or obj:IsA("BasePart"))
-							then
-								local targetPos
-								if obj:IsA("Model") and obj.PrimaryPart then
-									targetPos = obj.PrimaryPart.CFrame
-								elseif obj:IsA("BasePart") then
-									targetPos = obj.CFrame
+							local foundWire = false
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Fountain")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not cfg.isAutoFountainWire then
+									break
 								end
 
-								if targetPos then
-									foundWire = true
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
+								if
+									(obj.Name == "LiveWire" or obj.Name == "FountainWire")
+									and (obj:IsA("Model") or obj:IsA("BasePart"))
+								then
+									local targetPos
+									if obj:IsA("Model") and obj.PrimaryPart then
+										targetPos = obj.PrimaryPart.CFrame
+									elseif obj:IsA("BasePart") then
+										targetPos = obj.CFrame
+									end
 
-									ExecuteAttack(myChar, myHrp, true, obj.Name)
-									bmRemote:InvokeServer("Fountain Wire Repair", "WireHit", obj)
-									task.wait(0.2)
+									if targetPos then
+										foundWire = true
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+
+										ExecuteAttack(myChar, myHrp, true, obj.Name)
+										bmRemote:InvokeServer("Fountain Wire Repair", "WireHit", obj)
+										task.wait(0.2)
+									end
 								end
 							end
-						end
 
-						if not foundWire then
-							task.wait(1)
-						end
-					end)
+							if not foundWire then
+								task.wait(1)
+							end
+						end)
+					end
 				end
 			end)
 		end
@@ -13841,40 +14541,44 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoWindmill do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Windmill")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not getgenv().AutoWindmill then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								obj.Name == "WindmillBlade"
-								or obj.Name == "WindmillGear"
-								or obj.Name == "WindmillPart"
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Windmill Maintenance", "Repair", obj)
+
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Windmill")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not getgenv().AutoWindmill then
+									break
+								end
+								if
+									obj.Name == "WindmillBlade"
+									or obj.Name == "WindmillGear"
+									or obj.Name == "WindmillPart"
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Windmill Maintenance", "Repair", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -13896,32 +14600,36 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoTavernBrawl do
-					task.wait(0.2)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.2)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
+							end
 
-						local enemies = workspace:FindFirstChild("Enemies")
-						if enemies then
-							for _, enemy in ipairs(enemies:GetChildren()) do
-								if not getgenv().AutoTavernBrawl then
-									break
-								end
-								if string.find(enemy.Name, "Tavern") or string.find(enemy.Name, "Brawler") then
-									local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-									local eHum = enemy:FindFirstChildOfClass("Humanoid")
-									if eHrp and eHum and eHum.Health > 0 then
-										TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
-										ExecuteAttack(myChar, myHrp, true, enemy.Name)
-										task.wait(0.2)
+							local enemies = workspace:FindFirstChild("Enemies")
+							if enemies then
+								for _, enemy in ipairs(enemies:GetChildren()) do
+									if not getgenv().AutoTavernBrawl then
+										break
+									end
+									if string.find(enemy.Name, "Tavern") or string.find(enemy.Name, "Brawler") then
+										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+										local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if eHrp and eHum and eHum.Health > 0 then
+											TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
+											ExecuteAttack(myChar, myHrp, true, enemy.Name)
+											task.wait(0.2)
+										end
 									end
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -13943,38 +14651,42 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoThievingMonkey do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Jungle")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not getgenv().AutoThievingMonkey then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if obj.Name == "MonkeyHat" or obj.Name == "ThievingMonkey" then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("The Thieving Monkey", "ClaimHat", obj)
-										task.wait(0.5)
-										bmRemote:InvokeServer("The Thieving Monkey", "ReturnHat")
+
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Jungle")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not getgenv().AutoThievingMonkey then
+									break
+								end
+								if obj.Name == "MonkeyHat" or obj.Name == "ThievingMonkey" then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("The Thieving Monkey", "ClaimHat", obj)
+											task.wait(0.5)
+											bmRemote:InvokeServer("The Thieving Monkey", "ReturnHat")
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -13997,36 +14709,40 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoRescueHasan do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
 						pcall(function()
-							bmRemote:InvokeServer("Rescue Hasan", "StartWaves")
-						end)
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
+							end
 
-						local enemies = workspace:FindFirstChild("Enemies")
-						if enemies then
-							for _, enemy in ipairs(enemies:GetChildren()) do
-								if not getgenv().AutoRescueHasan then
-									break
-								end
-								if string.find(enemy.Name, "Skeleton") or string.find(enemy.Name, "Desert") then
-									local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-									local eHum = enemy:FindFirstChildOfClass("Humanoid")
-									if eHrp and eHum and eHum.Health > 0 then
-										TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
-										ExecuteAttack(myChar, myHrp, true, enemy.Name)
-										task.wait(0.2)
+							pcall(function()
+								bmRemote:InvokeServer("Rescue Hasan", "StartWaves")
+							end)
+
+							local enemies = workspace:FindFirstChild("Enemies")
+							if enemies then
+								for _, enemy in ipairs(enemies:GetChildren()) do
+									if not getgenv().AutoRescueHasan then
+										break
+									end
+									if string.find(enemy.Name, "Skeleton") or string.find(enemy.Name, "Desert") then
+										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+										local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if eHrp and eHum and eHum.Health > 0 then
+											TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
+											ExecuteAttack(myChar, myHrp, true, enemy.Name)
+											task.wait(0.2)
+										end
 									end
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14048,34 +14764,38 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoPricklyHarvest do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Desert")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not getgenv().AutoPricklyHarvest then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if string.find(obj.Name, "Cactus") or string.find(obj.Name, "Prickly") then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
+
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Desert")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not getgenv().AutoPricklyHarvest then
+									break
+								end
+								if string.find(obj.Name, "Cactus") or string.find(obj.Name, "Prickly") then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14098,38 +14818,42 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoSnowman do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						local map = workspace:FindFirstChild("Map")
-						local searchFolder = (map and map:FindFirstChild("Snow")) or workspace
-						for _, obj in ipairs(searchFolder:GetChildren()) do
-							if not getgenv().AutoSnowman then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if string.find(obj.Name, "Snowball") or string.find(obj.Name, "Snowman") then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Snowman", "GrabSnowball", obj)
-										task.wait(0.5)
-										bmRemote:InvokeServer("Snowman", "Finished")
+
+							local map = workspace:FindFirstChild("Map")
+							local searchFolder = (map and map:FindFirstChild("Snow")) or workspace
+							for _, obj in ipairs(searchFolder:GetChildren()) do
+								if not getgenv().AutoSnowman then
+									break
+								end
+								if string.find(obj.Name, "Snowball") or string.find(obj.Name, "Snowman") then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Snowman", "GrabSnowball", obj)
+											task.wait(0.5)
+											bmRemote:InvokeServer("Snowman", "Finished")
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14152,34 +14876,38 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoFlagpole do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoFlagpole then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if string.find(obj.Name, "Flagpole") or string.find(obj.Name, "FortressFlag") then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Fortress Flagpole", "Hoist", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoFlagpole then
+									break
+								end
+								if string.find(obj.Name, "Flagpole") or string.find(obj.Name, "FortressFlag") then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Fortress Flagpole", "Hoist", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14202,38 +14930,42 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoEchoesClouds do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoEchoesClouds then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								string.find(obj.Name, "Bell")
-								or string.find(obj.Name, "GoldenBell")
-								or string.find(obj.Name, "SkyCloud")
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Echoes Through the Clouds", "WakeGod", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoEchoesClouds then
+									break
+								end
+								if
+									string.find(obj.Name, "Bell")
+									or string.find(obj.Name, "GoldenBell")
+									or string.find(obj.Name, "SkyCloud")
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Echoes Through the Clouds", "WakeGod", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14256,39 +14988,43 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoLeverJailbreak do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoLeverJailbreak then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								string.find(obj.Name, "Lever")
-								or string.find(obj.Name, "Jailbreak")
-								or string.find(obj.Name, "CellDoor")
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Lever Jailbreak", "Pull", obj)
-										bmRemote:InvokeServer("Lever Jailbreak", "Release", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoLeverJailbreak then
+									break
+								end
+								if
+									string.find(obj.Name, "Lever")
+									or string.find(obj.Name, "Jailbreak")
+									or string.find(obj.Name, "CellDoor")
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Lever Jailbreak", "Pull", obj)
+											bmRemote:InvokeServer("Lever Jailbreak", "Release", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14310,39 +15046,43 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoEscapeAlcatraz do
-					task.wait(0.3)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.3)
 						pcall(function()
-							bmRemote:InvokeServer("Escape from Alcatraz", "Provoke")
-						end)
-						local enemies = workspace:FindFirstChild("Enemies")
-						if enemies then
-							for _, enemy in ipairs(enemies:GetChildren()) do
-								if not getgenv().AutoEscapeAlcatraz then
-									break
-								end
-								if
-									string.find(enemy.Name, "Guard")
-									or string.find(enemy.Name, "Prisoner")
-									or string.find(enemy.Name, "Warden")
-								then
-									local eHrp = enemy:FindFirstChild("HumanoidRootPart")
-									local eHum = enemy:FindFirstChildOfClass("Humanoid")
-									if eHrp and eHum and eHum.Health > 0 then
-										TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
-										ExecuteAttack(myChar, myHrp, true, enemy.Name)
-										task.wait(0.2)
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
+							end
+
+							pcall(function()
+								bmRemote:InvokeServer("Escape from Alcatraz", "Provoke")
+							end)
+							local enemies = workspace:FindFirstChild("Enemies")
+							if enemies then
+								for _, enemy in ipairs(enemies:GetChildren()) do
+									if not getgenv().AutoEscapeAlcatraz then
+										break
+									end
+									if
+										string.find(enemy.Name, "Guard")
+										or string.find(enemy.Name, "Prisoner")
+										or string.find(enemy.Name, "Warden")
+									then
+										local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+										local eHum = enemy:FindFirstChildOfClass("Humanoid")
+										if eHrp and eHum and eHum.Health > 0 then
+											TweenTo(eHrp.CFrame * CFrame.new(0, 5, 0))
+											ExecuteAttack(myChar, myHrp, true, enemy.Name)
+											task.wait(0.2)
+										end
 									end
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14365,34 +15105,38 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoBeyondBubble do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoBeyondBubble then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if string.find(obj.Name, "BubbleChest") or string.find(obj.Name, "UnderwaterChest") then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Beyond the Bubble", "OpenChest", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoBeyondBubble then
+									break
+								end
+								if string.find(obj.Name, "BubbleChest") or string.find(obj.Name, "UnderwaterChest") then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Beyond the Bubble", "OpenChest", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14415,41 +15159,45 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoClownJewels do
-					task.wait(0.3)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.3)
 						pcall(function()
-							bmRemote:InvokeServer("The Clown's Jewels", "Provoke")
-						end)
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoClownJewels then
-								break
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								string.find(obj.Name, "Jewel")
-								or string.find(obj.Name, "ClownChest")
-								or string.find(obj.Name, "BagOfJewels")
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("The Clown's Jewels", "Collect", obj)
+
+							pcall(function()
+								bmRemote:InvokeServer("The Clown's Jewels", "Provoke")
+							end)
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoClownJewels then
+									break
+								end
+								if
+									string.find(obj.Name, "Jewel")
+									or string.find(obj.Name, "ClownChest")
+									or string.find(obj.Name, "BagOfJewels")
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("The Clown's Jewels", "Collect", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14472,40 +15220,44 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoUnexpectedGuest do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoUnexpectedGuest then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								string.find(obj.Name, "VaultDoor")
-								or string.find(obj.Name, "VaultChest")
-								or string.find(obj.Name, "SecretVault")
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Unexpected Guest", "BreakDoor", obj)
-										task.wait(0.5)
-										bmRemote:InvokeServer("Unexpected Guest", "TakeChest", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoUnexpectedGuest then
+									break
+								end
+								if
+									string.find(obj.Name, "VaultDoor")
+									or string.find(obj.Name, "VaultChest")
+									or string.find(obj.Name, "SecretVault")
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Unexpected Guest", "BreakDoor", obj)
+											task.wait(0.5)
+											bmRemote:InvokeServer("Unexpected Guest", "TakeChest", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14528,34 +15280,38 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoSewerGangs do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoSewerGangs then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if string.find(obj.Name, "SewerChest") or string.find(obj.Name, "SewerTreasure") then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("Sewer Gangs", "ClaimTreasure", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoSewerGangs then
+									break
+								end
+								if string.find(obj.Name, "SewerChest") or string.find(obj.Name, "SewerTreasure") then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("Sewer Gangs", "ClaimTreasure", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14577,40 +15333,44 @@ Tabs.Sea1:CreateToggle({
 					:WaitForChild("Remotes")
 					:WaitForChild("BonusMomentsRemoteFunction")
 				while getgenv().AutoXMarksSpot do
-					task.wait(0.5)
-					pcall(function()
-						local myChar = GetCharacter()
-						local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-						if not myHrp then
-							return
-						end
-
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if not getgenv().AutoXMarksSpot then
-								break
+					if not EnvironmentGate.CanRun(x22Sea1Puzzlex22) then
+						task.wait(2)
+					else
+						task.wait(0.5)
+						pcall(function()
+							local myChar = GetCharacter()
+							local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+							if not myHrp then
+								return
 							end
-							if
-								string.find(obj.Name, "TreasureMap")
-								or string.find(obj.Name, "BuriedTreasure")
-								or string.find(obj.Name, "XSpot")
-							then
-								local targetPos = obj:IsA("BasePart") and obj.CFrame
-									or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
-								if targetPos then
-									TweenTo(targetPos * CFrame.new(0, 5, 0))
-									local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-									if prompt and prompt.Enabled then
-										SafeProximity(prompt, hrp or (GetRootPart()))
-									else
-										bmRemote:InvokeServer("X Marks The Spot", "PickupMap", obj)
-										task.wait(0.5)
-										bmRemote:InvokeServer("X Marks The Spot", "CollectCheckpoint", obj)
+
+							for _, obj in ipairs(workspace:GetDescendants()) do
+								if not getgenv().AutoXMarksSpot then
+									break
+								end
+								if
+									string.find(obj.Name, "TreasureMap")
+									or string.find(obj.Name, "BuriedTreasure")
+									or string.find(obj.Name, "XSpot")
+								then
+									local targetPos = obj:IsA("BasePart") and obj.CFrame
+										or (obj.PrimaryPart and obj.PrimaryPart.CFrame)
+									if targetPos then
+										TweenTo(targetPos * CFrame.new(0, 5, 0))
+										local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+										if prompt and prompt.Enabled then
+											SafeProximity(prompt, hrp or (GetRootPart()))
+										else
+											bmRemote:InvokeServer("X Marks The Spot", "PickupMap", obj)
+											task.wait(0.5)
+											bmRemote:InvokeServer("X Marks The Spot", "CollectCheckpoint", obj)
+										end
+										task.wait(0.3)
 									end
-									task.wait(0.3)
 								end
 							end
-						end
-					end)
+						end)
+					end
 				end
 			end)
 		end
@@ -14652,28 +15412,31 @@ Tabs.Sea2:CreateToggle({
 		end
 		task.spawn(function()
 			while getgenv().AutoDarkbeard do
-				task.wait(0.5)
-				pcall(function()
-					local db = workspace:FindFirstChild("Enemies") and workspace.Enemies:FindFirstChild("Darkbeard")
-					local char = GetCharacter()
-					local hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if
-						db
-						and db:FindFirstChildOfClass("Humanoid")
-						and db:FindFirstChildOfClass("Humanoid").Health > 0
-						and hrp
-					then
-						TweenTo(db.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
-						ExecuteAttack(char, hrp, true, "Darkbeard")
-						ToggleFloat(true)
-					else
-						if Runtime.activeTween then
-							Runtime.activeTween:Cancel()
-							Runtime.activeTween = nil
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 2 then
+					task.wait(2)
+				else
+					task.wait(0.5)
+					pcall(function()
+						local db = (
+							workspace:FindFirstChild("Enemies") and workspace.Enemies:FindFirstChild("Darkbeard")
+						) or ReplicatedStorage:FindFirstChild("Darkbeard")
+						local char = GetCharacter()
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if
+							db
+							and db:FindFirstChildOfClass("Humanoid")
+							and db:FindFirstChildOfClass("Humanoid").Health > 0
+							and hrp
+						then
+							TweenTo(db.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
+							ExecuteAttack(char, hrp, true, "Darkbeard")
+							ToggleFloat(true)
+						else
+							task.wait(1)
 						end
-						ToggleFloat(false)
-					end
-				end)
+					end)
+				end
 			end
 		end)
 	end,
@@ -14690,29 +15453,31 @@ Tabs.Sea2:CreateToggle({
 		end
 		task.spawn(function()
 			while getgenv().AutoCursedCaptain do
-				task.wait(0.5)
-				pcall(function()
-					local cap = workspace:FindFirstChild("Enemies")
-						and workspace.Enemies:FindFirstChild("Cursed Captain")
-					local char = GetCharacter()
-					local hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if
-						cap
-						and cap:FindFirstChildOfClass("Humanoid")
-						and cap:FindFirstChildOfClass("Humanoid").Health > 0
-						and hrp
-					then
-						TweenTo(cap.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
-						ExecuteAttack(char, hrp, true, "Cursed Captain")
-						ToggleFloat(true)
-					else
-						if Runtime.activeTween then
-							Runtime.activeTween:Cancel()
-							Runtime.activeTween = nil
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 2 then
+					task.wait(2)
+				else
+					task.wait(0.5)
+					pcall(function()
+						local cap = (
+							workspace:FindFirstChild("Enemies") and workspace.Enemies:FindFirstChild("Cursed Captain")
+						) or ReplicatedStorage:FindFirstChild("Cursed Captain")
+						local char = GetCharacter()
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if
+							cap
+							and cap:FindFirstChildOfClass("Humanoid")
+							and cap:FindFirstChildOfClass("Humanoid").Health > 0
+							and hrp
+						then
+							TweenTo(cap.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
+							ExecuteAttack(char, hrp, true, "Cursed Captain")
+							ToggleFloat(true)
+						else
+							task.wait(1)
 						end
-						ToggleFloat(false)
-					end
-				end)
+					end)
+				end
 			end
 		end)
 	end,
@@ -14822,6 +15587,10 @@ Tabs.Sea3:CreateToggle({
 				Window.Flags["ToggleFarmNearest"]:Set(false)
 			end
 			isAutoMaterial = false
+			isAutoSoulReaper = false
+			if Window and Window.Flags and Window.Flags["ToggleAutoSoulReaper"] then
+				Window.Flags["ToggleAutoSoulReaper"]:Set(false)
+			end
 
 			State.WorkerGen = State.WorkerGen + 1
 			isReadyToAttack = false
@@ -14831,6 +15600,42 @@ Tabs.Sea3:CreateToggle({
 		else
 			State.WorkerGen = State.WorkerGen + 1
 			StopAllActivities()
+		end
+	end,
+})
+
+Tabs.Sea3:CreateToggle({
+	Name = "Auto Soul Reaper",
+	CurrentValue = false,
+	Flag = "ToggleAutoSoulReaper",
+	Callback = function(Value)
+		isAutoSoulReaper = Value
+		cfg.isAutoSoulReaper = Value
+		if Value then
+			isAutoFarm = false
+			isAutoBone = false
+			isAutoMaterial = false
+			farmNearestEnabled = false
+			if FarmToggle then
+				FarmToggle:Set(false)
+			end
+			if Window and Window.Flags then
+				if Window.Flags["ToggleAutoBone"] then
+					Window.Flags["ToggleAutoBone"]:Set(false)
+				end
+				if Window.Flags["ToggleFarmNearest"] then
+					Window.Flags["ToggleFarmNearest"]:Set(false)
+				end
+			end
+			StopAllActivities()
+			isAutoSoulReaper = true
+			StartAutoSoulReaper()
+		else
+			soulReaperWorkerGeneration = (soulReaperWorkerGeneration or 0) + 1
+			isAutoSoulReaper = false
+			cfg.isAutoSoulReaper = false
+			StopAllActivities()
+			ToggleFloat(false)
 		end
 	end,
 })
@@ -14932,34 +15737,79 @@ Tabs.Sea3:CreateToggle({
 		end
 		task.spawn(function()
 			while getgenv().AutoRipIndra do
-				task.wait(0.5)
-				pcall(function()
-					local indra = workspace:FindFirstChild("Enemies")
-						and (
-							workspace.Enemies:FindFirstChild("rip_indra True Form")
-							or workspace.Enemies:FindFirstChild("rip_indra")
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 3 then
+					task.wait(2)
+				else
+					task.wait(0.5)
+					pcall(function()
+						local indra = (
+							workspace:FindFirstChild("Enemies")
+							and (
+								workspace.Enemies:FindFirstChild("rip_indra True Form")
+								or workspace.Enemies:FindFirstChild("rip_indra")
+							)
 						)
-					local char = GetCharacter()
-					local hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if
-						indra
-						and indra:FindFirstChildOfClass("Humanoid")
-						and indra:FindFirstChildOfClass("Humanoid").Health > 0
-						and hrp
-					then
-						TweenTo(indra.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
-						ExecuteAttack(char, hrp, true, indra.Name)
-						ToggleFloat(true)
-					else
-						if Runtime.activeTween then
-							Runtime.activeTween:Cancel()
-							Runtime.activeTween = nil
+							or ReplicatedStorage:FindFirstChild("rip_indra True Form")
+							or ReplicatedStorage:FindFirstChild("rip_indra")
+						local char = GetCharacter()
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if
+							indra
+							and indra:FindFirstChildOfClass("Humanoid")
+							and indra:FindFirstChildOfClass("Humanoid").Health > 0
+							and hrp
+						then
+							TweenTo(indra.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0))
+							ExecuteAttack(char, hrp, true, indra.Name)
+							ToggleFloat(true)
+						else
+							task.wait(1)
 						end
-						ToggleFloat(false)
-					end
-				end)
+					end)
+				end
 			end
 		end)
+	end,
+})
+
+Tabs.Sea3:CreateToggle({
+	Name = "Auto Kill Tyrant of the Skies",
+	CurrentValue = false,
+	Flag = "AutoTyrantOfTheSkies",
+	Callback = function(Value)
+		cfg.isAutoTyrant = Value
+		if Value then
+			local _, seaNum = GetCurrentSea()
+			if seaNum ~= 3 then
+				print("You must be in Sea 3 to use Auto Kill Tyrant of the Skies")
+				return
+			end
+			isAutoFarm = false
+			isAutoBone = false
+			isAutoMaterial = false
+			if FarmToggle then
+				FarmToggle:Set(false)
+			end
+			State.WorkerGen = State.WorkerGen + 1
+			if Runtime.StartAutoTyrant then
+				Runtime.StartAutoTyrant()
+			end
+		else
+			State.TyrantGen = (State.TyrantGen or 0) + 1
+			currentTargetInstance = nil
+			StopAllActivities()
+			ToggleFloat(false)
+		end
+	end,
+})
+
+Tabs.Sea3:CreateToggle({
+	Name = "Auto Elite Hunter Quest (Tyrant)",
+	CurrentValue = true,
+	Flag = "AutoTyrantEliteQuest",
+	Callback = function(Value)
+		cfg.isAutoTyrantEliteQuest = Value
 	end,
 })
 
@@ -14973,17 +15823,22 @@ Tabs.Sea3:CreateToggle({
 		getgenv().AutoMoonV3 = Value
 		task.spawn(function()
 			while getgenv().AutoMoonV3 do
-				task.wait(2)
-				pcall(function()
-					local moonDir = game.Lighting:GetMoonDirection()
-					local cam = workspace.CurrentCamera
-					local lookPos = cam.CFrame.p + moonDir * 100
-					cam.CFrame = CFrame.lookAt(cam.CFrame.p, lookPos)
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 3 then
+					task.wait(2)
+				else
+					task.wait(2)
+					pcall(function()
+						local moonDir = game.Lighting:GetMoonDirection()
+						local cam = workspace.CurrentCamera
+						local lookPos = cam.CFrame.p + moonDir * 100
+						cam.CFrame = CFrame.lookAt(cam.CFrame.p, lookPos)
 
-					VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.T, false, game)
-					task.wait(0.1)
-					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.T, false, game)
-				end)
+						VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.T, false, game)
+						task.wait(0.1)
+						VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.T, false, game)
+					end)
+				end
 			end
 		end)
 	end,
@@ -15002,45 +15857,44 @@ Tabs.Sea3:CreateToggle({
 
 		task.spawn(function()
 			while autoChest do
-				local mysticIsland = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MysticIsland")
-				local chestsFolder = mysticIsland and mysticIsland:FindFirstChild("Chests")
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 3 then
+					task.wait(2)
+				else
+					local mysticIsland = workspace:FindFirstChild("Map")
+						and workspace.Map:FindFirstChild("MysticIsland")
+					local chestsFolder = mysticIsland and mysticIsland:FindFirstChild("Chests")
 
-				if chestsFolder then
-					local hrp = GetRootPart()
-					local nearest = nil
-					local nearestDist = math.huge
-					for _, chest in ipairs(chestsFolder:GetChildren()) do
-						if chest:IsA("BasePart") and chest.Parent == chestsFolder and hrp then
-							local d = (hrp.Position - chest.Position).Magnitude
-							if d < nearestDist then
-								nearestDist = d
-								nearest = chest
+					if chestsFolder then
+						local hrp = GetRootPart()
+						local nearest = nil
+						local nearestDist = math.huge
+						for _, chest in ipairs(chestsFolder:GetChildren()) do
+							if chest:IsA("BasePart") and chest.Parent == chestsFolder and hrp then
+								local d = (hrp.Position - chest.Position).Magnitude
+								if d < nearestDist then
+									nearestDist = d
+									nearest = chest
+								end
 							end
 						end
-					end
 
-					if nearest and hrp then
-						if nearestDist <= 15 then
-							SafeTouch(nearest, hrp, 20)
-						end
-						if nearestDist <= 3 then
-							if Runtime.activeTween then
-								pcall(function()
-									Runtime.activeTween:Cancel()
-								end)
-								Runtime.activeTween = nil
+						if nearest and hrp then
+							if nearestDist <= 15 then
+								SafeTouch(nearest, hrp, 20)
+							end
+							if nearestDist > 3 then
+								TweenTo(nearest.CFrame * CFrame.new(0, 3, 0))
 							end
 						else
-							TweenTo(nearest.CFrame * CFrame.new(0, 3, 0))
+							task.wait(0.5)
 						end
 					else
-						task.wait(0.5)
+						task.wait(1)
 					end
-				else
-					task.wait(1)
-				end
 
-				task.wait(0.2)
+					task.wait(0.2)
+				end
 			end
 		end)
 	end,
@@ -15059,26 +15913,31 @@ Tabs.Sea3:CreateToggle({
 		end
 		task.spawn(function()
 			while getgenv().TweenKitsune do
-				local origin = workspace:FindFirstChild("_WorldOrigin")
-				local locs = origin and origin:FindFirstChild("Locations")
-				local targetPos = nil
-				if locs then
-					local kIsland = locs:FindFirstChild("Kitsune Island")
-					if kIsland then
-						targetPos = kIsland.Position
+				local _, seaNum = GetCurrentSea()
+				if seaNum ~= 3 then
+					task.wait(2)
+				else
+					local origin = workspace:FindFirstChild("_WorldOrigin")
+					local locs = origin and origin:FindFirstChild("Locations")
+					local targetPos = nil
+					if locs then
+						local kIsland = locs:FindFirstChild("Kitsune Island")
+						if kIsland then
+							targetPos = kIsland.Position
+						end
 					end
-				end
-				if not targetPos then
-					local map = workspace:FindFirstChild("Map")
-					local kMod = map and map:FindFirstChild("KitsuneIsland")
-					if kMod then
-						targetPos = GetSafePosition(kMod)
+					if not targetPos then
+						local map = workspace:FindFirstChild("Map")
+						local kMod = map and map:FindFirstChild("KitsuneIsland")
+						if kMod then
+							targetPos = GetSafePosition(kMod)
+						end
 					end
+					if targetPos then
+						TweenTo(CFrame.new(targetPos + Vector3.new(0, 300, 0)))
+					end
+					task.wait(1)
 				end
-				if targetPos then
-					TweenTo(CFrame.new(targetPos + Vector3.new(0, 300, 0)))
-				end
-				task.wait(1)
 			end
 		end)
 	end,
@@ -15094,22 +15953,27 @@ Tabs.Sea3:CreateToggle({
 		if Value then
 			task.spawn(function()
 				while State.AutoEmber do
-					local char = GetCharacter()
-					local myHrp = char and char:FindFirstChild("HumanoidRootPart")
+					local _, seaNum = GetCurrentSea()
+					if seaNum ~= 3 then
+						task.wait(2)
+					else
+						local char = GetCharacter()
+						local myHrp = char and char:FindFirstChild("HumanoidRootPart")
 
-					if myHrp then
-						if workspace:FindFirstChild("AttachedAzureEmber") then
-							for _, part in ipairs(workspace:GetChildren()) do
-								if part.Name == "EmberTemplate" then
-									local safePos = GetSafePosition(part)
-									if safePos then
-										myHrp.CFrame = CFrame.new(safePos)
+						if myHrp then
+							if workspace:FindFirstChild("AttachedAzureEmber") then
+								for _, part in ipairs(workspace:GetChildren()) do
+									if part.Name == "EmberTemplate" then
+										local safePos = GetSafePosition(part)
+										if safePos then
+											myHrp.CFrame = CFrame.new(safePos)
+										end
 									end
 								end
 							end
 						end
+						task.wait(0.1)
 					end
-					task.wait()
 				end
 			end)
 		end
@@ -16219,11 +17083,17 @@ local function GetCurrentScriptTask()
 	if isAutoCakePrince then
 		return withGate("Cake Prince", "CakePrince")
 	end
+	if cfg.isAutoTyrant then
+		return withGate("Tyrant of the Skies", "Tyrant")
+	end
 	if isAutoEliteHunter then
 		return withGate("Elite Hunter", "EliteHunter")
 	end
 	if isAutoBone then
 		return withGate("Bone Farm", "BoneFarm")
+	end
+	if isAutoSoulReaper then
+		return withGate("Soul Reaper", "SoulReaper")
 	end
 	if isAutoRaidKill then
 		return withGate("Raid", "Raid")
@@ -16887,6 +17757,34 @@ Tabs.Settings:CreateSlider({
 })
 
 Tabs.Settings:CreateSection("Ranges & Evasion")
+Tabs.Settings:CreateToggle({
+	Name = "Bring Mobs",
+	CurrentValue = cfg.isBringMob,
+	Flag = "BringMobsToggle",
+	Callback = function(Value)
+		cfg.isBringMob = Value
+		if not Value then
+			local enemiesFolder = workspace:FindFirstChild("Enemies")
+			if enemiesFolder then
+				for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+					if enemy:GetAttribute("MagnetLocked") then
+						enemy:SetAttribute("MagnetLocked", nil)
+					end
+					local eHrp = enemy:FindFirstChild("HumanoidRootPart")
+					if eHrp and eHrp:FindFirstChild("Lock") then
+						pcall(function()
+							eHrp.Lock:Destroy()
+						end)
+					end
+					local eHum = enemy:FindFirstChildOfClass("Humanoid")
+					if eHum and eHum.Health > 0 then
+						eHum.PlatformStand = false
+					end
+				end
+			end
+		end
+	end,
+})
 Tabs.Settings:CreateSlider({
 	Name = "Bring Radius",
 	Range = { 100, 1000 },
@@ -16965,16 +17863,6 @@ Tabs.Settings:CreateSlider({
 })
 
 Tabs.Settings:CreateSection("Tween & Timing")
-Tabs.Settings:CreateDropdown({
-	Name = "Bring Method",
-	Options = { "Tween", "CFrame" },
-	CurrentOption = "Tween",
-	Flag = "BringMethodOpt",
-	Callback = function(Option)
-		cfg.BringMethod = Option
-	end,
-})
-
 Tabs.Settings:CreateSlider({
 	Name = "Tween Speed",
 	Range = { 100, 600 },
@@ -17460,7 +18348,8 @@ do
 		Callback = function(Value)
 			task.spawn(function()
 				pcall(function()
-					local waterBase = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("WaterBase-Plane")
+					local waterBase = workspace:FindFirstChild("Map")
+						and workspace.Map:FindFirstChild("WaterBase-Plane")
 					if waterBase then
 						waterBase.Size = Value and Vector3.new(1000, 112, 1000) or Vector3.new(1000, 80, 1000)
 					end
