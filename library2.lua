@@ -109,78 +109,94 @@ local configData = {}
 local currentConfigFolder = "Lonum_Data"
 local currentConfigFile = "default_config.json"
 
-local function MakeDraggable(topBar, targetFrame)
-	local dragging, dragInput, dragStart, startPos
+Lonum.Flags = {}
+Lonum.Values = {}
+Lonum.Config = configData
 
-	local function update(input)
-		local delta = input.Position - dragStart
-		targetFrame.Position =
-			UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
+local function resolveFs()
+	local rf = (type(readfile) == "function" and readfile)
+		or (type(getgenv) == "function" and rawget(getgenv(), "readfile"))
+		or rawget(_G, "readfile")
+		or UNC.readfile
 
-	topBar.InputBegan:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			dragging = true
-			dragStart = input.Position
-			startPos = targetFrame.Position
+	local wf = (type(writefile) == "function" and writefile)
+		or (type(getgenv) == "function" and rawget(getgenv(), "writefile"))
+		or rawget(_G, "writefile")
+		or UNC.writefile
 
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
-		end
-	end)
+	local inf = (type(isfile) == "function" and isfile)
+		or (type(getgenv) == "function" and rawget(getgenv(), "isfile"))
+		or rawget(_G, "isfile")
+		or UNC.isfile
 
-	topBar.InputChanged:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.MouseMovement
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			dragInput = input
-		end
-	end)
+	local isf = (type(isfolder) == "function" and isfolder)
+		or (type(getgenv) == "function" and rawget(getgenv(), "isfolder"))
+		or rawget(_G, "isfolder")
+		or UNC.isfolder
 
-	UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
-			update(input)
-		end
-	end)
+	local mf = (type(makefolder) == "function" and makefolder)
+		or (type(getgenv) == "function" and rawget(getgenv(), "makefolder"))
+		or rawget(_G, "makefolder")
+		or UNC.makefolder
+
+	return rf, wf, inf, isf, mf
 end
 
+local saveScheduled = false
 function Lonum:SaveConfig()
 	SetThreadIdentity(7)
-	local wf = UNC.writefile
+	local rf, wf, inf, isf, mf = resolveFs()
 	if wf and HttpService then
 		local success, encoded = pcall(function()
 			return HttpService:JSONEncode(configData)
 		end)
 		if success and encoded then
 			local folder = currentConfigFolder
-			if UNC.isfolder and UNC.makefolder and not UNC.isfolder(folder) then
-				pcall(UNC.makefolder, folder)
+			if isf and mf and not isf(folder) then
+				pcall(mf, folder)
 			end
-			pcall(wf, folder .. "/" .. currentConfigFile, encoded)
+			local fullPath = folder .. "/" .. currentConfigFile
+			pcall(wf, fullPath, encoded)
+			if type(getgenv) == "function" then
+				getgenv().LonumConfig = configData
+				getgenv().LonumValues = Lonum.Values
+			end
 		end
 	end
 end
 
 function Lonum:LoadConfig()
 	SetThreadIdentity(7)
-	local rf = UNC.readfile
-	local inf = UNC.isfile
-	if rf and inf and inf(currentConfigFolder .. "/" .. currentConfigFile) then
+	local rf, wf, inf, isf, mf = resolveFs()
+	local fullPath = currentConfigFolder .. "/" .. currentConfigFile
+	local altPath = currentConfigFile
+
+	local targetFile = nil
+	if inf then
+		if inf(fullPath) then
+			targetFile = fullPath
+		elseif inf(altPath) then
+			targetFile = altPath
+		end
+	end
+
+	if rf and targetFile then
 		local success, decoded = pcall(function()
-			local content = rf(currentConfigFolder .. "/" .. currentConfigFile)
+			local content = rf(targetFile)
 			return HttpService:JSONDecode(content)
 		end)
 		if success and type(decoded) == "table" then
-			configData = decoded
+			for k, v in pairs(decoded) do
+				configData[k] = v
+				Lonum.Values[k] = v
+			end
+			if type(getgenv) == "function" then
+				getgenv().LonumConfig = configData
+				getgenv().LonumValues = Lonum.Values
+			end
 		end
 	end
+	Lonum.Config = configData
 end
 
 local function GenerateRandomName()
@@ -886,7 +902,42 @@ function Lonum:CreateWindow(options)
 	local WindowObj = {
 		CurrentTab = nil,
 		Tabs = {},
+		Flags = {},
+		Values = {},
+		Config = configData,
 	}
+	Lonum.Flags = WindowObj.Flags
+	Lonum.Values = WindowObj.Values
+	Lonum.Config = configData
+
+	function WindowObj:GetFlag(flagName, fallback)
+		if self.Values[flagName] ~= nil then
+			return self.Values[flagName]
+		end
+		if self.Flags[flagName] and self.Flags[flagName].Value ~= nil then
+			return self.Flags[flagName].Value
+		end
+		return fallback
+	end
+
+	function WindowObj:SetFlag(flagName, val, skipCallback)
+		local item = self.Flags[flagName]
+		if item and type(item.Set) == "function" then
+			item:Set(val, skipCallback)
+		else
+			self.Values[flagName] = val
+			configData[flagName] = val
+			Lonum:SaveConfig()
+		end
+	end
+
+	function WindowObj:SaveConfig()
+		Lonum:SaveConfig()
+	end
+
+	function WindowObj:LoadConfig()
+		Lonum:LoadConfig()
+	end
 
 	function WindowObj:CreateTab(tabName)
 		local TabButton = Instance.new("TextButton")
@@ -1208,11 +1259,14 @@ function Lonum:CreateWindow(options)
 		end
 
 		function TabObj:CreateToggle(options)
-			local flag = options.Flag or options.Name
+			options = options or {}
+			local flag = options.Flag or options.Name or ("Toggle_" .. tostring(math.random(1000, 9999)))
 			local defaultVal = options.CurrentValue or false
 
 			if configData[flag] ~= nil then
-				defaultVal = configData[flag]
+				defaultVal = (configData[flag] == true)
+			else
+				defaultVal = (defaultVal == true)
 			end
 
 			local tFrame = Instance.new("TextButton")
@@ -1267,59 +1321,81 @@ function Lonum:CreateWindow(options)
 
 			local State = defaultVal
 
-			if options.Callback and State == true then
-				pcall(function()
-					options.Callback(State)
-				end)
-			end
+			configData[flag] = State
+			WindowObj.Values[flag] = State
+			Lonum.Values[flag] = State
+			Lonum.Flags[flag] = State
 
-			local function Fire()
-				if options.Callback then
-					pcall(function()
-						options.Callback(State)
-					end)
-				end
+			local TogObj = {
+				Class = "Toggle",
+				Flag = flag,
+				Value = State,
+			}
+
+			local function Fire(val, skipCallback)
+				State = (val == true)
+				TogObj.Value = State
+				WindowObj.Values[flag] = State
+				Lonum.Values[flag] = State
+				Lonum.Flags[flag] = State
 				configData[flag] = State
 				Lonum:SaveConfig()
+
+				if not skipCallback and options.Callback then
+					pcall(options.Callback, State)
+				end
 			end
 
-			tFrame.Activated:Connect(function()
-				State = not State
-				TweenService:Create(tBox, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-					BackgroundColor3 = State and Lonum.Theme.Accent or Color3.fromRGB(50, 50, 55),
-				}):Play()
-				TweenService:Create(tCircle, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-					Position = State and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7),
-				}):Play()
-				Fire()
-			end)
+			function TogObj:Get()
+				return State
+			end
 
-			local TogObj = {}
-			function TogObj:Set(newVal)
-				if State == newVal then
+			function TogObj:Set(newVal, skipCallback)
+				newVal = (newVal == true)
+				if State == newVal and self.Value == newVal then
 					return
 				end
 				State = newVal
+				self.Value = State
+				WindowObj.Values[flag] = State
+				Lonum.Values[flag] = State
+				Lonum.Flags[flag] = State
+				configData[flag] = State
 				TweenService:Create(tBox, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
 					BackgroundColor3 = State and Lonum.Theme.Accent or Color3.fromRGB(50, 50, 55),
 				}):Play()
 				TweenService:Create(tCircle, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
 					Position = State and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7),
 				}):Play()
-				Fire()
+				Fire(State, skipCallback)
 			end
+
+			tFrame.Activated:Connect(function()
+				TogObj:Set(not State)
+			end)
+
+			WindowObj.Flags[flag] = TogObj
+
+			-- ALWAYS fire callback at startup (both true and false) so script syncs!
+			if options.Callback then
+				task.defer(function()
+					pcall(options.Callback, State)
+				end)
+			end
+
 			return TogObj
 		end
 
 		function TabObj:CreateSlider(options)
-			local flag = options.Flag or options.Name
+			options = options or {}
+			local flag = options.Flag or options.Name or ("Slider_" .. tostring(math.random(1000, 9999)))
 			local min = options.Range and options.Range[1] or 0
 			local max = options.Range and options.Range[2] or 100
 			local inc = options.Increment or 1
 			local defaultVal = options.CurrentValue or min
 
-			if configData[flag] ~= nil then
-				defaultVal = configData[flag]
+			if configData[flag] ~= nil and tonumber(configData[flag]) ~= nil then
+				defaultVal = tonumber(configData[flag])
 			end
 			defaultVal = math.clamp(defaultVal, min, max)
 
@@ -1375,7 +1451,7 @@ function Lonum:CreateWindow(options)
 			barAreaCorner.Parent = sBarArea
 
 			local sFill = Instance.new("Frame")
-			local startPct = (defaultVal - min) / (max - min)
+			local startPct = (max > min) and ((defaultVal - min) / (max - min)) or 0
 			sFill.Size = UDim2.new(startPct, 0, 1, 0)
 			sFill.BackgroundColor3 = Lonum.Theme.Accent
 			sFill.Parent = sBarArea
@@ -1396,38 +1472,57 @@ function Lonum:CreateWindow(options)
 
 			local Value = defaultVal
 
-			sValLabel.Text = tostring(Value)
-			if options.Callback then
-				pcall(function()
-					options.Callback(Value)
-				end)
+			configData[flag] = Value
+			WindowObj.Values[flag] = Value
+			Lonum.Values[flag] = Value
+			Lonum.Flags[flag] = Value
+
+			local SliderObj = {
+				Class = "Slider",
+				Flag = flag,
+				Value = Value,
+			}
+
+			local function Fire(val, skipCallback)
+				Value = math.clamp(val, min, max)
+				SliderObj.Value = Value
+				WindowObj.Values[flag] = Value
+				Lonum.Values[flag] = Value
+				Lonum.Flags[flag] = Value
+				configData[flag] = Value
+				sValLabel.Text = tostring(Value)
+				local pct = (max > min) and ((Value - min) / (max - min)) or 0
+				sFill.Size = UDim2.new(pct, 0, 1, 0)
+				Lonum:SaveConfig()
+
+				if not skipCallback and options.Callback then
+					pcall(options.Callback, Value)
+				end
 			end
 
-			local function Fire()
-				sValLabel.Text = tostring(Value)
-				if options.Callback then
-					pcall(function()
-						options.Callback(Value)
-					end)
-				end
-				configData[flag] = Value
-				Lonum:SaveConfig()
+			function SliderObj:Get()
+				return Value
+			end
+
+			function SliderObj:Set(newVal, skipCallback)
+				local n = tonumber(newVal) or min
+				Fire(n, skipCallback)
 			end
 
 			local dragging = false
 			local function updateSlider(input)
 				local pos = math.clamp((input.Position.X - sBarArea.AbsolutePosition.X) / sBarArea.AbsoluteSize.X, 0, 1)
 				local rawValue = min + (pos * (max - min))
-				Value = math.floor(rawValue / inc + 0.5) * inc
-				Value = math.clamp(Value, min, max)
+				local stepVal = math.floor(rawValue / inc + 0.5) * inc
+				stepVal = math.clamp(stepVal, min, max)
 
-				local pct = (Value - min) / (max - min)
+				local pct = (max > min) and ((stepVal - min) / (max - min)) or 0
 				TweenService:Create(
 					sFill,
-					TweenInfo.new(0.1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+					TweenInfo.new(0.08, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 					{ Size = UDim2.new(pct, 0, 1, 0) }
 				):Play()
-				Fire()
+				Fire(stepVal)
 			end
 
 			sBarArea.InputBegan:Connect(function(input)
@@ -1460,9 +1555,31 @@ function Lonum:CreateWindow(options)
 					updateSlider(input)
 				end
 			end)
+
+			WindowObj.Flags[flag] = SliderObj
+
+			if options.Callback then
+				task.defer(function()
+					pcall(options.Callback, Value)
+				end)
+			end
+
+			return SliderObj
 		end
 
 		function TabObj:CreateDropdown(options)
+			options = options or {}
+			local flag = options.Flag or options.Name or ("Dropdown_" .. tostring(math.random(1000, 9999)))
+			local selected = options.CurrentOption and options.CurrentOption[1] or ""
+
+			if configData[flag] ~= nil then
+				if type(configData[flag]) == "table" and configData[flag][1] then
+					selected = configData[flag][1]
+				elseif type(configData[flag]) == "string" then
+					selected = configData[flag]
+				end
+			end
+
 			local dropFrame = Instance.new("Frame")
 			dropFrame.Size = UDim2.new(1, 0, 0, 42)
 			dropFrame.BackgroundColor3 = Lonum.Theme.ElementBackground
@@ -1501,7 +1618,7 @@ function Lonum:CreateWindow(options)
 			dValue.Size = UDim2.new(0.5, -20, 0, 42)
 			dValue.Position = UDim2.new(0.5, 0, 0, 0)
 			dValue.BackgroundTransparency = 1
-			dValue.Text = (options.CurrentOption and options.CurrentOption[1] or "") .. " ▾"
+			dValue.Text = selected .. " ▾"
 			dValue.TextColor3 = Lonum.Theme.TextDim
 			dValue.Font = Lonum.Theme.Font
 			dValue.TextSize = 12
@@ -1528,31 +1645,16 @@ function Lonum:CreateWindow(options)
 				optionContainer.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y)
 			end)
 
-			local flag = options.Flag or options.Name
-			local selected = options.CurrentOption and options.CurrentOption[1] or ""
+			configData[flag] = selected
+			WindowObj.Values[flag] = selected
+			Lonum.Values[flag] = selected
+			Lonum.Flags[flag] = selected
 
-			if configData[flag] ~= nil then
-				selected = configData[flag]
-			end
-
-			dValue.Text = selected .. " ▾"
-			if options.Callback then
-				pcall(function()
-					options.Callback({ selected })
-				end)
-			end
-
-			local function Fire(val)
-				selected = val
-				dValue.Text = selected .. " ▾"
-				if options.Callback then
-					pcall(function()
-						options.Callback({ selected })
-					end)
-				end
-				configData[flag] = selected
-				Lonum:SaveConfig()
-			end
+			local DropObj = {
+				Class = "Dropdown",
+				Flag = flag,
+				Value = selected,
+			}
 
 			local function GetTargetHeight()
 				local optCount = #(options.Options or {})
@@ -1561,6 +1663,32 @@ function Lonum:CreateWindow(options)
 				end
 				local visibleOpts = math.min(optCount, 4)
 				return 42 + (visibleOpts * 35)
+			end
+
+			local function Fire(val, skipCallback)
+				selected = tostring(val)
+				DropObj.Value = selected
+				WindowObj.Values[flag] = selected
+				Lonum.Values[flag] = selected
+				Lonum.Flags[flag] = selected
+				configData[flag] = selected
+				dValue.Text = selected .. " ▾"
+				Lonum:SaveConfig()
+
+				if not skipCallback and options.Callback then
+					pcall(options.Callback, { selected })
+				end
+			end
+
+			function DropObj:Get()
+				return selected
+			end
+
+			function DropObj:Set(newVal, skipCallback)
+				if type(newVal) == "table" and newVal[1] then
+					newVal = newVal[1]
+				end
+				Fire(newVal, skipCallback)
 			end
 
 			local function PopulateOptions(newOpts)
@@ -1613,6 +1741,18 @@ function Lonum:CreateWindow(options)
 				options.Options = newOpts
 			end
 
+			function DropObj:Refresh(newOpts)
+				PopulateOptions(newOpts)
+				if isOpen then
+					local targetHeight = GetTargetHeight()
+					TweenService:Create(
+						dropFrame,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+						{ Size = UDim2.new(1, 0, 0, targetHeight) }
+					):Play()
+				end
+			end
+
 			PopulateOptions(options.Options)
 
 			dropBtn.Activated:Connect(function()
@@ -1639,18 +1779,14 @@ function Lonum:CreateWindow(options)
 				end
 			end)
 
-			local DropObj = {}
-			function DropObj:Refresh(newOpts)
-				PopulateOptions(newOpts)
-				if isOpen then
-					local targetHeight = GetTargetHeight()
-					TweenService:Create(
-						dropFrame,
-						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-						{ Size = UDim2.new(1, 0, 0, targetHeight) }
-					):Play()
-				end
+			WindowObj.Flags[flag] = DropObj
+
+			if options.Callback and selected ~= "" then
+				task.defer(function()
+					pcall(options.Callback, { selected })
+				end)
 			end
+
 			return DropObj
 		end
 
@@ -1671,9 +1807,43 @@ function Lonum:CreateWindow(options)
 				Lonum.ToggleKey = defaultVal
 			end
 
+			configData[flag] = defaultVal.Name
+			WindowObj.Values[flag] = defaultVal
+			Lonum.Values[flag] = defaultVal
+
+			local KeybindObj = {
+				Class = "Keybind",
+				Flag = flag,
+				Value = defaultVal,
+			}
+
+			function KeybindObj:Get()
+				return self.Value
+			end
+
+			function KeybindObj:Set(key)
+				if typeof(key) == "EnumItem" then
+					defaultVal = key
+					KeybindObj.Value = key
+					WindowObj.Values[flag] = key
+					Lonum.Values[flag] = key
+					kBtn.Text = key.Name
+					if flag == "ToggleUIKeybind" then
+						Lonum.ToggleKey = key
+					end
+					configData[flag] = key.Name
+					Lonum:SaveConfig()
+					if options.Callback then
+						pcall(options.Callback, key)
+					end
+				end
+			end
+
+			WindowObj.Flags[flag] = KeybindObj
+
 			if options.Callback then
-				pcall(function()
-					options.Callback(defaultVal)
+				task.defer(function()
+					pcall(options.Callback, defaultVal)
 				end)
 			end
 
@@ -1760,6 +1930,7 @@ function Lonum:CreateWindow(options)
 					end
 				end)
 			end)
+			return KeybindObj
 		end
 
 		return TabObj
@@ -1777,6 +1948,12 @@ function Lonum:CreateWindow(options)
 			MainFrame.Visible = not MainFrame.Visible
 		end
 	end)
+
+	function WindowObj:Destroy()
+		if ScreenGui and ScreenGui.Parent then
+			ScreenGui:Destroy()
+		end
+	end
 
 	return WindowObj
 end
@@ -1891,6 +2068,19 @@ function Lonum:Notify(options)
 		tweenOut.Completed:Wait()
 		nFrame:Destroy()
 	end)
+end
+
+function Lonum:Destroy()
+	local targetParent = GetSafeParent()
+	if targetParent then
+		for _, child in ipairs(targetParent:GetChildren()) do
+			if child:IsA("ScreenGui") and (child:GetAttribute("isLonumUI") or child.Name == "LonumNotifGui") then
+				pcall(function()
+					child:Destroy()
+				end)
+			end
+		end
+	end
 end
 
 return Lonum
